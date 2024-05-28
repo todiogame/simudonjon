@@ -14,7 +14,7 @@ def calculer_statistiques(resultats):
     mediane = sorted(resultats)[len(resultats) // 2]
     return moyenne, mediane, maximum, minimum
 
-def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
+def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     log_details = []
     
     donjon.melange()
@@ -26,6 +26,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
         donjon
     Jeu.joueurs = joueurs
     Jeu.donjon = donjon
+    Jeu.objets_dispo = objets_dispo
 
     # arreter la simulation si on a un objet casse dans une main
     for j in joueurs:
@@ -325,15 +326,19 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
 
 
 def loguer_x_parties(x=1):
+    # Créer une copie de la liste des objets disponibles pour cette simulation
     objets_disponibles_simu = list(objets_disponibles)
+    # Reparer tous les objets
+    for o in objets_disponibles_simu:
+        o.intact = True
 
     # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
-    joueurs = [
-        # Joueur("Sagarex", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
-        # Joueur("Francis", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
-        Joueur("Mastho", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
-        Joueur("Mr.Adam", random.randint(22,24), [ArcEnflamme(),])
-    ]
+    joueurs = []
+    for nom in ["Sagarex", "Francis", "Mastho", "Mr.Adam"]:
+        objets_joueur = random.sample(objets_disponibles_simu, 6)
+        for objet in objets_joueur:
+            objets_disponibles_simu.remove(objet)
+        joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
 
     seuil_pv_essai_fuite = 5
 
