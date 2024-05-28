@@ -472,7 +472,7 @@ class MasqueAGaz(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
         self.perdPV(self.pv_bonus, joueur, carte, log_details)
-        self.executeEtDefausse(joueur, carte, log_details)
+        self.executeEtDefausse(joueur, carte, Jeu,log_details)
 
 class BouclierCameleon(Objet):
     def __init__(self):
@@ -621,17 +621,17 @@ TroisPV_(),
 ArmureDHonneur(),
 PierreDAme(),
 # CoeurDeGolem(),
-# CouronneDEpines(),
-# MasqueAGaz(),
-# BouclierCameleon(),
-# YoYoProtecteur(),
-# TalismanIncertain(),ChapeletDeVitalite(),GlaiveDArgent(),BouclierCasse(),
-# PlanPresqueParfait(),
-# GraalEnMousse(),
-# ItemUseless(),
-# AnneauDesSurmulots(),
-# ArmureDamnee(),
-# PatinsAGlace(),
+CouronneDEpines(),
+MasqueAGaz(),
+BouclierCameleon(),
+YoYoProtecteur(),
+TalismanIncertain(),ChapeletDeVitalite(),GlaiveDArgent(),BouclierCasse(),
+PlanPresqueParfait(),
+GraalEnMousse(),
+ItemUseless(),
+AnneauDesSurmulots(),
+ArmureDamnee(),
+PatinsAGlace(),
 ]
 
 

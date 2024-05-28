@@ -11,7 +11,7 @@ from monstres import cartes
 import copy
 
 # Nombre de simulations souhaitées
-total_simulations = 10000
+total_simulations = 100000
 seuil_pv_essai_fuite=7
 
 
