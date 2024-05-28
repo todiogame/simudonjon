@@ -229,7 +229,7 @@ class CouteauSuisse(Objet):
             objet_repare = random.choice(objets_brisés)
             objet_repare.intact = True
             log_details.append(f"Utilisé Couteau Suisse pour réparer {objet_repare.nom}.")
-            if objet_repare.pv_bonus: self.gagnePV(objet_repare.pv_bonus, joueur, carte, log_details)
+            if objet_repare.pv_bonus: self.gagnePV(objet_repare.pv_bonus, joueur, log_details)
 
 class CaisseEnchantee(Objet):
     def __init__(self):
