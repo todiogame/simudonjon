@@ -2,7 +2,7 @@ import random
 import numpy as np
 from objets import *
 from perso import Joueur
-from monstres import CarteMonstre, cartes, CarteEvent
+from monstres import CarteMonstre, DonjonDeck, CarteEvent
 import copy
 
 
@@ -17,7 +17,7 @@ def calculer_statistiques(resultats):
 def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
     log_details = []
     
-    random.shuffle(donjon)
+    donjon.melange()
     class Jeu:
         defausse = []
         tour = 0
@@ -33,8 +33,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
             if not o.intact: 1/0
 
     index_joueur = 0  # Initialisation de l'index du joueur courant
+    nb_joueurs = len(joueurs)
     
-    while Jeu.donjon:
+    while not Jeu.donjon.vide:
         Jeu.tour += 1
         
         if log:
@@ -43,15 +44,14 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
         log_details = []
 
         # Vérifier s'il reste des joueurs vivants
-        joueurs_dans_le_dj = [joueur for joueur in joueurs if joueur.dans_le_dj]
-        if not joueurs_dans_le_dj:
+        if not any(True for joueur in joueurs if joueur.dans_le_dj):
             log_details.append("Tous les joueurs ont fini.")
             break
 
         # Le joueur courant
         while not joueurs[index_joueur].dans_le_dj:
             index_joueur += 1
-            if index_joueur >= len(joueurs):
+            if index_joueur >= nb_joueurs:
                 index_joueur = 0
             # Ajouter une vérification pour éviter une boucle infinie
             if all(not joueur.dans_le_dj for joueur in joueurs):
@@ -65,14 +65,15 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
         for objet in joueur.objets:
             objet.debut_tour(joueur, Jeu, log_details)
         # Le joueur pioche une carte
-        carte = donjon.pop(0)
+        carte = donjon.prochaine_carte()
         
         joueur.jet_fuite_lance = False
 
         if joueur.pv_total <= pv_min_fuite and sum(objet.actif and objet.intact for objet in joueur.objets) <= 1:
-                        # Tentative de fuite
-            joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs() 
-            log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
+            # Tentative de fuite
+            modif = joueur.calculer_modificateurs()
+            joueur.jet_fuite = random.randint(1, 6) + modif
+            log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {modif}) ")
             joueur.jet_fuite_lance = True
             #use items en_fuite
             for objet in joueur.objets:
@@ -182,7 +183,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                     # Fuite réussie
                     log_details.append(f"Fuite réussie avec un jet de {joueur.jet_fuite} contre {carte.titre} puissance {carte.puissance}\n")
                     joueur.fuite()
-                    donjon.insert(0, carte)
+                    donjon.rajoute_en_haut_de_la_pile(carte)
                     joueur.jet_fuite_lance = False
                     continue
                 else:
@@ -202,7 +203,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                     if carte.executed or carte.dommages <= 0 or joueur.fuite_reussie:
                         break
                 if(not joueur.dans_le_dj):
-                    donjon.insert(0, carte)
+                    donjon.rajoute_en_haut_de_la_pile(carte)
                     continue
                 
             if not carte.executed:
@@ -246,9 +247,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
             if joueur.pv_total <= 0:
                 joueur.mort()
                 log_details.append(f"OUPS!! Mort de {joueur.nom}, a court de PV.\n")
-                donjon.insert(0, carte)
+                donjon.rajoute_en_haut_de_la_pile(carte)
                 index_joueur += 1
-                if index_joueur >= len(joueurs):
+                if index_joueur >= nb_joueurs:
                     index_joueur = 0
                 continue
             
@@ -263,7 +264,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                 if len([joueur for joueur in joueurs if joueur.dans_le_dj]) > 1:
                     log_details.append(f"{joueur.nom} passe son tour.\n")
                     index_joueur += 1
-                    if index_joueur >= len(joueurs):
+                    if index_joueur >= nb_joueurs:
                         index_joueur = 0
 
     # Calculer les scores finaux pour chaque joueur
@@ -344,6 +345,6 @@ def loguer_x_parties(x=1):
           # Réparer tous les objets avant chaque partie
         
         joueurs_copie = [copy.deepcopy(joueur) for joueur in joueurs]
-        cartes_copie = copy.deepcopy(cartes)
+        cartes_copie = DonjonDeck()
         print(f"\n--- Partie {i+1} ---")
         ordonnanceur(joueurs_copie, cartes_copie, seuil_pv_essai_fuite, True)

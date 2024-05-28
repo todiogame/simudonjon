@@ -7,7 +7,7 @@ import numpy as np
 from simu import   loguer_x_parties, ordonnanceur
 from objets import *
 from perso import Joueur
-from monstres import cartes
+from monstres import DonjonDeck
 import copy
 import itertools
 
@@ -43,10 +43,10 @@ def display_simu():
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
 
         # Création de la copie des joueurs et des cartes
-        cartes_copie = copy.deepcopy(cartes)
+        deck = DonjonDeck()
 
         # Exécution de l'ordonnanceur sans afficher les logs
-        vainqueur = ordonnanceur(joueurs, cartes_copie, seuil_pv_essai_fuite, False)
+        vainqueur = ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, False)
 
         # Mise à jour du highscore max et du meilleur vainqueur
         if vainqueur and vainqueur.score_final > highscore_max:
