@@ -230,7 +230,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
 
                 if carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
                     monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
-                    donjon.insert(0,monstre_remis)
+                    donjon.rajoute_en_haut_de_la_pile(monstre_remis)
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
 
                 if carte.dommages >= 0 and carte.effet == "MEDAIL" and carte.dommages > 0:

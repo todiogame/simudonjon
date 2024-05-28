@@ -87,13 +87,14 @@ class DonjonDeck:
 
     def prochaine_carte(self):
         if self.haut_pile:
-            haut_pile = self.haut_pile
-            self.haut_pile = None
+            haut_pile = self.haut_pile.pop(0)
             return haut_pile
         index = self.index
         self.index += 1
         return self.cartes[self.ordre[index]]
 
     def rajoute_en_haut_de_la_pile(self, carte):
-        assert self.haut_pile == None
-        self.haut_pile = carte
+        if self.haut_pile:
+            self.haut_pile.insert(0,carte)
+        else:
+            self.haut_pile = [carte]
