@@ -109,7 +109,7 @@ def display_simu():
     print(flop_10_duos)
     print(f"\nTemps total des simulations : {total_time:.2f} secondes")
     print(f"Total de jeux simulés : {total_games_simulees}")
-display_simu()
+# display_simu()
 
 
-# loguer_x_parties()
+loguer_x_parties()

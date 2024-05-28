@@ -24,6 +24,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
         execute_next_monster = False
         traquenard_actif = False
         donjon
+    Jeu.joueurs = joueurs
     Jeu.donjon = donjon
 
     index_joueur = 0  # Initialisation de l'index du joueur courant
@@ -55,6 +56,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
 
         log_details.append(f"Tour de {joueur.nom}, {joueur.pv_total}PV")
         
+        
+        for objet in joueur.objets:
+            objet.debut_tour(joueur, Jeu, log_details)
         # Le joueur pioche une carte
         carte = donjon.pop(0)
         
@@ -321,7 +325,12 @@ def loguer_x_parties(x=1):
         Joueur("Sagarex", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
         Joueur("Francis", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
         Joueur("Mastho", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
-        Joueur("Mr.Adam", random.randint(2, 4), random.sample(objets_disponibles_simu, 6))
+        Joueur("Mr.Adam", random.randint(22,24), [GrimoireInconnu(),
+GantsDeCombat(),
+GantsDeGaia(),
+GantsDeCombat(),
+GantsDeCombat(),
+GantsDeCombat()])
     ]
 
     seuil_pv_essai_fuite = 5

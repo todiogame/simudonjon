@@ -32,7 +32,7 @@ class Objet:
         pass
     def decompte_effet(self,joueur, joueurs_final, log_details):
         pass
-    def debut_tour(self, joueur, Jeu, log_details):
+    def debut_tour(self, joueur, Jeu, log_details): 
         pass
     def fin_tour(self):
         pass
@@ -536,9 +536,10 @@ class ChapeletDeVitalite(Objet):
         super().__init__("Chapelet de Vitalité", False, 3)
     
     def debut_tour(self, joueur, Jeu, log_details):
-        jet_chapelet = random.randint(1, 6)
-        if jet_chapelet == 6:
-            self.gagnePV(1, joueur, None, log_details)
+        if self.intact:
+            jet_chapelet = random.randint(1, 6)
+            if jet_chapelet == 6:
+                self.gagnePV(1, joueur, None, log_details)
 
 class TalismanIncertain(Objet):
     def __init__(self):
@@ -592,6 +593,151 @@ class PatinsAGlace(Objet):
         super().__init__("Patins à Glace", False, 3, 3)
 #todo ajouter effet perte de pv
 
+class CoquillageMagique(Objet):
+    def __init__(self):
+        super().__init__("Coquillage Magique", True)
+    
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact:
+            objets_actuels = [obj.nom for obj in joueur.objets]
+            for autre_joueur in Jeu.joueurs:
+                if autre_joueur != joueur:
+                    objets_actuels.extend([obj.nom for obj in autre_joueur.objets])
+            
+            objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
+            if objets_possibles:
+                nouvel_objet = random.choice(objets_possibles)
+                joueur.ajouter_objet(nouvel_objet)
+                joueur.modificateur_de = joueur.calculer_modificateurs()
+                log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+            self.destroy()
+
+class MasqueDragon(Objet):
+    def __init__(self):
+        super().__init__("Masque Dragon", True)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Dragon" in carte.types and not Jeu.traquenard_actif
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        objets_actuels = [obj.nom for obj in joueur.objets]
+        objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
+        if objets_possibles:
+            nouvel_objet = random.choice(objets_possibles)
+            joueur.ajouter_objet(nouvel_objet)
+            joueur.modificateur_de = joueur.calculer_modificateurs()
+            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+        self.destroy()
+
+class PiedDeBiche(Objet):
+    def __init__(self):
+        super().__init__("Pied de Biche", True)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Mimique" in carte.titre and not Jeu.traquenard_actif
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        objets_actuels = [obj.nom for obj in joueur.objets]
+        objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
+        if objets_possibles:
+            nouvel_objet = random.choice(objets_possibles)
+            joueur.ajouter_objet(nouvel_objet)
+            joueur.modificateur_de = joueur.calculer_modificateurs()
+            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+
+class MarmiteGelatineuse(Objet):
+    def __init__(self):
+        super().__init__("Marmite Gélatineuse", True)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.effet and "LIMON" in carte.effet and not Jeu.traquenard_actif
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        objets_actuels = [obj.nom for obj in joueur.objets]
+        objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
+        if objets_possibles:
+            nouvel_objet = random.choice(objets_possibles)
+            joueur.ajouter_objet(nouvel_objet)
+            joueur.modificateur_de = joueur.calculer_modificateurs()
+            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+
+class GrimoireInconnu(Objet):
+    def __init__(self):
+        super().__init__("Grimoire Inconnu", True)
+    
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact:
+            jet_grimoire = random.randint(1, 6)
+            if jet_grimoire == 6:
+                objets_actuels = [obj.nom for obj in joueur.objets]
+                for autre_joueur in Jeu.joueurs:
+                    if autre_joueur != joueur:
+                        objets_actuels.extend([obj.nom for obj in autre_joueur.objets])
+                
+                objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
+                if objets_possibles:
+                    nouvel_objet = random.choice(objets_possibles)
+                    joueur.ajouter_objet(nouvel_objet)
+                    joueur.modificateur_de = joueur.calculer_modificateurs()
+                    log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+
+class GantsDeCombat(Objet):
+    def __init__(self):
+        super().__init__("Gants de combat", True)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance <= 2 and not Jeu.traquenard_actif
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        objets_actuels = [obj.nom for obj in joueur.objets]
+        for autre_joueur in Jeu.joueurs:
+            if autre_joueur != joueur:
+                objets_actuels.extend([obj.nom for obj in autre_joueur.objets])
+        
+        objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
+        if objets_possibles:
+            nouvel_objet = random.choice(objets_possibles)
+            joueur.ajouter_objet(nouvel_objet)
+            joueur.modificateur_de = joueur.calculer_modificateurs()
+            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+        self.destroy()
+
+class GantsDeGaia(Objet):
+    def __init__(self):
+        super().__init__("Gants de Gaïa", True)
+    
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact:
+            objets_brisés = [obj for obj in joueur.objets if not obj.intact]
+            objets_actifs_intacts = [obj for obj in joueur.objets if obj.actif and obj.intact]
+            objets_actuels = [obj.nom for obj in joueur.objets]
+            for autre_joueur in Jeu.joueurs:
+                if autre_joueur != joueur:
+                    objets_actuels.extend([obj.nom for obj in autre_joueur.objets])
+            
+            objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
+
+            if (len(objets_brisés) >= 2) or (len(objets_brisés) == 1 and len(objets_actifs_intacts) == 1 and objets_actifs_intacts[0] == self):
+                nombre_a_defausser = min(2, len(objets_brisés))
+                for _ in range(nombre_a_defausser):
+                    objet_brisé = objets_brisés.pop()
+                    joueur.objets.remove(objet_brisé)
+                    log_details.append(f"Utilisé {self.nom} pour défausser objet brisé: {objet_brisé.nom}")
+                
+                for _ in range(nombre_a_defausser):
+                    if objets_possibles:
+                        nouvel_objet = random.choice(objets_possibles)
+                        joueur.ajouter_objet(nouvel_objet)
+                        joueur.modificateur_de = joueur.calculer_modificateurs()
+                        log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+                self.destroy()
+
+
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -640,6 +786,13 @@ ItemUseless(),
 AnneauDesSurmulots(),
 ArmureDamnee(),
 PatinsAGlace(),
+CoquillageMagique(),
+MasqueDragon(),
+PiedDeBiche(),
+MarmiteGelatineuse(),
+GrimoireInconnu(),
+GantsDeCombat(),
+GantsDeGaia(),
 ]
 
 
@@ -699,5 +852,12 @@ __all__ = [
             "ItemUseless",
             "AnneauDesSurmulots",
             "ArmureDamnee",
-            "PatinsAGlace"
+            "PatinsAGlace",
+            "CoquillageMagique",
+            "MasqueDragon",
+            "PiedDeBiche",
+            "MarmiteGelatineuse",
+            "GrimoireInconnu",
+            "GantsDeCombat",
+            "GantsDeGaia",
         ]
