@@ -32,13 +32,10 @@ class Objet:
         pass
     def decompte_effet(self,joueur, joueurs_final, log_details):
         pass
-
     def debut_tour(self, joueur, Jeu, log_details):
         pass
-
     def fin_tour(self):
         pass
-
     def score_effet(self, joueur, log_details):
         pass
 
@@ -453,14 +450,21 @@ class PierreDAme(Objet):
 class CoeurDeGolem(Objet):
     def __init__(self):
         super().__init__("Cœur de Golem", False, 3)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if any("Golem" in monstre.types for monstre in joueur.pile_monstres_vaincus):    
+            nb_golems = sum("Golem" in monstre.types for monstre in joueur.pile_monstres_vaincus)
+            self.reduc_damage(nb_golems, joueur, carte, log_details)
 
 class CouronneDEpines(Objet):
     def __init__(self):
         super().__init__("Couronne d'épines", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >1
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.reduc_damage(1, joueur, carte, log_details)
-        if carte.dommages == 0:
+        self.reduc_damage(2, joueur, carte, log_details)
+        if carte.dommages <= 0:
             self.add_damage(1, joueur, carte, log_details)
+#note la courronne peut etre reduite encore par un item reduc dommage utilise en suivant
 
 class MasqueAGaz(Objet):
     def __init__(self):
@@ -472,7 +476,7 @@ class MasqueAGaz(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
         self.perdPV(self.pv_bonus, joueur, carte, log_details)
-        self.executeEtDefausse(joueur, carte, log_details)
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
 
 class BouclierCameleon(Objet):
     def __init__(self):
@@ -554,20 +558,21 @@ class PlanPresqueParfait(Objet):
 class GraalEnMousse(Objet):
     def __init__(self):
         super().__init__("Graal en Mousse", False)
-    
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance % 2 == 0 and not Jeu.traquenard_actif
-    
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
+    def vaincu_effet(self, joueur, carte, Jeu, log_details):
+        if len(joueur.pile_monstres_vaincus) >= 7:
+            self.destroy()
 
 class ItemUseless(Objet):
     def __init__(self):
         super().__init__("ItemUseless", False)
+
 class ArmureDamnee(Objet):
     def __init__(self):
         super().__init__("Armure Damnée", False, 7)
-    
     def score_effet(self, joueur, log_details):
         self.scoreChange(-1, joueur, log_details)
 
@@ -583,7 +588,7 @@ class AnneauDesSurmulots(Objet):
 class PatinsAGlace(Objet):
     def __init__(self):
         super().__init__("Patins à Glace", False, 3, 3)
-
+#todo ajouter effet perte de pv
 
 # Liste des objets
 objets_disponibles = [ 
@@ -620,18 +625,18 @@ TroisPV(),
 TroisPV_(),
 ArmureDHonneur(),
 PierreDAme(),
-# CoeurDeGolem(),
-# CouronneDEpines(),
-# MasqueAGaz(),
-# BouclierCameleon(),
-# YoYoProtecteur(),
-# TalismanIncertain(),ChapeletDeVitalite(),GlaiveDArgent(),BouclierCasse(),
-# PlanPresqueParfait(),
-# GraalEnMousse(),
-# ItemUseless(),
-# AnneauDesSurmulots(),
-# ArmureDamnee(),
-# PatinsAGlace(),
+CoeurDeGolem(),
+CouronneDEpines(),
+MasqueAGaz(),
+BouclierCameleon(),
+YoYoProtecteur(),
+TalismanIncertain(),ChapeletDeVitalite(),GlaiveDArgent(),BouclierCasse(),
+PlanPresqueParfait(),
+GraalEnMousse(),
+ItemUseless(),
+AnneauDesSurmulots(),
+ArmureDamnee(),
+PatinsAGlace(),
 ]
 
 

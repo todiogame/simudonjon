@@ -141,12 +141,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                     carte.puissance = len(objets_intacts)
                     log_details.append(f"Rencontré Mimique, puissance déterminée à {carte.puissance} (égale au nombre d'objets possédés).")
 
-                # if carte.effet == "GOLD":
-                #     log_details.append(f"Il vaut le double de points!")
-                #     points_de_victoire = 2
-                # else:
-                #     points_de_victoire = 1
-
                 if carte.effet == "NOOB":
                     if joueur.medailles > 0:
                         carte.puissance = 2
@@ -202,32 +196,33 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                     continue
                 
             if not carte.executed:
-                    Jeu.traquenard_actif = False
-                    joueur.pv_total -= carte.dommages
-                    #item survie ici
-                    # Ne pas ajouter le Gobelin Fantôme à la pile des monstres vaincus
-                    if carte.effet == "MAUDIT":  
-                        Jeu.defausse.append(carte)
-                        log_details.append(f"Le {carte.titre} disparait.")
-                    else:
-                        if (joueur.vivant): joueur.pile_monstres_vaincus.append(carte)
-                    if carte.effet == "LIMON":
-                        objets_intacts = [objet for objet in joueur.objets if objet.intact]
-                        if objets_intacts:
-                            objet_avalé = random.choice(objets_intacts)
-                            log_details.append(f"Le limon Glouton avale {objet_avalé.nom}.")
-                            objet_avalé.destroy()
-                            if objet_avalé.pv_bonus:
-                                joueur.pv_total -= objet_avalé.pv_bonus
-                                log_details.append(f"L'objet avale {objet_avalé.nom} donnait {objet_avalé.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
-                
-                    log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
+                Jeu.traquenard_actif = False
+                joueur.pv_total -= carte.dommages
+                #item survie ici
+                # Ne pas ajouter le Gobelin Fantôme à la pile des monstres vaincus
+                if carte.effet == "MAUDIT":  
+                    Jeu.defausse.append(carte)
+                    log_details.append(f"Le {carte.titre} disparait.")
+                else:
+                    if (joueur.vivant): joueur.pile_monstres_vaincus.append(carte)
+                if carte.effet == "LIMON":
+                    objets_intacts = [objet for objet in joueur.objets if objet.intact]
+                    if objets_intacts:
+                        objet_avalé = random.choice(objets_intacts)
+                        log_details.append(f"Le limon Glouton avale {objet_avalé.nom}.")
+                        objet_avalé.destroy()
+                        if objet_avalé.pv_bonus:
+                            joueur.pv_total -= objet_avalé.pv_bonus
+                            log_details.append(f"L'objet avale {objet_avalé.nom} donnait {objet_avalé.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
+            
+                log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
 
-                    if carte.dommages >= 0 and carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
-                        monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
-                        log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
+                if carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
+                    monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
+                    donjon.insert(0,monstre_remis)
+                    log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
 
-                    if carte.dommages >= 0 and carte.effet == "MEDAIL" and carte.dommages > 0:
+                if carte.dommages >= 0 and carte.effet == "MEDAIL" and carte.dommages > 0:
                         joueur.medailles -= 1
                         log_details.append(f"Perdu une médaille en affrontant Rongeur de médaille, médailles restantes: {joueur.medailles}")
             
@@ -319,32 +314,16 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
 
 
 def loguer_x_parties(x=1):
-        # Initialisation du personnage
-    objets_sag = [ 
-        BouclierGolemique(),
-        HacheExecution(),
-        CotteDeMailles(),
-        BouclierDragon(),
-        ParcheminDeBahn(),
-        SingeDore(),
+    objets_disponibles_simu = list(objets_disponibles)
+
+    # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
+    joueurs = [
+        Joueur("Sagarex", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
+        Joueur("Francis", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
+        Joueur("Mastho", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
+        Joueur("Mr.Adam", random.randint(2, 4), random.sample(objets_disponibles_simu, 6))
     ]
-    objets_francis = [ 
-        KebabRevigorant(),
-        ArmureEnCuir(),
-        MarteauDeGuerre(),
-        CaisseEnchantee(),
-        CouteauSuisse(),
-        GateauSpatial(),
-    ]
-    objets_mastho = [
-        # ChapeauDuNovice(),
-        # TorcheRose(),
-        # MasqueDeLaPeste(),
-        PotionDraconique(),
-        ArmureDHonneur(),
-        PotionFeerique(),
-    ]
-    joueurs = [Joueur("Sagarex",3, objets_sag), Joueur("Francis",3, objets_francis), Joueur("Mastho",5, objets_mastho)]
+
     seuil_pv_essai_fuite = 5
 
     for j in joueurs:
