@@ -172,7 +172,9 @@ class MainDeMidas(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
         self.absorbe(joueur, carte, log_details)
-
+class Item6PV(Objet):
+    def __init__(self):
+        super().__init__("Item 6PV", False, 6)
 class ArmureEnCuir(Objet):
     def __init__(self):
         super().__init__("Armure en cuir", False, 5)
@@ -597,6 +599,7 @@ objets_disponibles = [
     MarteauDeGuerre(),
     FleauDesLiches(),
     EpauletteDuBourrin(),
+    Item6PV(),
     ArmureEnCuir(),  # 5pv
     CotteDeMailles(), # 4pv
     ParcheminDeBahn(), # Exécute et défausse un monstre, gagne 1 PV
@@ -648,6 +651,7 @@ __all__ = [
             "MarteauDeGuerre",
             "FleauDesLiches",
             "EpauletteDuBourrin",
+            "Item6PV",
             "ArmureEnCuir",
             "CotteDeMailles",
             "ParcheminDeBahn",
