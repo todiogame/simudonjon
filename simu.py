@@ -31,8 +31,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
     while Jeu.donjon:
         Jeu.tour += 1
         
-        for detail in log_details:
-            print(detail)
+        if log:
+            for detail in log_details:
+                print(detail)
         log_details = []
 
         # Vérifier s'il reste des joueurs vivants
@@ -51,9 +52,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                 break
 
         joueur = joueurs[index_joueur]
-        log_details.append(f"debut de boucle avec {joueur.nom}")
 
-                
         log_details.append(f"Tour de {joueur.nom}, {joueur.pv_total}PV")
         
         # Le joueur pioche une carte
@@ -168,6 +167,10 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                 carte.dommages += 4
                 log_details.append(f"Rencontré Seigneur Vampire, inflige 4 dommages supplémentaires grâce aux médailles, dommages {carte.dommages}.")
             
+            #use items en_rencontre
+            for objet in joueur.objets:
+                objet.en_rencontre(joueur, carte, Jeu, log_details)
+
             if jet_fuite_lance: 
                 if jet_fuite >= carte.puissance:
                     # Fuite réussie
@@ -227,12 +230,26 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                         log_details.append(f"Perdu une médaille en affrontant Rongeur de médaille, médailles restantes: {joueur.medailles}")
             
             if joueur.pv_total <= 0:
+                #use items survie
+                for objet in joueur.objets:
+                    objet.en_survie(joueur, carte, Jeu, log_details)
+                    if joueur.pv_total > 0:
+                        break
+            # vraiment mort        
+            if joueur.pv_total <= 0:
                 joueur.mort()
                 log_details.append(f"OUPS!! Mort de {joueur.nom}, a court de PV.\n")
                 donjon.insert(0, carte)
                 index_joueur += 1
                 if index_joueur >= len(joueurs):
                     index_joueur = 0
+                continue
+            
+            #use items en_vaincu
+            for objet in joueur.objets:
+                objet.en_vaincu(joueur, carte, Jeu, log_details)
+
+
             if joueur.dans_le_dj and not Jeu.execute_next_monster:
                 # Passer son tour, au joueur suivant
                 joueur.tour += 1
@@ -263,6 +280,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
         joueurs_final = [j for j in joueurs if j.vivant]
         log_details.append("Aucun joueur n'a poncé le donjon, tous les joueurs vivants comptent.")
 
+    #use items en_decompte
+    for j in joueurs:
+        for objet in j.objets:
+            objet.en_decompte(j, joueurs_final, log_details)
+
     # Loguer les joueurs exclus et inclus
     for j in joueurs:
         if j in joueurs_final:
@@ -272,7 +294,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
                 log_details.append(f"{j.nom} est exclu du décompte final car il est mort.")
             elif j.fuite_reussie:
                 log_details.append(f"{j.nom} est exclu du décompte final car il a fui le donjon.")
-
+            else: log_details.append(f"{j.nom}  A BUG ?? {j.vivant} {j.fuite_reussie} {j.dans_le_dj}")
     # Trier les joueurs par ordre de score décroissant
     joueurs_final.sort(key=lambda j: j.score_final, reverse=True)
 
@@ -284,20 +306,23 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
     log_details.append("\n")
 
     # Impression des logs (facultatif)
-    for detail in log_details:
-        print(detail)
+    if log:
+        for detail in log_details:
+            print(detail)
 
     #return score_final#, fuite_reussie, donjon_ponce
+    # Retourner le joueur vainqueur s'il y en a un
+    vainqueur = joueurs_final[0] if joueurs_final else None
+    return vainqueur
 
 
-
-def loguer_x_parties(x=3):
+def loguer_x_parties(x=1):
         # Initialisation du personnage
     objets_sag = [ 
         BouclierGolemique(),
         HacheExecution(),
         CotteDeMailles(),
-        CouteauSuisse(),
+        BouclierDragon(),
         ParcheminDeBahn(),
         SingeDore(),
     ]
@@ -310,15 +335,15 @@ def loguer_x_parties(x=3):
         GateauSpatial(),
     ]
     objets_mastho = [
-        ChapeauDuNovice(),
-        TorcheRose(),
-        MasqueDeLaPeste(),
-        ValisesDeCash(),
-        TroisPV(),
-        Katana(),
+        # ChapeauDuNovice(),
+        # TorcheRose(),
+        # MasqueDeLaPeste(),
+        PotionDraconique(),
+        ArmureDHonneur(),
+        PotionFeerique(),
     ]
     joueurs = [Joueur("Sagarex",3, objets_sag), Joueur("Francis",3, objets_francis), Joueur("Mastho",5, objets_mastho)]
-    seuil_pv_essai_fuite = 6
+    seuil_pv_essai_fuite = 5
 
     for j in joueurs:
         print(f"Initialisation de  avec {j.pv_base} PV de base et les objets spécifiés")
