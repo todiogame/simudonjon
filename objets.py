@@ -446,6 +446,13 @@ class CouronneDEpines(Objet):
 class MasqueAGaz(Objet):
     def __init__(self):
         super().__init__("Masque à gaz", True, 4)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and joueur.pv_total > 3 and carte.dommages >= (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.destroy()
+        self.perdPV(self.pv_bonus, joueur, carte, log_details)
+        self.executeEtDefausse(joueur, carte, log_details)
+        
 class BouclierCameleon(Objet):
     def __init__(self):
         super().__init__("Bouclier caméléon", False, 0, 0)
