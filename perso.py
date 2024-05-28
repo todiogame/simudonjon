@@ -11,6 +11,7 @@ class Joueur:
         self.fuite_reussie = False
         self.tour = 1
         self.objets = objets if objets is not None else []
+        self.objets_initiaux = objets if objets is not None else []
         for objet in self.objets:
             self.pv_total += objet.pv_bonus
         self.pile_monstres_vaincus = []
