@@ -12,7 +12,7 @@ import copy
 import itertools
 
 # Nombre de simulations souhaitées
-total_simulations = 50000
+total_simulations = 20000
 seuil_pv_essai_fuite=6
 
 
@@ -20,7 +20,8 @@ seuil_pv_essai_fuite=6
 def display_simu():
     # Initialisation des résultats
     resultats_builds = []
-    total_games_simulees = 0
+    highscore_max = 0
+    meilleur_vainqueur = None
 
     # Mesurer le temps de simulation
     start_time = time.time()
@@ -49,10 +50,14 @@ def display_simu():
         # Exécution de l'ordonnanceur sans afficher les logs
         vainqueur = ordonnanceur(joueurs_copie, cartes_copie, seuil_pv_essai_fuite, False)
 
+        # Mise à jour du highscore max et du meilleur vainqueur
+        if vainqueur and vainqueur.score_final > highscore_max:
+            highscore_max = vainqueur.score_final
+            meilleur_vainqueur = copy.deepcopy(vainqueur)
+        
         # Mise à jour des statistiques
         for joueur in joueurs_copie:
             for objet in joueur.objets_initiaux:
-                total_games_simulees += 1
                 resultats_builds.append({
                     'Objet': objet.nom,
                     'Build': ', '.join(o.nom for o in joueur.objets_initiaux),
@@ -108,8 +113,11 @@ def display_simu():
     print("\nPires duos d'objets:")
     print(flop_10_duos)
     print(f"\nTemps total des simulations : {total_time:.2f} secondes")
-    print(f"Total de jeux simulés : {total_games_simulees}")
+    if meilleur_vainqueur:
+            print(f"\nHighscore Max: {highscore_max}")
+            print(f"Meilleur Vainqueur: {meilleur_vainqueur.nom} avec les objets: {', '.join(objet.nom for objet in meilleur_vainqueur.objets)}")
+
+
 # display_simu()
 
-
-loguer_x_parties()
+loguer_x_parties(50)
