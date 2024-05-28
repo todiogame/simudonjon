@@ -175,7 +175,9 @@ class MainDeMidas(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
         self.absorbe(joueur, carte, log_details)
-
+class Item6PV(Objet):
+    def __init__(self):
+        super().__init__("Item 6PV", False, 6)
 class ArmureEnCuir(Objet):
     def __init__(self):
         super().__init__("Armure en cuir", False, 5)
@@ -453,6 +455,13 @@ class PierreDAme(Objet):
 class CoeurDeGolem(Objet):
     def __init__(self):
         super().__init__("Cœur de Golem", False, 3)
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        golem_count = sum(1 for monstre in joueur.pile_monstres_vaincus if "Golem" in monstre.types)
+        if golem_count > 0:
+            self.reduc_damage(golem_count, joueur, carte, log_details)
+            log_details.append(f"Utilisé {self.nom} pour réduire les dommages de {golem_count}, égal au nombre de Golems vaincus.")
+
 
 class CouronneDEpines(Objet):
     def __init__(self):
@@ -592,6 +601,7 @@ objets_disponibles = [
     MarteauDeGuerre(),
     FleauDesLiches(),
     EpauletteDuBourrin(),
+    Item6PV(),
     ArmureEnCuir(),  # 5pv
     CotteDeMailles(), # 4pv
     ParcheminDeBahn(), # Exécute et défausse un monstre, gagne 1 PV
@@ -620,7 +630,7 @@ TroisPV(),
 TroisPV_(),
 ArmureDHonneur(),
 PierreDAme(),
-# CoeurDeGolem(),
+CoeurDeGolem(),
 CouronneDEpines(),
 MasqueAGaz(),
 BouclierCameleon(),
@@ -643,6 +653,7 @@ __all__ = [
             "MarteauDeGuerre",
             "FleauDesLiches",
             "EpauletteDuBourrin",
+            "Item6PV",
             "ArmureEnCuir",
             "CotteDeMailles",
             "ParcheminDeBahn",

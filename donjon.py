@@ -32,7 +32,8 @@ def display_simu():
         joueurs = [
             Joueur("Sagarex", random.randint(2, 4), random.sample(objets_disponibles_simu, 3)),
             Joueur("Francis", random.randint(2, 4), random.sample(objets_disponibles_simu, 3)),
-            Joueur("Mastho", random.randint(2, 4), random.sample(objets_disponibles_simu, 3))
+            Joueur("Mastho", random.randint(2, 4), random.sample(objets_disponibles_simu, 3)),
+            Joueur("Nicoco", random.randint(2, 4), random.sample(objets_disponibles_simu, 3)),
         ]
 
         # Création de la copie des joueurs et des cartes
