@@ -46,3 +46,6 @@ class Joueur:
             self.score_final += 1
         for objet in self.objets:
             objet.en_score(self, log_details)
+
+    def trier_objets_par_priorite(self):
+        self.objets = sorted(self.objets, key=lambda obj: obj.priorite, reverse=True)

@@ -12,10 +12,8 @@ import copy
 import itertools
 
 # Nombre de simulations souhaitées
-total_simulations = 100000
+total_simulations = 300000
 seuil_pv_essai_fuite=6
-
-
 
 def display_simu():
     # Initialisation des résultats
@@ -30,9 +28,10 @@ def display_simu():
     for _ in tqdm(range(total_simulations), desc="Simulation des builds"):
         # Créer une copie de la liste des objets disponibles pour cette simulation
         objets_disponibles_simu = list(objets_disponibles)
-        # Reparer tous les objets
+        # Reparer tous les objets et attribuer une priorité aléatoire
         for o in objets_disponibles_simu:
-             o.intact = True
+            o.intact = True
+            o.priorite = random.randint(0, 99)
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         joueurs = []
@@ -58,6 +57,7 @@ def display_simu():
             for objet in joueur.objets_initiaux:
                 resultats_builds.append({
                     'Objet': objet.nom,
+                    'Priorite': objet.priorite,
                     'Build': ', '.join(o.nom for o in joueur.objets_initiaux),
                     'Victoire': 1 if joueur == vainqueur else 0
                 })
@@ -76,8 +76,38 @@ def display_simu():
 
     # Calculer le winrate pour chaque objet
     df_stats_objets['Winrate'] = (df_stats_objets['Victoires'] / df_stats_objets['Total']) * 100
-    # Trier les statistiques par winrate
-    df_stats_objets = df_stats_objets.sort_values(by='Winrate', ascending=False)
+
+    # Calculer la priorité médiane et moyenne parmi les jeux joués
+    priorite_stats = df_resultats.groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
+    priorite_stats.columns = ['Objet', 'Priorite_mediane', 'Priorite_moyenne']
+
+    # Calculer la priorité médiane et moyenne parmi les jeux gagnés
+    priorite_stats_gagnees = df_resultats[df_resultats['Victoire'] == 1].groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
+    priorite_stats_gagnees.columns = ['Objet', 'Priorite_mediane_gagnee', 'Priorite_moyenne_gagnee']
+
+    # Fusionner les priorités médianes et moyennes avec les statistiques des objets
+    df_stats_objets = df_stats_objets.merge(priorite_stats, on='Objet')
+    df_stats_objets = df_stats_objets.merge(priorite_stats_gagnees, on='Objet')
+
+    # Calculer la différence de moyenne
+    df_stats_objets['Diff_moyenne'] = df_stats_objets['Priorite_moyenne_gagnee'] - df_stats_objets['Priorite_moyenne']
+
+    # Trier les statistiques par différence de moyenne
+    df_stats_objets = df_stats_objets.sort_values(by='Diff_moyenne', ascending=False)
+
+    # Afficher les résultats
+    print("\nStatistiques par objet:")
+    print(df_stats_objets)
+    print(f"\nTemps total des simulations : {total_time:.2f} secondes")
+    if meilleur_vainqueur:
+        print(f"\nHighscore Max: {highscore_max}")
+        print(f"Meilleur Vainqueur: {meilleur_vainqueur.nom} avec les objets de départ:\n {', '.join(objet.nom for objet in meilleur_vainqueur.objets_initiaux)}\nBuild complet: {', '.join(objet.nom for objet in meilleur_vainqueur.objets)}")
+
+
+display_simu()
+
+# loguer_x_parties(1)
+
 
     # Calculer les meilleurs et les pires duos d'objets
     # duos_scores = {}
@@ -103,20 +133,3 @@ def display_simu():
     # df_duos_scores.sort_values(by='Winrate', ascending=False, inplace=True)
     # top_10_duos = df_duos_scores.head(10)
     # flop_10_duos = df_duos_scores.tail(10)
-
-    # Afficher les résultats
-    print("\nStatistiques par objet:")
-    print(df_stats_objets)
-    # print("\nMeilleurs duos d'objets:")
-    # print(top_10_duos)
-    # print("\nPires duos d'objets:")
-    # print(flop_10_duos)
-    print(f"\nTemps total des simulations : {total_time:.2f} secondes")
-    if meilleur_vainqueur:
-            print(f"\nHighscore Max: {highscore_max}")
-            print(f"Meilleur Vainqueur: {meilleur_vainqueur.nom} avec les objets de depart:\n {', '.join(objet.nom for objet in meilleur_vainqueur.objets_initiaux)}\nBuild complet:{', '.join(objet.nom for objet in meilleur_vainqueur.objets)}")
-
-
-display_simu()
-
-# loguer_x_parties(1)

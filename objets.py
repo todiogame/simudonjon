@@ -1,13 +1,14 @@
 import random
 
 class Objet:
-    def __init__(self, nom, actif=False, pv_bonus=0, modificateur_de=0, effet=None, intact=True):
+    def __init__(self, nom, actif=False, pv_bonus=0, modificateur_de=0, effet=None, intact=True, priorite = 0):
         self.nom = nom
         self.pv_bonus = pv_bonus
         self.modificateur_de = modificateur_de
         self.effet = effet
         self.intact = intact
         self.actif = actif
+        self.priorite = priorite
 
     def rules(self, joueur, carte, Jeu, log_details):
         # rule condition to use the item
