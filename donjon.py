@@ -116,6 +116,6 @@ def display_simu():
             print(f"Meilleur Vainqueur: {meilleur_vainqueur.nom} avec les objets: {', '.join(objet.nom for objet in meilleur_vainqueur.objets)}")
 
 
-# display_simu()
+display_simu()
 
-loguer_x_parties(50)
+# loguer_x_parties(50)
