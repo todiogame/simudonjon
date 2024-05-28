@@ -91,6 +91,10 @@ class Objet:
         carte.dommages = max(carte.dommages - value, 0)
         log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
 
+    def add_damage(self, value, joueur, carte, log_details):
+        carte.dommages = carte.dommages + value
+        log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour augmenter les dommages de {value}.")
+
     def gagnePV(self, value, joueur, carte, log_details):
         joueur.pv_total += value
         log_details.append(f"Utilisé {self.nom} pour gagner {value} PV. Total {joueur.pv_total} PV.")
@@ -444,6 +448,10 @@ class CoeurDeGolem(Objet):
 class CouronneDEpines(Objet):
     def __init__(self):
         super().__init__("Couronne d'épines", False)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.reduc_damage(1, joueur, carte, log_details)
+        if carte.dommages == 0:
+            self.add_damage(1, joueur, carte, log_details)
 
 class MasqueAGaz(Objet):
     def __init__(self):
@@ -460,6 +468,14 @@ class MasqueAGaz(Objet):
 class BouclierCameleon(Objet):
     def __init__(self):
         super().__init__("Bouclier caméléon", False, 0, 0)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and carte.puissance >= 6 
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= 2 and joueur.pv_total > 2 
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.perdPV(2, joueur, carte, log_details)
+
 class YoYoProtecteur(Objet):
     def __init__(self):
         super().__init__("Yo-yo protecteur", True)
