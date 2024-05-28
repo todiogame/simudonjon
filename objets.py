@@ -702,6 +702,28 @@ class ChampDeForce(Objet):
             self.execute(joueur, carte, log_details)
             self.destroy()
 
+class BoiteDePandore(Objet):
+    def __init__(self):
+        super().__init__("Boîte de Pandore", True)
+    
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact:
+            self.gagnePV(3, joueur, log_details)
+            for autre_joueur in Jeu.joueurs:
+                objets_actuels = [obj.nom for obj in autre_joueur.objets]
+                for joueur_autre in Jeu.joueurs:
+                    if joueur_autre != autre_joueur:
+                        objets_actuels.extend([obj.nom for obj in joueur_autre.objets])
+                
+                objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
+                if objets_possibles:
+                    nouvel_objet = random.choice(objets_possibles)
+                    autre_joueur.ajouter_objet(nouvel_objet)
+                    autre_joueur.modificateur_de = autre_joueur.calculer_modificateurs()
+                    log_details.append(f"{autre_joueur.nom} a pioché un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {autre_joueur.pv_total} PV.")
+            self.destroy()
+
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -765,7 +787,8 @@ objets_disponibles = [
     GrimoireInconnu(),
     GantsDeCombat(),
     GantsDeGaia(),
-    ChampDeForce()
+    ChampDeForce(),
+    BoiteDePandore(),
 ]
 
 
@@ -834,4 +857,5 @@ __all__ = [
             "GantsDeCombat",
             "GantsDeGaia",
             "ChampDeForce",
+            "BoiteDePandore",
         ]
