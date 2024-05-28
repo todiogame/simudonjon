@@ -68,7 +68,8 @@ def display_simu():
 
     # Convertir les résultats en DataFrame
     df_resultats = pd.DataFrame(resultats_builds)
-
+    pd.set_option('display.max_rows', 100)
+    
     # Calculer le nombre total de victoires et de défaites pour chaque objet
     df_stats_objets = df_resultats.groupby('Objet')['Victoire'].agg(['sum', 'count']).reset_index()
     df_stats_objets.columns = ['Objet', 'Victoires', 'Total']
