@@ -243,7 +243,9 @@ class Barde(Objet):
     def __init__(self):
         super().__init__("Barde", True, 3)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and joueur.pv_total > 3 and carte.dommages >= (joueur.pv_total / 2)
+        return not Jeu.traquenard_actif and joueur.pv_total > 3
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > 3 and carte.dommages >= (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
         self.perdPV(self.pv_bonus, joueur, carte, log_details)
@@ -403,7 +405,7 @@ class AnneauDuFeu(Objet):
         return not Jeu.traquenard_actif and "Vampire" in carte.types
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.gagnePV(27, joueur, carte, log_details)
+        self.gagnePV(2, joueur, carte, log_details)
 
 class AnneauMagique(Objet):
     def __init__(self):
@@ -447,12 +449,14 @@ class MasqueAGaz(Objet):
     def __init__(self):
         super().__init__("Masque à gaz", True, 4)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and joueur.pv_total > 3 and carte.dommages >= (joueur.pv_total / 2)
+        return not Jeu.traquenard_actif and joueur.pv_total > 4 
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > 4 and carte.dommages >= (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
         self.perdPV(self.pv_bonus, joueur, carte, log_details)
         self.executeEtDefausse(joueur, carte, log_details)
-        
+
 class BouclierCameleon(Objet):
     def __init__(self):
         super().__init__("Bouclier caméléon", False, 0, 0)
@@ -487,6 +491,12 @@ class ArmureDamnee(Objet):
 class AnneauDesSurmulots(Objet):
     def __init__(self):
         super().__init__("Anneau des surmulots", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Rat" in carte.types and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.gagnePV(3, joueur, carte, log_details)
+        
 class PatinsAGlace(Objet):
     def __init__(self):
         super().__init__("Patins à Glace", False, 3, 3)
