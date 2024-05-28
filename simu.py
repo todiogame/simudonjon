@@ -26,6 +26,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
         donjon
     Jeu.donjon = donjon
 
+    # arreter la simulation si on a un objet casse dans une main
+    for j in joueurs:
+        for o in j.objets:
+            if not o.intact: 1/0
+
     index_joueur = 0  # Initialisation de l'index du joueur courant
     
     while Jeu.donjon:
@@ -65,9 +70,10 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
             joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs() 
             log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
             joueur.jet_fuite_lance = True
-            # if joueur.jet_fuite >= 7 and any(isinstance(objet, PatinsAGlace) and objet.intact for objet in joueur.objets):
-            #     joueur.pv_total -= 1
-            #     log_details.append(f"Jet de fuite de {joueur.jet_fuite}, Patins à Glace actifs, perd 1 PV. PV restant: {joueur.pv_total}")
+            #use items en_fuite
+            for objet in joueur.objets:
+                objet.en_fuite(joueur, Jeu, log_details)
+            
 
 
 
@@ -327,7 +333,7 @@ def loguer_x_parties(x=1):
     seuil_pv_essai_fuite = 5
 
     for j in joueurs:
-        print(f"Initialisation de  avec {j.pv_base} PV de base et les objets spécifiés")
+        print(f"Initialisation de {j.nom} avec {j.pv_base} PV de base et les objets spécifiés")
         print(f"Objets : {[objet.nom for objet in j.objets]}")
     print(f"Seuil de PV pour tenter la fuite : {seuil_pv_essai_fuite}\n")
     for i in range(x):

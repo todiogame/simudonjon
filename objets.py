@@ -45,6 +45,10 @@ class Objet:
         # attention, check si les items sont intacts
         self.rencontre_effet(joueur, carte, Jeu, log_details)
 
+    def en_fuite(self, joueur, Jeu, log_details):
+        # attention, check si les items sont intacts
+        pass
+
     def en_rencontre_event(self, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         self.rencontre_event_effet(joueur, carte, Jeu, log_details)    
@@ -101,11 +105,11 @@ class Objet:
         carte.dommages = carte.dommages + value
         log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour augmenter les dommages de {value}.")
 
-    def gagnePV(self, value, joueur, carte, log_details):
+    def gagnePV(self, value, joueur, log_details):
         joueur.pv_total += value
         log_details.append(f"Utilisé {self.nom} pour gagner {value} PV. Total {joueur.pv_total} PV.")
 
-    def perdPV(self, value, joueur, carte, log_details):
+    def perdPV(self, value, joueur, log_details):
         joueur.pv_total -= value
         log_details.append(f"Utilisé {self.nom} et perd {value} PV. Total {joueur.pv_total} PV.")
         if(joueur.pv_total <= 0): joueur.mort()
@@ -192,7 +196,7 @@ class ParcheminDeBahn(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        self.gagnePV(1, joueur, carte, log_details)
+        self.gagnePV(1, joueur, log_details)
 
 class SingeDore(Objet):
     def __init__(self):
@@ -211,7 +215,7 @@ class GateauSpatial(Objet):
             joueur.fuite()
             log_details.append(f"Utilisé Gâteau spatial, jet de {jet_gateau}, fuite immédiate du Donjon.\n")
         else:
-            self.gagnePV(jet_gateau, joueur, carte, log_details)
+            self.gagnePV(jet_gateau, joueur, log_details)
 
 class CouteauSuisse(Objet):
     def __init__(self):
@@ -260,7 +264,7 @@ class Barde(Objet):
         return carte.dommages > 3 and carte.dommages >= (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
-        self.perdPV(self.pv_bonus, joueur, carte, log_details)
+        self.perdPV(self.pv_bonus, joueur, log_details)
         self.execute(joueur, carte, log_details)
 
 class BouclierDragon(Objet):
@@ -276,9 +280,14 @@ class BouclierDragon(Objet):
     def rencontre_effet(self, joueur, carte, Jeu, log_details):
         if ("Dragon" in carte.types):
             self.reset_intact(log_details)
+
 class PotionDeMana(Objet):
     def __init__(self):
         super().__init__("Potion de Mana", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        if len(joueur.pile_monstres_vaincus):
+            self.destroy()
+            self.survit(1, joueur, carte, log_details)
 
 class KebabRevigorant(Objet):
     def __init__(self):
@@ -287,7 +296,7 @@ class KebabRevigorant(Objet):
         return joueur.tour >= 3
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
-        self.gagnePV(7, joueur, carte, log_details)
+        self.gagnePV(7, joueur, log_details)
 
 class ArcEnflamme(Objet):
     def __init__(self):
@@ -328,6 +337,7 @@ class PotionDeGlace(Objet):
         self.destroy()
         log_details.append(f"Utilisé {self.nom} pour fuir le réduire à 0 {carte.titre} !")
         carte.puissance = 0
+        carte.dommages = 0
 
 class PotionDraconique(Objet):
     def __init__(self):
@@ -385,7 +395,7 @@ class RobeDeMage(Objet):
         return not Jeu.traquenard_actif and "Démon" in carte.types
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.gagnePV(5, joueur, carte, log_details)
+        self.gagnePV(5, joueur, log_details)
 
 class ValisesDeCash(Objet):
     def __init__(self):
@@ -402,7 +412,7 @@ class TronconneuseEnflammee(Objet):
         return carte.dommages >= 3
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.perdPV(3, joueur, carte, log_details)
+        self.perdPV(3, joueur, log_details)
     
 class TuniqueClasse(Objet):
     def __init__(self):
@@ -417,7 +427,7 @@ class AnneauDuFeu(Objet):
         return not Jeu.traquenard_actif and "Vampire" in carte.types
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.gagnePV(2, joueur, carte, log_details)
+        self.gagnePV(2, joueur, log_details)
 
 class AnneauMagique(Objet):
     def __init__(self):
@@ -477,7 +487,7 @@ class MasqueAGaz(Objet):
         return carte.dommages > 4 and carte.dommages >= (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
-        self.perdPV(self.pv_bonus, joueur, carte, log_details)
+        self.perdPV(self.pv_bonus, joueur, log_details)
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
 
 class BouclierCameleon(Objet):
@@ -489,7 +499,7 @@ class BouclierCameleon(Objet):
         return carte.dommages >= 2 and joueur.pv_total > 2 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.perdPV(2, joueur, carte, log_details)
+        self.perdPV(2, joueur, log_details)
 
 class YoYoProtecteur(Objet):
     def __init__(self):
@@ -529,16 +539,15 @@ class GlaiveDArgent(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         if any("Vampire" in monstre.types for monstre in joueur.pile_monstres_vaincus):
-            self.gagnePV(4, joueur, carte, log_details)
+            self.gagnePV(4, joueur, log_details)
 
 class ChapeletDeVitalite(Objet):
     def __init__(self):
         super().__init__("Chapelet de Vitalité", False, 3)
-    
     def debut_tour(self, joueur, Jeu, log_details):
         jet_chapelet = random.randint(1, 6)
         if jet_chapelet == 6:
-            self.gagnePV(1, joueur, None, log_details)
+            self.gagnePV(1, joueur, log_details)
 
 class TalismanIncertain(Objet):
     def __init__(self):
@@ -585,12 +594,15 @@ class AnneauDesSurmulots(Objet):
         return "Rat" in carte.types and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.gagnePV(3, joueur, carte, log_details)
+        self.gagnePV(3, joueur, log_details)
         
 class PatinsAGlace(Objet):
     def __init__(self):
         super().__init__("Patins à Glace", False, 3, 3)
-#todo ajouter effet perte de pv
+    def en_fuite(self, joueur, Jeu, log_details):
+        if joueur.jet_fuite >= 7:
+            self.perdPV(1, joueur, log_details)
+
 
 # Liste des objets
 objets_disponibles = [ 
@@ -602,44 +614,52 @@ objets_disponibles = [
     Item6PV(),
     ArmureEnCuir(),  # 5pv
     CotteDeMailles(), # 4pv
-    ParcheminDeBahn(), # Exécute et défausse un monstre, gagne 1 PV
-    SingeDore(), # Jet de fuite -2, au décompte final lancez le dé et gagnez autant de points de victoire
+    ParcheminDeBahn(), 
+    SingeDore(), 
     GateauSpatial(),
     CouteauSuisse(),
     CaisseEnchantee(),
-    BouclierGolemique(), Barde(), BouclierDragon(),PotionDeMana(), KebabRevigorant(), ArcEnflamme(),   
-              ParcheminDeTeleportation(),
- GrosBoulet(),
- PotionFeerique(),
-  PotionDeGlace(),
-  PotionDraconique(),
-  PiocheDeDiamant(),
-  Katana(),
-  ChapeauDuNovice(),
-MasqueDeLaPeste(),
-TorcheRose(),
- RobeDeMage(),
- ValisesDeCash(),
- AnneauDuFeu(),
-TronconneuseEnflammee(),
-TuniqueClasse(),
-AnneauMagique(),
-TroisPV(),
-TroisPV_(),
-ArmureDHonneur(),
-PierreDAme(),
-CoeurDeGolem(),
-CouronneDEpines(),
-MasqueAGaz(),
-BouclierCameleon(),
-YoYoProtecteur(),
-TalismanIncertain(),ChapeletDeVitalite(),GlaiveDArgent(),BouclierCasse(),
-PlanPresqueParfait(),
-GraalEnMousse(),
-ItemUseless(),
-AnneauDesSurmulots(),
-ArmureDamnee(),
-PatinsAGlace(),
+    BouclierGolemique(),
+    Barde(),
+    BouclierDragon(),
+    PotionDeMana(),
+    KebabRevigorant(), 
+    ArcEnflamme(),   
+    ParcheminDeTeleportation(),
+    GrosBoulet(),
+    PotionFeerique(),
+    PotionDeGlace(),
+    PotionDraconique(),
+    PiocheDeDiamant(),
+    Katana(),
+    ChapeauDuNovice(),
+    MasqueDeLaPeste(),
+    TorcheRose(),
+    RobeDeMage(),
+    ValisesDeCash(),
+    AnneauDuFeu(),
+    TronconneuseEnflammee(),
+    TuniqueClasse(),
+    AnneauMagique(),
+    TroisPV(),
+    TroisPV_(),
+    ArmureDHonneur(),
+    PierreDAme(),
+    CoeurDeGolem(),
+    CouronneDEpines(),
+    MasqueAGaz(),
+    BouclierCameleon(),
+    YoYoProtecteur(),
+    TalismanIncertain(),
+    ChapeletDeVitalite(),
+    GlaiveDArgent(),
+    BouclierCasse(),
+    PlanPresqueParfait(),
+    GraalEnMousse(),
+    ItemUseless(),
+    AnneauDesSurmulots(),
+    ArmureDamnee(),
+    PatinsAGlace(),
 ]
 
 

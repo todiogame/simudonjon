@@ -15,6 +15,7 @@ class Joueur:
             self.pv_total += objet.pv_bonus
         self.pile_monstres_vaincus = []
         self.score_final = 0
+        self.jet_fuite = 0
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)
