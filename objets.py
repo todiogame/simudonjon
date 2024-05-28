@@ -301,7 +301,7 @@ class KebabRevigorant(Objet):
 class ArcEnflamme(Objet):
     def __init__(self):
         super().__init__("Arc enflammé", False, 7)
-    def vaincu_effet(self, joueur, carte, Jeu, log_details):
+    def combat_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and (carte.puissance %2 ==1):
             self.add_damage(1, joueur, carte, log_details)
 

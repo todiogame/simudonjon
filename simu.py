@@ -328,15 +328,10 @@ def loguer_x_parties(x=1):
 
     # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
     joueurs = [
-        Joueur("Sagarex", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
-        Joueur("Francis", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
+        # Joueur("Sagarex", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
+        # Joueur("Francis", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
         Joueur("Mastho", random.randint(2, 4), random.sample(objets_disponibles_simu, 6)),
-        Joueur("Mr.Adam", random.randint(22,24), [GrimoireInconnu(),
-GantsDeCombat(),
-GantsDeGaia(),
-GantsDeCombat(),
-GantsDeCombat(),
-GantsDeCombat()])
+        Joueur("Mr.Adam", random.randint(22,24), [ArcEnflamme(),])
     ]
 
     seuil_pv_essai_fuite = 5
