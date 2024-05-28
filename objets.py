@@ -189,11 +189,13 @@ class Item6PV(Objet):
         super().__init__("Item 6PV", False, 6)
 class ArmureEnCuir(Objet):
     def __init__(self):
-        super().__init__("Armure en cuir", False, 5)
+        super().__init__("Item 5PV", False, 5)
 class CotteDeMailles(Objet):
     def __init__(self):
-        super().__init__("Cotte de mailles", False, 4)
-
+        super().__init__("Item 4PV", False, 4)
+class Item2PV(Objet):
+    def __init__(self):
+        super().__init__("Item 2PV", False, 4)
 class ParcheminDeBahn(Objet):
     def __init__(self):
         super().__init__("Parchemin de Bahn", True)
@@ -417,7 +419,7 @@ class TronconneuseEnflammee(Objet):
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif
     def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= 3
+        return carte.dommages >= 3 and joueur.pv_total > 3
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         self.perdPV(3, joueur, log_details)
@@ -447,10 +449,10 @@ class AnneauMagique(Objet):
 
 class TroisPV(Objet):
     def __init__(self):
-        super().__init__("TroisPV", False, 3)
+        super().__init__("Item 3PV", False, 3)
 class TroisPV_(Objet):
     def __init__(self):
-        super().__init__("TroisPV 2", False, 3)
+        super().__init__("Item 3PV 2", False, 3)
 class ArmureDHonneur(Objet):
     def __init__(self):
         super().__init__("Armure d'honneur", False, 3)
@@ -690,7 +692,15 @@ class GantsDeGaia(Objet):
                     self.piocheItem(joueur, Jeu, log_details)
                 self.destroy()
 
-
+class ChampDeForce(Objet):
+    def __init__(self):
+        super().__init__("Champ de force", True)
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        jet_cf = random.randint(1, 6)
+        if jet_cf >= 5:
+            self.execute(joueur, carte, log_details)
+            self.destroy()
 
 # Liste des objets
 objets_disponibles = [ 
@@ -755,6 +765,7 @@ objets_disponibles = [
     GrimoireInconnu(),
     GantsDeCombat(),
     GantsDeGaia(),
+    ChampDeForce()
 ]
 
 
@@ -822,4 +833,5 @@ __all__ = [
             "GrimoireInconnu",
             "GantsDeCombat",
             "GantsDeGaia",
+            "ChampDeForce",
         ]

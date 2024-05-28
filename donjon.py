@@ -12,7 +12,7 @@ import copy
 import itertools
 
 # Nombre de simulations souhaitées
-total_simulations = 20000
+total_simulations = 100000
 seuil_pv_essai_fuite=6
 
 
