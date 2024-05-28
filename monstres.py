@@ -13,6 +13,7 @@ class CarteEvent:
         self.titre = titre
         self.description = description
         self.effet = effet
+        self.event = True
 
 cartes = [
     CarteMonstre("Gobelin", 1, ["Gobelin"]),

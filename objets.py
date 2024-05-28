@@ -24,6 +24,8 @@ class Objet:
         pass
     def rencontre_effet(self, joueur, carte, Jeu, log_details):
         pass
+    def rencontre_event_effet(self, joueur, carte, Jeu, log_details):
+        pass
     def vaincu_effet(self, joueur, carte, Jeu, log_details):
         pass
     def survie_effet(self, joueur, carte, Jeu, log_details):
@@ -31,7 +33,7 @@ class Objet:
     def decompte_effet(self,joueur, joueurs_final, log_details):
         pass
 
-    def debut_tour(self):
+    def debut_tour(self, joueur, Jeu, log_details):
         pass
 
     def fin_tour(self):
@@ -40,9 +42,16 @@ class Objet:
     def score_effet(self, joueur, log_details):
         pass
 
+
+
     def en_rencontre(self, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         self.rencontre_effet(joueur, carte, Jeu, log_details)
+
+    def en_rencontre_event(self, joueur, carte, Jeu, log_details):
+        # attention, check si les items sont intacts
+        self.rencontre_event_effet(joueur, carte, Jeu, log_details)    
+    
 
     def en_combat(self, joueur, carte, Jeu, log_details):
         if self.condition(joueur, carte, Jeu, log_details):
@@ -286,7 +295,7 @@ class ArcEnflamme(Objet):
         super().__init__("Arc enflammé", False, 7)
     def vaincu_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and (carte.puissance %2 ==1):
-            self.perdPV(1, joueur, carte, log_details)
+            self.add_damage(1, joueur, carte, log_details)
 
 class ParcheminDeTeleportation(Objet):
     def __init__(self):
@@ -479,30 +488,88 @@ class BouclierCameleon(Objet):
 class YoYoProtecteur(Objet):
     def __init__(self):
         super().__init__("Yo-yo protecteur", True)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance % 2 == 0 and not Jeu.traquenard_actif
+    
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.puissance > 2 or carte.dommages >= joueur.pv_total / 2
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.destroy()
+        jet_yoyo = random.randint(1, 6)
+        if jet_yoyo >= 4:
+            self.reset_intact(log_details)
+
 class BouclierCasse(Objet):
     def __init__(self):
         super().__init__("Bouclier cassé", False)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance >= 6
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        jet_bouclier = random.randint(1, 6)
+        self.reduc_damage(jet_bouclier, joueur, carte, log_details)
+
 class GlaiveDArgent(Objet):
     def __init__(self):
         super().__init__("Glaive d'argent", False)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Vampire" in carte.types and not Jeu.traquenard_actif
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        if any("Vampire" in monstre.types for monstre in joueur.pile_monstres_vaincus):
+            self.gagnePV(4, joueur, carte, log_details)
+
 class ChapeletDeVitalite(Objet):
     def __init__(self):
         super().__init__("Chapelet de Vitalité", False, 3)
+    
+    def debut_tour(self, joueur, Jeu, log_details):
+        jet_chapelet = random.randint(1, 6)
+        if jet_chapelet == 6:
+            self.gagnePV(1, joueur, None, log_details)
+
 class TalismanIncertain(Objet):
     def __init__(self):
         super().__init__("Talisman Incertain", False, 2)
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        jet_talisman = random.randint(1, 6)
+        if jet_talisman == 6:
+            self.execute(joueur, carte, log_details)
+            
 class PlanPresqueParfait(Objet):
     def __init__(self):
         super().__init__("Plan presque parfait", False, 3)
+    
+    def rencontre_event_effet(self, joueur, carte, Jeu, log_details):
+        Jeu.execute_next_monster = True
+        log_details.append(f"Effet {self.nom} actif: la prochaine carte monstre peut être exécutée. Sauf si...")
+
 class GraalEnMousse(Objet):
     def __init__(self):
         super().__init__("Graal en Mousse", False)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance % 2 == 0 and not Jeu.traquenard_actif
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
 class ItemUseless(Objet):
     def __init__(self):
         super().__init__("ItemUseless", False)
 class ArmureDamnee(Objet):
     def __init__(self):
         super().__init__("Armure Damnée", False, 7)
+    
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(-1, joueur, log_details)
 
 class AnneauDesSurmulots(Objet):
     def __init__(self):

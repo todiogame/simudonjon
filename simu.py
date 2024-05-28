@@ -58,16 +58,16 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
         # Le joueur pioche une carte
         carte = donjon.pop(0)
         
-        jet_fuite_lance = False
+        joueur.jet_fuite_lance = False
 
         if joueur.pv_total <= pv_min_fuite and sum(objet.actif and objet.intact for objet in joueur.objets) <= 1:
                         # Tentative de fuite
-            jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs() 
-            log_details.append(f"Tentative de fuite, {jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
-            jet_fuite_lance = True
-            # if jet_fuite >= 7 and any(isinstance(objet, PatinsAGlace) and objet.intact for objet in joueur.objets):
+            joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs() 
+            log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
+            joueur.jet_fuite_lance = True
+            # if joueur.jet_fuite >= 7 and any(isinstance(objet, PatinsAGlace) and objet.intact for objet in joueur.objets):
             #     joueur.pv_total -= 1
-            #     log_details.append(f"Jet de fuite de {jet_fuite}, Patins à Glace actifs, perd 1 PV. PV restant: {joueur.pv_total}")
+            #     log_details.append(f"Jet de fuite de {joueur.jet_fuite}, Patins à Glace actifs, perd 1 PV. PV restant: {joueur.pv_total}")
 
 
 
@@ -76,7 +76,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
             log_details.append(f"A pioché un événement: {carte.titre}.")
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
-
+            for objet in joueur.objets:
+                objet.en_rencontre_event(joueur, carte, Jeu, log_details)
+            
             if carte.effet == "HEAL":
                 joueur.pv_total += 3
                 log_details.append(f"{joueur.nom} gagne 3 PV grâce à {carte.titre}. PV restant: {joueur.pv_total}")
@@ -171,18 +173,18 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, log=True):
             for objet in joueur.objets:
                 objet.en_rencontre(joueur, carte, Jeu, log_details)
 
-            if jet_fuite_lance: 
-                if jet_fuite >= carte.puissance:
+            if joueur.jet_fuite_lance: 
+                if joueur.jet_fuite >= carte.puissance:
                     # Fuite réussie
-                    log_details.append(f"Fuite réussie avec un jet de {jet_fuite} contre {carte.titre} puissance {carte.puissance}\n")
+                    log_details.append(f"Fuite réussie avec un jet de {joueur.jet_fuite} contre {carte.titre} puissance {carte.puissance}\n")
                     joueur.fuite()
                     donjon.insert(0, carte)
-                    jet_fuite_lance = False
+                    joueur.jet_fuite_lance = False
                     continue
                 else:
                     # Fuite échouée, affronter le monstre normalement
-                    log_details.append(f"Fuite échouée avec un jet de {jet_fuite} contre {carte.puissance}.")
-                    jet_fuite_lance = False
+                    log_details.append(f"Fuite échouée avec un jet de {joueur.jet_fuite} contre {carte.puissance}.")
+                    joueur.jet_fuite_lance = False
 
             if Jeu.execute_next_monster and not Jeu.traquenard_actif:
                 carte.executed = True
