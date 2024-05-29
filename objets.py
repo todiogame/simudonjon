@@ -930,7 +930,7 @@ class LameDraconique(Objet):
     def __init__(self):
         super().__init__("Lame Draconique", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return "Dragon" in carte.types and not Jeu.traquenard_actif
+        return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if "Dragon" in carte.types:
             self.execute(joueur, carte, log_details)

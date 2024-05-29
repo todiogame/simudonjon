@@ -15,7 +15,7 @@ import shutil
 import sys
 
 # Nombre de simulations souhaitées
-total_simulations = 5000
+total_simulations = 100000
 seuil_pv_essai_fuite=6
 
 def display_simu(r=0):
@@ -88,7 +88,7 @@ def display_simu(r=0):
     # Calculer le winrate pour chaque objet
     df_stats_objets['Winrate'] = (df_stats_objets['Victoires'] / df_stats_objets['Total']) * 100
     df_stats_objets = df_stats_objets.sort_values(by='Winrate', ascending=False)
-
+ 
     # Afficher les résultats
     print("\nStatistiques par objet:")
     print(df_stats_objets)
