@@ -717,6 +717,18 @@ class BoiteDePandore(Objet):
                 self.piocheItem(j, Jeu, log_details)
             self.destroy()
 
+class AnneauPlussain(Objet):
+    def __init__(self):
+        super().__init__("Anneau Plussain", False, 1, 1)
+    
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(1,joueur,log_details)
+        
+class GetasDuNovice(Objet):
+    def __init__(self):
+        super().__init__("Getas du novice", False, 2, 2)
+        
+#todo reroll jdf
 
 # Liste des objets
 objets_disponibles = [ 
@@ -783,6 +795,8 @@ objets_disponibles = [
     GantsDeGaia(),
     ChampDeForce(),
     BoiteDePandore(),
+    AnneauPlussain(),
+    GetasDuNovice(),
 ]
 
 
@@ -852,4 +866,6 @@ __all__ = [
             "GantsDeGaia",
             "ChampDeForce",
             "BoiteDePandore",
+            "AnneauPlussain",
+            "GetasDuNovice",
         ]
