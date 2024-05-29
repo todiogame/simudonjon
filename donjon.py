@@ -15,7 +15,7 @@ import shutil
 import sys
 
 # Nombre de simulations souhaitées
-total_simulations = 30000
+total_simulations = 50000
 seuil_pv_essai_fuite=6
 
 def display_simu(r=0):
@@ -39,7 +39,7 @@ def display_simu(r=0):
         # Reparer tous les objets et attribuer une priorité aléatoire
         for o in objets_disponibles_simu:
             o.intact = True
-            # o.priorite = priorites_objets.get(o.nom, 0) * (1 + random.uniform(-0.1, 0.1))
+            # o.priorite = priorites_objets.get(o.nom, 49.5) * (1 + random.uniform(-0.2, 0.2))
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         joueurs = []
@@ -120,11 +120,8 @@ def display_simu(r=0):
         print(f"\nHighscore Max: {highscore_max}")
         print(f"Meilleur Vainqueur: {meilleur_vainqueur.nom} avec les objets de départ:\n {', '.join(objet.nom for objet in meilleur_vainqueur.objets_initiaux)}\nBuild complet: {', '.join(objet.nom for objet in meilleur_vainqueur.objets)}")
 
-# for r in range(20):
+# for r in range(10):
 #     display_simu(r)
-display_simu()
-
-# loguer_x_parties(1)
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
