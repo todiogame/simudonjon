@@ -17,6 +17,7 @@ class Joueur:
         self.pile_monstres_vaincus = []
         self.score_final = 0
         self.jet_fuite = 0
+        self.rejoue = False #actuellement en train de repiocher
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)
