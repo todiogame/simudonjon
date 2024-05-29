@@ -234,7 +234,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     if objets_intacts:
                         objet_avalé = random.choice(objets_intacts)
                         log_details.append(f"Le limon Glouton avale {objet_avalé.nom}.")
-                        objet_avalé.destroy()
+                        objet_avalé.destroy(joueur, Jeu, log_details)
                         if objet_avalé.pv_bonus:
                             joueur.pv_total -= objet_avalé.pv_bonus
                             log_details.append(f"L'objet avale {objet_avalé.nom} donnait {objet_avalé.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
@@ -361,9 +361,8 @@ def loguer_x_parties(x=1):
             objets_joueur = random.sample(objets_disponibles_simu, 6)
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
-            # ajouter objet tests ici
-            # objets_joueur.append(CaliceDuRoiSorcier())
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
+        # joueurs[0].objets.append(CoffreAnime())
 
 
         for j in joueurs:

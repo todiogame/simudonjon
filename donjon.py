@@ -120,9 +120,9 @@ def display_simu(r=0):
 
 # for r in range(20):
 #     display_simu(r)
-display_simu()
+# display_simu()
 
-# loguer_x_parties(1)
+loguer_x_parties(1)
 
 
     # Calculer les meilleurs et les pires duos d'objets
