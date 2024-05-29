@@ -43,9 +43,14 @@ class Objet:
         pass
     def score_effet(self, joueur, log_details):
         pass
+    def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        pass
 
 
-
+    def en_subit_dommages(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        # attention, check si les items sont intacts
+        self.subit_dommages_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
+        
     def en_rencontre(self, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         self.rencontre_effet(joueur, carte, Jeu, log_details)
@@ -89,40 +94,40 @@ class Objet:
     def execute(self, joueur, carte, log_details):
         carte.executed = True
         joueur.pile_monstres_vaincus.append(carte)
-        log_details.append(f"Utilisé {self.nom} pour exécuter {carte.titre}")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter {carte.titre}")
 
     def executeEtDefausse(self, joueur, carte, Jeu, log_details):
         carte.executed = True
         Jeu.defausse.append(carte)
-        log_details.append(f"Utilisé {self.nom} pour exécuter et défausser {carte.titre}")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter et défausser {carte.titre}")
 
     def absorbe(self, joueur, carte, log_details):
         carte.executed = True
         joueur.pv_total += carte.puissance  # Absorber les PV
         joueur.pile_monstres_vaincus.append(carte)
-        log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour absorber {carte.puissance} PV. Total {joueur.pv_total} PV.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour absorber {carte.puissance} PV. Total {joueur.pv_total} PV.")
 
     def reduc_damage(self, value, joueur, carte, log_details):
         carte.dommages = max(carte.dommages - value, 0)
-        log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
 
     def add_damage(self, value, joueur, carte, log_details):
         carte.dommages = carte.dommages + value
-        log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour augmenter les dommages de {value}.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour augmenter les dommages de {value}.")
 
     def gagnePV(self, value, joueur, log_details):
         joueur.pv_total += value
-        log_details.append(f"Utilisé {self.nom} pour gagner {value} PV. Total {joueur.pv_total} PV.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour gagner {value} PV. Total {joueur.pv_total} PV.")
 
     def perdPV(self, value, joueur, log_details):
         joueur.pv_total -= value
-        log_details.append(f"Utilisé {self.nom} et perd {value} PV. Total {joueur.pv_total} PV.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} et perd {value} PV. Total {joueur.pv_total} PV.")
         if(joueur.pv_total <= 0): joueur.mort()
 
     def survit(self, value, joueur, carte, log_details):
         joueur.pv_total = value
         joueur.pile_monstres_vaincus.append(carte)
-        log_details.append(f"Utilisé {self.nom} pour survivre avec {value} PV et vaincre {carte.titre}")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour survivre avec {value} PV et vaincre {carte.titre}")
 
     def piocheItem(self, joueur, Jeu, log_details):
         if len(Jeu.objets_dispo):
@@ -227,7 +232,7 @@ class GateauSpatial(Objet):
         jet_gateau = random.randint(1, 6)
         if jet_gateau == 1:
             joueur.fuite()
-            log_details.append(f"Utilisé Gâteau spatial, jet de {jet_gateau}, fuite immédiate du Donjon.\n")
+            log_details.append(f"{joueur.nom} utilise Gâteau spatial, jet de {jet_gateau}, fuite immédiate du Donjon.\n")
         else:
             self.gagnePV(jet_gateau, joueur, log_details)
 
@@ -242,7 +247,7 @@ class CouteauSuisse(Objet):
         if objets_brisés:
             objet_repare = random.choice(objets_brisés)
             objet_repare.intact = True
-            log_details.append(f"Utilisé Couteau Suisse pour réparer {objet_repare.nom}.")
+            log_details.append(f"{joueur.nom} utilise Couteau Suisse pour réparer {objet_repare.nom}.")
             if objet_repare.pv_bonus: self.gagnePV(objet_repare.pv_bonus, joueur, log_details)
 
 class CaisseEnchantee(Objet):
@@ -252,7 +257,7 @@ class CaisseEnchantee(Objet):
         return carte.puissance < 6 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_caisse = random.randint(1, 6)
-        log_details.append(f"Utilisé Caisse enchantée sur {carte.titre}, jet de {jet_caisse}")
+        log_details.append(f"{joueur.nom} utilise Caisse enchantée sur {carte.titre}, jet de {jet_caisse}")
         if jet_caisse == 1:
             self.destroy()
             log_details.append(f"Caisse enchantée brisée.")
@@ -324,7 +329,7 @@ class ParcheminDeTeleportation(Objet):
         super().__init__("Parchemin de Téléportation", True)
     def vaincu_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and (joueur.pv_total <= 6 and sum(objet.actif and objet.intact for objet in joueur.objets) <= 2):
-            log_details.append(f"Utilisé {self.nom} pour fuir le donjon !\n")
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le donjon !\n")
             self.destroy()
             joueur.fuite()
 
@@ -695,21 +700,25 @@ class GantsDeGaia(Objet):
                 for _ in range(nombre_a_defausser):
                     objet_brisé = objets_brisés.pop()
                     joueur.objets.remove(objet_brisé)
-                    log_details.append(f"Utilisé {self.nom} pour défausser objet brisé: {objet_brisé.nom}")
+                    log_details.append(f"{joueur.nom} utilise {self.nom} pour défausser objet brisé: {objet_brisé.nom}")
                 for _ in range(nombre_a_defausser):
                     self.piocheItem(joueur, Jeu, log_details)
                 self.destroy()
 
-class ChampDeForce(Objet):
+class ChampDeForceEnMousse(Objet):
     def __init__(self):
-        super().__init__("Champ de force", True)
-    
+        super().__init__("Champ de force en mousse", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_cf = random.randint(1, 6)
         if jet_cf >= 5:
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"Utilisé {self.nom}... raté !")
+    def vaincu_effet(self, joueur, carte, Jeu, log_details):
+        if len(joueur.pile_monstres_vaincus) >= 7:
+            self.destroy()
 
 class BoiteDePandore(Objet):
     def __init__(self):
@@ -747,12 +756,53 @@ class GetasDuNovice(Objet):
     
 class MarteauDEternite(Objet):
     def __init__(self):
-        super().__init__("Marteau d'Eternité", False, 0, -100)
+        super().__init__("Marteau d'Eternité", False, 0, -100) #-100 fuite car inutile de fuir avec cet objet
     def decompte_effet(self, joueur, joueurs_final, log_details):
         if not joueur.vivant and joueur not in joueurs_final:
             log_details.append(f"Le {self.nom} de {joueur.nom} le fait compter parmi les gagnants")
             joueurs_final.append(joueur)
 
+class CaliceDuRoiSorcier(Objet):
+    def __init__(self):
+        super().__init__("Calice du Roi Sorcier", False)
+        
+    def subit_dommages_effet(self,joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and carte.dommages >= 3 and joueur.nom != joueur_proprietaire.nom:
+            self.gagnePV(1, joueur_proprietaire, log_details)
+                
+class PerceuseABreche(Objet):
+    def __init__(self):
+        super().__init__("Perceuse a Breche", False)
+        
+    def subit_dommages_effet(self,joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and "Golem" in carte.types and joueur.nom != joueur_proprietaire.nom:
+            self.gagnePV(carte.dommages, joueur_proprietaire, log_details)
+            
+class BourseGarnie(Objet):
+    def __init__(self):
+        super().__init__("Bourse Garnie", False, 3)
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(1,joueur,log_details)
+                
+class EnclumeInstable(Objet):
+    def __init__(self):
+        super().__init__("Enclume instable", True)
+    
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact:
+            objets_brisés_autres_joueurs = [obj for j in Jeu.joueurs if j != joueur for obj in j.objets if not obj.intact]
+            if objets_brisés_autres_joueurs:
+                objet_vole = random.choice(objets_brisés_autres_joueurs)
+                objet_vole.intact = True
+                ancien_proprietaire = next(j for j in Jeu.joueurs if objet_vole in j.objets)
+                ancien_proprietaire.objets.remove(objet_vole)
+                joueur.ajouter_objet(objet_vole)
+                log_details.append(f"{joueur.nom} utilise {self.nom} pour voler et réparer {objet_vole.nom} de {ancien_proprietaire.nom}")
+                self.destroy()
+
+
+                
+                
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -816,12 +866,15 @@ objets_disponibles = [
     GrimoireInconnu(),
     GantsDeCombat(),
     GantsDeGaia(),
-    ChampDeForce(),
+    ChampDeForceEnMousse(),
     BoiteDePandore(),
     TorcheBleue(),
     AnneauPlussain(),
     GetasDuNovice(),
     MarteauDEternite(),
+    CaliceDuRoiSorcier(),
+    PerceuseABreche(),
+    EnclumeInstable(),
 ]
 
 
@@ -889,10 +942,13 @@ __all__ = [
             "GrimoireInconnu",
             "GantsDeCombat",
             "GantsDeGaia",
-            "ChampDeForce",
+            "ChampDeForceEnMousse",
             "BoiteDePandore",
             "TorcheBleue",
             "AnneauPlussain",
             "GetasDuNovice",
             "MarteauDEternite",
+            "CaliceDuRoiSorcier",
+            "PerceuseABreche",
+            "EnclumeInstable",
         ]

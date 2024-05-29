@@ -15,7 +15,7 @@ import shutil
 import sys
 
 # Nombre de simulations souhaitées
-total_simulations = 30000
+total_simulations = 10000
 seuil_pv_essai_fuite=6
 
 def display_simu(r=0):
