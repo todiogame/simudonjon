@@ -393,7 +393,7 @@ class PiocheDeDiamant(Objet):
 
 class ChapeauDuNovice(Objet):
     def __init__(self):
-        super().__init__("Chapeau du novice", False)
+        super().__init__("Chapeau du novice", False, 3)
     def rules(self, joueur, carte, Jeu, log_details):
         return ("Orc" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -922,17 +922,15 @@ class PatteDuRatLiche(Objet):
     def __init__(self):
         super().__init__("Patte du RatLiche", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return ("Rat" in carte.types or "Lich" in carte.types) and not Jeu.traquenard_actif
+        return ("Rat" in carte.types or "Liche" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
 class LameDraconique(Objet):
     def __init__(self):
         super().__init__("Lame Draconique", False)
-
     def rules(self, joueur, carte, Jeu, log_details):
-        return "Dragon" in carte.types
-
+        return "Dragon" in carte.types and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if "Dragon" in carte.types:
             self.execute(joueur, carte, log_details)
@@ -943,7 +941,8 @@ class LameDraconique(Objet):
 class FouetDuFourbe(Objet):
     def __init__(self):
         super().__init__("Fouet du fourbe", True)
-
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
         type_monstre = carte.types
@@ -962,7 +961,7 @@ class CraneDuRoiLiche(Objet):
         super().__init__("Crâne du Roi Liche", False)
 
     def rules(self, joueur, carte, Jeu, log_details):
-        return "Liche" in carte.types
+        return "Liche" in carte.types and not Jeu.traquenard_actif
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if "Liche" in carte.types:
@@ -981,8 +980,39 @@ class CraneDuRoiLiche(Objet):
                     log_details.append(f"{joueur_proprietaire.nom} récupère {carte.titre} de la defausse grâce à {self.nom}")
                 else:
                     log_details.append(f"{joueur_proprietaire.nom} essaie de récupèrer {carte.titre} mais la carte a disparu !!")
+    
+class LivreSacre(Objet):
+    def __init__(self):
+        super().__init__("Livre Sacré", False, 2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and "Squelette" in carte.types
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        
+class PendentifDuNovice(Objet):
+    def __init__(self):
+        super().__init__("Pendentif du Novice", False, 3)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and "Gobelin" in carte.types and not joueur.medailles
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+      
+class PistoletPirate(Objet):
+    def __init__(self):
+        super().__init__("Pistolet Pirate", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and (carte.puissance == 2 or carte.puissance == 3)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
 
-                
+class ArmureArdente(Objet):
+    def __init__(self):
+        super().__init__("Armure Ardente", False, 4)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Dragon" in carte.types
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.reduc_damage(5, joueur, carte, log_details)
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -1069,6 +1099,10 @@ objets_disponibles = [
     CraneDuRoiLiche(),
     FeuilleEternelle(),
     PatteDuRatLiche(),
+    LivreSacre(),
+    PendentifDuNovice(),
+    PistoletPirate(),
+    ArmureArdente(),
 ]
 
 
@@ -1159,4 +1193,8 @@ __all__ = [
             "CraneDuRoiLiche",
             "FeuilleEternelle",
             "PatteDuRatLiche",
+            "LivreSacre",
+            "PendentifDuNovice",
+            "PistoletPirate",
+            "ArmureArdente",
         ]
