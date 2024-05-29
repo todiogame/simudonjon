@@ -1,0 +1,10 @@
+# Ignore Python bytecode files
+*.pyc
+__pycache__/
+
+# Ignore specific files
+donjon.py
+monstres.py
+objets.py
+perso.py
+simu.py
