@@ -1047,6 +1047,26 @@ class CorneDAbordage(Objet):
                     log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}")
             self.destroy(joueur, Jeu, log_details)
 
+class SceptreActif(Objet):
+    def __init__(self):
+        super().__init__("Sceptre actif", False, 2)
+
+    def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur:
+            self.gagnePV(2, joueur, log_details)
+
+class CapeVaudou(Objet):
+    def __init__(self):
+        super().__init__("Cape vaudou", True)
+
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total or carte.puissance >= 1.5 * joueur.pv_total
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        joueur.pv_total = carte.puissance
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour fixer ses PV à {carte.puissance} après avoir exécuté et défaussé {carte.titre}.")
+        self.destroy(joueur, Jeu, log_details)
 
 
 # Liste des objets
@@ -1141,6 +1161,8 @@ objets_disponibles = [
     PendentifDuNovice(),
     PistoletPirate(),
     ArmureArdente(),
+    SceptreActif(),
+    CapeVaudou(),
 ]
 
 
@@ -1237,4 +1259,6 @@ __all__ = [
             "PendentifDuNovice",
             "PistoletPirate",
             "ArmureArdente",
+            "SceptreActif",
+            "CapeVaudou",
         ]
