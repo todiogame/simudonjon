@@ -49,7 +49,8 @@ class Objet:
 
     def en_subit_dommages(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
-        self.subit_dommages_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
+        if(joueur_proprietaire.dans_le_dj):
+            self.subit_dommages_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
         
     def en_rencontre(self, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
@@ -134,7 +135,7 @@ class Objet:
             nouvel_objet = random.choice(Jeu.objets_dispo)
             Jeu.objets_dispo.remove(nouvel_objet)
             joueur.ajouter_objet(nouvel_objet)
-            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
             
     def scoreChange(self, value, joueur, log_details):
         if value > 0:
@@ -354,7 +355,7 @@ class PotionDeGlace(Objet):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
-        log_details.append(f"Utilisé {self.nom} pour réduire à 0 {carte.titre} !")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour réduire à 0 {carte.titre} !")
         carte.puissance = 0
         carte.dommages = 0
 
@@ -579,7 +580,7 @@ class TalismanIncertain(Objet):
         if jet_talisman == 6:
             self.execute(joueur, carte, log_details)
         else:
-            log_details.append(f"Utilisé {self.nom}... raté !")
+            log_details.append(f"{joueur.nom} utilise {self.nom}... raté !")
             
 class PlanPresqueParfait(Objet):
     def __init__(self):
@@ -715,7 +716,7 @@ class ChampDeForceEnMousse(Objet):
         if jet_cf >= 5:
             self.execute(joueur, carte, log_details)
         else:
-            log_details.append(f"Utilisé {self.nom}... raté !")
+            log_details.append(f"{joueur.nom} utilise {self.nom}... raté !")
     def vaincu_effet(self, joueur, carte, Jeu, log_details):
         if len(joueur.pile_monstres_vaincus) >= 7:
             self.destroy()
@@ -824,6 +825,16 @@ class Randotion(Objet):
         self.gagnePV(random.randint(1, 6), joueur, log_details)
         self.perdPV(random.randint(1, 6), joueur, log_details)
         self.destroy()
+        
+class LameDeLHarmonie(Objet):
+    def __init__(self):
+        super().__init__("Lame de l'Harmonie", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        count_same_type = sum(1 for monstre in joueur.pile_monstres_vaincus if any(type_ in monstre.types for type_ in carte.types))
+        return not Jeu.traquenard_actif and count_same_type == 1
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
                 
 # Liste des objets
 objets_disponibles = [ 
@@ -900,6 +911,7 @@ objets_disponibles = [
     AnneauDeVie(),
     BottesDeVitesse(),
     Randotion(),
+    LameDeLHarmonie(),
 ]
 
 
@@ -979,4 +991,5 @@ __all__ = [
             "AnneauDeVie",
             "BottesDeVitesse",
             "Randotion",
+            "LameDeLHarmonie",
         ]

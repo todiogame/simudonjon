@@ -365,7 +365,7 @@ def loguer_x_parties(x=1):
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
             # ajouter objet tests ici
-            # objets_joueur.append(CaliceDuRoiSorcier())
+            # objets_joueur.append(LameDeLHarmonie())
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
 
 
