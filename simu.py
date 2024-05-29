@@ -64,10 +64,14 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         joueur = joueurs[index_joueur]
 
-        log_details.append(f"Tour de {joueur.nom}, {joueur.pv_total}PV")
+        log_details.append(f"Tour de {joueur.nom}, {joueur.pv_total}PV {'qui rejoue' if joueur.rejoue else ''}")
         
-        for objet in joueur.objets:
-            objet.debut_tour(joueur, Jeu, log_details)
+        # trigger de debut de tour
+        if not joueur.rejoue:
+            for objet in joueur.objets:
+                objet.debut_tour(joueur, Jeu, log_details)
+        for j in joueurs: j.rejoue = False
+        
         # Le joueur pioche une carte
         carte = donjon.prochaine_carte()
         
@@ -99,7 +103,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 log_details.append(f"{joueur.nom} gagne 3 PV grâce à {carte.titre}. PV restant: {joueur.pv_total}")
                 # Ajouter 2 PV aux autres joueurs
                 for autre_joueur in joueurs:
-                    if autre_joueur != joueur:
+                    if autre_joueur != joueur and autre_joueur.dans_le_dj:
                         autre_joueur.pv_total += 2
                         log_details.append(f"{autre_joueur.nom} gagne 2 PV grâce à {carte.titre}. PV restant: {autre_joueur.pv_total}")
 
@@ -127,8 +131,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     log_details.append(f"Gagnez {3 * golem_count} PV grâce à {carte.titre} (3 PV pour chaque Golem). PV restant: {joueur.pv_total}")
                 else:
                     log_details.append(f"{carte.titre} ne fait rien.")
-
-        if joueur.pv_total > 0 and isinstance(carte, CarteMonstre):
+            
+            # Le joueur rejoue
+            joueur.rejoue = True
+            
+        if isinstance(carte, CarteMonstre):
             if carte.effet:
                 if carte.effet == "MIROIR":
                     log_details.append(f"Le Miroir Maléfique est pioche.")
@@ -270,7 +277,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     index_joueur += 1
                     if index_joueur >= nb_joueurs:
                         index_joueur = 0
+            else:
+                # Le joueur rejoue
+                joueur.rejoue = True
 
+    log_details.append(f"\nFIN DE LA PARTIE !\nCalcul des scores:")
     # Calculer les scores finaux pour chaque joueur
     for j in joueurs:
         j.calculScoreFinal(log_details)
@@ -329,30 +340,30 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
 def loguer_x_parties(x=1):
-    # Créer une copie de la liste des objets disponibles pour cette simulation
-    objets_disponibles_simu = list(objets_disponibles)
-    # Reparer tous les objets
-    for o in objets_disponibles_simu:
-        o.intact = True
-
-    # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
-    joueurs = []
-    for nom in ["Sagarex", "Francis", "Mastho", "Mr.Adam"]:
-        objets_joueur = random.sample(objets_disponibles_simu, 6)
-        for objet in objets_joueur:
-            objets_disponibles_simu.remove(objet)
-        joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-
     seuil_pv_essai_fuite = 5
-
-    for j in joueurs:
-        print(f"Initialisation de {j.nom} avec {j.pv_base} PV de base et les objets spécifiés")
-        print(f"Objets : {[objet.nom for objet in j.objets]}")
-    print(f"Seuil de PV pour tenter la fuite : {seuil_pv_essai_fuite}\n")
     for i in range(x):
-          # Réparer tous les objets avant chaque partie
         
-        joueurs_copie = [copy.deepcopy(joueur) for joueur in joueurs]
-        cartes_copie = DonjonDeck()
+        # Créer une copie de la liste des objets disponibles pour cette simulation
+        objets_disponibles_simu = list(objets_disponibles)
+        # Reparer tous les objets
+        for o in objets_disponibles_simu:
+            o.intact = True
+
+        # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
+        joueurs = []
+        for nom in ["Sagarex", "Francis", "Mastho", "Mr.Adam"]:
+            objets_joueur = random.sample(objets_disponibles_simu, 6)
+            for objet in objets_joueur:
+                objets_disponibles_simu.remove(objet)
+            joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
+
+
+        for j in joueurs:
+            print(f"Initialisation de {j.nom} avec {j.pv_base} PV de base et les objets spécifiés")
+            print(f"Objets : {[objet.nom for objet in j.objets]}")
+            
+        print(f"Seuil de PV pour tenter la fuite : {seuil_pv_essai_fuite}\n")
+        # Réparer tous les objets avant chaque partie
+        deck = DonjonDeck()
         print(f"\n--- Partie {i+1} ---")
-        ordonnanceur(joueurs_copie, cartes_copie, seuil_pv_essai_fuite, True)
+        ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_simu, True)

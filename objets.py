@@ -12,7 +12,7 @@ class Objet:
         self.effet = effet
         self.intact = intact
         self.actif = actif
-        self.priorite = priorites_objets.get(nom, 0)  # Utilise la priorité du JSON ou 0 par défaut
+        self.priorite = priorites_objets.get(nom, 50)  # Utilise la priorité du JSON ou 0 par défaut
 
     def rules(self, joueur, carte, Jeu, log_details):
         # rule condition to use the item
@@ -129,7 +129,7 @@ class Objet:
             nouvel_objet = random.choice(Jeu.objets_dispo)
             Jeu.objets_dispo.remove(nouvel_objet)
             joueur.ajouter_objet(nouvel_objet)
-            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
             
     def scoreChange(self, value, joueur, log_details):
         if value > 0:
@@ -324,7 +324,7 @@ class ParcheminDeTeleportation(Objet):
         super().__init__("Parchemin de Téléportation", True)
     def vaincu_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and (joueur.pv_total <= 6 and sum(objet.actif and objet.intact for objet in joueur.objets) <= 2):
-            log_details.append(f"Utilisé {self.nom} pour fuir le donjon !")
+            log_details.append(f"Utilisé {self.nom} pour fuir le donjon !\n")
             self.destroy()
             joueur.fuite()
 
@@ -551,9 +551,9 @@ class GlaiveDArgent(Objet):
         return "Vampire" in carte.types and not Jeu.traquenard_actif
     
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.execute(joueur, carte, log_details)
         if any("Vampire" in monstre.types for monstre in joueur.pile_monstres_vaincus):
             self.gagnePV(4, joueur, log_details)
+        self.execute(joueur, carte, log_details)
 
 class ChapeletDeVitalite(Objet):
     def __init__(self):
@@ -571,6 +571,8 @@ class TalismanIncertain(Objet):
         jet_talisman = random.randint(1, 6)
         if jet_talisman == 6:
             self.execute(joueur, carte, log_details)
+        else:
+            log_details.append(f"Utilisé {self.nom}... raté !")
             
 class PlanPresqueParfait(Objet):
     def __init__(self):
@@ -704,7 +706,8 @@ class ChampDeForce(Objet):
         jet_cf = random.randint(1, 6)
         if jet_cf >= 5:
             self.execute(joueur, carte, log_details)
-            self.destroy()
+        else:
+            log_details.append(f"Utilisé {self.nom}... raté !")
 
 class BoiteDePandore(Objet):
     def __init__(self):
@@ -717,18 +720,24 @@ class BoiteDePandore(Objet):
                 self.piocheItem(j, Jeu, log_details)
             self.destroy()
 
+class TorcheBleue(Objet):
+    def __init__(self):
+        super().__init__("Torche Bleue", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance <= 2 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
 class AnneauPlussain(Objet):
     def __init__(self):
         super().__init__("Anneau Plussain", False, 1, 1)
-    
     def score_effet(self, joueur, log_details):
         self.scoreChange(1,joueur,log_details)
         
 class GetasDuNovice(Objet):
     def __init__(self):
         super().__init__("Getas du novice", False, 2, 2)
-        
-#todo reroll jdf
+    #todo reroll jdf
 
 # Liste des objets
 objets_disponibles = [ 
@@ -795,8 +804,10 @@ objets_disponibles = [
     GantsDeGaia(),
     ChampDeForce(),
     BoiteDePandore(),
+    TorcheBleue(),
     AnneauPlussain(),
     GetasDuNovice(),
+    
 ]
 
 
@@ -866,6 +877,7 @@ __all__ = [
             "GantsDeGaia",
             "ChampDeForce",
             "BoiteDePandore",
+            "TorcheBleue",
             "AnneauPlussain",
             "GetasDuNovice",
         ]

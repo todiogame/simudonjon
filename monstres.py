@@ -94,6 +94,7 @@ class DonjonDeck:
         return self.cartes[self.ordre[index]]
 
     def rajoute_en_haut_de_la_pile(self, carte):
+        carte.executed = False
         if self.haut_pile:
             self.haut_pile.insert(0,carte)
         else:
