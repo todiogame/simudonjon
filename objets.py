@@ -923,7 +923,42 @@ class CraneDuRoiLiche(Objet):
                 else:
                     log_details.append(f"{joueur_proprietaire.nom} essaie de récupèrer {carte.titre} mais la carte a disparu !!")
 
-                
+class SeringueDuDocteurFou(Objet):
+    def __init__(self):
+        super().__init__("Seringue du docteur fou", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(10, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+    
+    def rencontre_effet(self, joueur, carte, Jeu, log_details):
+        if not self.intact:
+            self.perdPV(1, joueur, log_details)
+            
+    def rencontre_event_effet(self, joueur, carte, Jeu, log_details):
+        if not self.intact:
+            self.perdPV(1, joueur, log_details)
+            
+class CorneDAbordage(Objet):
+    def __init__(self):
+        super().__init__("Corne d'abordage", True)
+
+    def debut_tour(self, joueur, Jeu, log_details):
+        autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
+
+        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj):
+            log_details.append(f"{joueur.nom} utilise {self.nom}")
+            for autre_joueur in autres_joueurs_dans_le_dj:
+                if autre_joueur.pile_monstres_vaincus:
+                    monstre_volee = random.choice(autre_joueur.pile_monstres_vaincus)
+                    autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
+                    joueur.pile_monstres_vaincus.append(monstre_volee)
+                    log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}")
+            self.destroy(joueur, Jeu, log_details)
+
+
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -1004,6 +1039,8 @@ objets_disponibles = [
     LameDraconique(),
     FouetDuFourbe(),
     CraneDuRoiLiche(),
+    SeringueDuDocteurFou(),
+    CorneDAbordage(),
 ]
 
 
@@ -1088,4 +1125,6 @@ __all__ = [
             "LameDraconique",
             "FouetDuFourbe",
             "CraneDuRoiLiche",
+            "SeringueDuDocteurFou",
+            "CorneDAbordage",
         ]
