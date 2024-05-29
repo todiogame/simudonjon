@@ -10,12 +10,18 @@ from perso import Joueur
 from monstres import DonjonDeck
 import copy
 import itertools
-
+import json
+import shutil
 # Nombre de simulations souhaitées
-total_simulations = 300000
+total_simulations = 30000
 seuil_pv_essai_fuite=6
 
-def display_simu():
+def display_simu(r=0):
+        
+    # # Lire le fichier JSON une fois au début
+    # with open('priorites_objets.json', 'r') as json_file:
+    #     priorites_objets = json.load(json_file)
+        
     # Initialisation des résultats
     resultats_builds = []
     highscore_max = 0
@@ -31,7 +37,7 @@ def display_simu():
         # Reparer tous les objets et attribuer une priorité aléatoire
         for o in objets_disponibles_simu:
             o.intact = True
-            o.priorite = random.randint(0, 99)
+            # o.priorite = priorites_objets.get(o.nom, 0) * (1 + random.uniform(-0.1, 0.1))
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         joueurs = []
@@ -76,25 +82,34 @@ def display_simu():
 
     # Calculer le winrate pour chaque objet
     df_stats_objets['Winrate'] = (df_stats_objets['Victoires'] / df_stats_objets['Total']) * 100
+    df_stats_objets = df_stats_objets.sort_values(by='Winrate', ascending=False)
 
-    # Calculer la priorité médiane et moyenne parmi les jeux joués
-    priorite_stats = df_resultats.groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
-    priorite_stats.columns = ['Objet', 'Priorite_mediane', 'Priorite_moyenne']
+    # # Calculer la priorité médiane et moyenne parmi les jeux joués
+    # priorite_stats = df_resultats.groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
+    # priorite_stats.columns = ['Objet', 'Priorite_mediane', 'Priorite_moyenne']
 
-    # Calculer la priorité médiane et moyenne parmi les jeux gagnés
-    priorite_stats_gagnees = df_resultats[df_resultats['Victoire'] == 1].groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
-    priorite_stats_gagnees.columns = ['Objet', 'Priorite_mediane_gagnee', 'Priorite_moyenne_gagnee']
+    # # Calculer la priorité médiane et moyenne parmi les jeux gagnés
+    # priorite_stats_gagnees = df_resultats[df_resultats['Victoire'] == 1].groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
+    # priorite_stats_gagnees.columns = ['Objet', 'Priorite_mediane_gagnee', 'Priorite_moyenne_gagnee']
 
-    # Fusionner les priorités médianes et moyennes avec les statistiques des objets
-    df_stats_objets = df_stats_objets.merge(priorite_stats, on='Objet')
-    df_stats_objets = df_stats_objets.merge(priorite_stats_gagnees, on='Objet')
+    # # Fusionner les priorités médianes et moyennes avec les statistiques des objets
+    # df_stats_objets = df_stats_objets.merge(priorite_stats, on='Objet')
+    # df_stats_objets = df_stats_objets.merge(priorite_stats_gagnees, on='Objet')
 
-    # Calculer la différence de moyenne
-    df_stats_objets['Diff_moyenne'] = df_stats_objets['Priorite_moyenne_gagnee'] - df_stats_objets['Priorite_moyenne']
+    # # Calculer la différence de moyenne
+    # df_stats_objets['Diff_moyenne'] = df_stats_objets['Priorite_moyenne_gagnee'] - df_stats_objets['Priorite_moyenne']
 
-    # Trier les statistiques par différence de moyenne
-    df_stats_objets = df_stats_objets.sort_values(by='Diff_moyenne', ascending=False)
+    # # Trier les statistiques par différence de moyenne
+    # df_stats_objets = df_stats_objets.sort_values(by='Diff_moyenne', ascending=False)
 
+    # # Sélectionner les colonnes pertinentes pour le JSON
+    # df_priorites = df_stats_objets[['Objet', 'Priorite_mediane_gagnee']]
+    # df_priorites_sorted = df_priorites.sort_values(by='Priorite_mediane_gagnee')
+    # # Convertir en dictionnaire et exporter en JSON
+    # priorites_dict = dict(zip(df_priorites_sorted['Objet'], df_priorites_sorted['Priorite_mediane_gagnee']))
+    # with open('priorites_objets.json', 'w') as json_file:
+    #     json.dump(priorites_dict, json_file, indent=4)
+    # shutil.copyfile('priorites_objets.json', f'backupfile_{r}.json')
     # Afficher les résultats
     print("\nStatistiques par objet:")
     print(df_stats_objets)
@@ -103,7 +118,8 @@ def display_simu():
         print(f"\nHighscore Max: {highscore_max}")
         print(f"Meilleur Vainqueur: {meilleur_vainqueur.nom} avec les objets de départ:\n {', '.join(objet.nom for objet in meilleur_vainqueur.objets_initiaux)}\nBuild complet: {', '.join(objet.nom for objet in meilleur_vainqueur.objets)}")
 
-
+# for r in range(20):
+#     display_simu(r)
 display_simu()
 
 # loguer_x_parties(1)

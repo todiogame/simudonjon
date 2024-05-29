@@ -21,6 +21,7 @@ class Joueur:
     def ajouter_objet(self, objet):
         self.objets.append(objet)
         self.pv_total += objet.pv_bonus
+        self.trier_objets_par_priorite() # maintenir les objets tries dans le bon ordre d'utilisation
 
     def calculer_modificateurs(self):
         modificateur_de = sum(objet.modificateur_de for objet in self.objets)

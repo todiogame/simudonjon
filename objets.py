@@ -1,14 +1,18 @@
 import random
+import json
+# Lire le fichier JSON une fois au début
+with open('priorites_objets.json', 'r') as json_file:
+    priorites_objets = json.load(json_file)
 
 class Objet:
-    def __init__(self, nom, actif=False, pv_bonus=0, modificateur_de=0, effet=None, intact=True, priorite = 0):
+    def __init__(self, nom, actif=False, pv_bonus=0, modificateur_de=0, effet=None, intact=True):
         self.nom = nom
         self.pv_bonus = pv_bonus
         self.modificateur_de = modificateur_de
         self.effet = effet
         self.intact = intact
         self.actif = actif
-        self.priorite = priorite
+        self.priorite = priorites_objets.get(nom, 0)  # Utilise la priorité du JSON ou 0 par défaut
 
     def rules(self, joueur, carte, Jeu, log_details):
         # rule condition to use the item
@@ -127,7 +131,6 @@ class Objet:
             joueur.ajouter_objet(nouvel_objet)
             log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
             
-
     def scoreChange(self, value, joueur, log_details):
         if value > 0:
             log_details.append(f"{self.nom} intact, gain de {value} points de victoire qui s'ajoutent aux {joueur.score_final} points, total {joueur.score_final + value}.")
@@ -710,18 +713,8 @@ class BoiteDePandore(Objet):
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
             self.gagnePV(3, joueur, log_details)
-            for autre_joueur in Jeu.joueurs:
-                objets_actuels = [obj.nom for obj in autre_joueur.objets]
-                for joueur_autre in Jeu.joueurs:
-                    if joueur_autre != autre_joueur:
-                        objets_actuels.extend([obj.nom for obj in joueur_autre.objets])
-                
-                objets_possibles = [obj for obj in objets_disponibles if obj.nom not in objets_actuels]
-                if objets_possibles:
-                    nouvel_objet = random.choice(objets_possibles)
-                    autre_joueur.ajouter_objet(nouvel_objet)
-                    autre_joueur.modificateur_de = autre_joueur.calculer_modificateurs()
-                    log_details.append(f"{autre_joueur.nom} a pioché un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {autre_joueur.pv_total} PV.")
+            for j in Jeu.joueurs:
+                self.piocheItem(j, Jeu, log_details)
             self.destroy()
 
 

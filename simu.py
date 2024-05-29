@@ -15,6 +15,11 @@ def calculer_statistiques(resultats):
     return moyenne, mediane, maximum, minimum
 
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
+    # arreter la simulation si on a un objet casse dans une main
+    for j in joueurs:
+        for o in j.objets:
+            if not o.intact: 1/0
+
     log_details = []
     
     donjon.melange()
@@ -28,14 +33,13 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     Jeu.donjon = donjon
     Jeu.objets_dispo = objets_dispo
 
-    # arreter la simulation si on a un objet casse dans une main
-    for j in joueurs:
-        for o in j.objets:
-            if not o.intact: 1/0
-
     index_joueur = 0  # Initialisation de l'index du joueur courant
     nb_joueurs = len(joueurs)
     
+    for j in joueurs:
+        j.trier_objets_par_priorite()
+    
+    # Boucle de jeu principale
     while not Jeu.donjon.vide:
         Jeu.tour += 1
         
@@ -62,7 +66,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         log_details.append(f"Tour de {joueur.nom}, {joueur.pv_total}PV")
         
-        joueur.trier_objets_par_priorite()
         for objet in joueur.objets:
             objet.debut_tour(joueur, Jeu, log_details)
         # Le joueur pioche une carte
@@ -77,7 +80,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {modif}) ")
             joueur.jet_fuite_lance = True
             #use items en_fuite
-            joueur.trier_objets_par_priorite()
             for objet in joueur.objets:
                 objet.en_fuite(joueur, Jeu, log_details)
             
@@ -89,7 +91,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             log_details.append(f"A pioché un événement: {carte.titre}.")
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
-            joueur.trier_objets_par_priorite()
             for objet in joueur.objets:
                 objet.en_rencontre_event(joueur, carte, Jeu, log_details)
             
@@ -178,7 +179,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 log_details.append(f"Rencontré Seigneur Vampire, inflige 4 dommages supplémentaires grâce aux médailles, dommages {carte.dommages}.")
             
             #use items en_rencontre
-            joueur.trier_objets_par_priorite()
             for objet in joueur.objets:
                 objet.en_rencontre(joueur, carte, Jeu, log_details)
 
@@ -202,7 +202,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 log_details.append(f"L'effet Exécute le prochain monstre est utilisé sur {carte.titre}.")
             else:
                 #use items
-                joueur.trier_objets_par_priorite()
                 for objet in joueur.objets:
                     objet.en_combat(joueur, carte, Jeu, log_details)
                     if carte.executed or carte.dommages <= 0 or joueur.fuite_reussie:
@@ -244,7 +243,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             
             if joueur.pv_total <= 0:
                 #use items survie
-                joueur.trier_objets_par_priorite()
                 for objet in joueur.objets:
                     objet.en_survie(joueur, carte, Jeu, log_details)
                     if joueur.pv_total > 0:
@@ -260,7 +258,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 continue
             
             #use items en_vaincu
-            joueur.trier_objets_par_priorite()
             for objet in joueur.objets:
                 objet.en_vaincu(joueur, carte, Jeu, log_details)
 
@@ -297,7 +294,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
     #use items en_decompte
     for j in joueurs:
-        joueur.trier_objets_par_priorite()
         for objet in j.objets:
             objet.en_decompte(j, joueurs_final, log_details)
 
