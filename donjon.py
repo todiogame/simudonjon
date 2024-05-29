@@ -122,6 +122,9 @@ def display_simu(r=0):
 
 # for r in range(20):
 #     display_simu(r)
+display_simu()
+
+# loguer_x_parties(1)
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
