@@ -835,7 +835,49 @@ class LameDeLHarmonie(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
-                
+class ChampignonVeneneux(Objet):
+    def __init__(self):
+        super().__init__("Champignon Vénéneux", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total > 1 and carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.perdPV(1, joueur, log_details)
+        self.destroy()
+
+class BouletDeCanon(Objet):
+    def __init__(self):
+        super().__init__("Boulet de Canon", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and carte.puissance >= 6
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.destroy()
+
+class PotionOuPoison(Objet):
+    def __init__(self):
+        super().__init__("PotionOuPoison", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(6, joueur, log_details)
+        jet_de_de = random.randint(1, 6)
+        if jet_de_de == 1:
+            self.perdPV(7, joueur, log_details)
+        self.destroy()
+
+class CoquilleSalvatrice(Objet):
+    def __init__(self):
+        super().__init__("Coquille Salvatrice", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        self.survit(3, joueur, carte, log_details)
+        self.destroy()
+
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -912,6 +954,10 @@ objets_disponibles = [
     BottesDeVitesse(),
     Randotion(),
     LameDeLHarmonie(),
+    ChampignonVeneneux(),
+    BouletDeCanon(),
+    PotionOuPoison(),
+    CoquilleSalvatrice(),
 ]
 
 
@@ -992,4 +1038,8 @@ __all__ = [
             "BottesDeVitesse",
             "Randotion",
             "LameDeLHarmonie",
+            "ChampignonVeneneux",
+            "BouletDeCanon",
+            "PotionOuPoison",
+            "CoquilleSalvatrice",
         ]
