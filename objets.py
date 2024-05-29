@@ -77,7 +77,8 @@ class Objet:
     
     def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
-        self.vaincu_effet(joueur_proprietaire, joueur, carte, Jeu, log_details) 
+        if(joueur_proprietaire.dans_le_dj):
+            self.vaincu_effet(joueur_proprietaire, joueur, carte, Jeu, log_details) 
     
     def en_survie(self, joueur, carte, Jeu, log_details):
         if self.intact:
@@ -95,10 +96,11 @@ class Objet:
         log_details.append(f"Reparé {self.nom}")
         self.intact = True
     def destroy(self, joueur, Jeu, log_details):
-        self.intact = False
-        for joueur_proprietaire in Jeu.joueurs:
-            for objet in joueur_proprietaire.objets:
-                objet.en_activated(joueur_proprietaire, joueur, self, Jeu, log_details)
+        if self.intact:
+            self.intact = False
+            for joueur_proprietaire in Jeu.joueurs:
+                for objet in joueur_proprietaire.objets:
+                    objet.en_activated(joueur_proprietaire, joueur, self, Jeu, log_details)
     
     def execute(self, joueur, carte, log_details):
         carte.executed = True
@@ -575,9 +577,10 @@ class ChapeletDeVitalite(Objet):
     def __init__(self):
         super().__init__("Chapelet de Vitalité", False, 3)
     def debut_tour(self, joueur, Jeu, log_details):
-        jet_chapelet = random.randint(1, 6)
-        if jet_chapelet == 6:
-            self.gagnePV(1, joueur, log_details)
+        if self.intact:
+            jet_chapelet = random.randint(1, 6)
+            if jet_chapelet == 6:
+                self.gagnePV(1, joueur, log_details)
 
 class TalismanIncertain(Objet):
     def __init__(self):
@@ -726,7 +729,7 @@ class ChampDeForceEnMousse(Objet):
         else:
             log_details.append(f"{joueur.nom} utilise {self.nom}... raté !")
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7:
+        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact:
             self.destroy(joueur, Jeu, log_details)
 
 class BoiteDePandore(Objet):
@@ -759,7 +762,7 @@ class GetasDuNovice(Objet):
         super().__init__("Getas du novice", False, 2, 2)
     def en_fuite(self, joueur, Jeu, log_details):
         # 1 reroll
-        if (not joueur.medailles and joueur.jet_fuite < 4):
+        if (not joueur.medailles and joueur.jet_fuite < 4) and self.intact:
             log_details.append(f"Utilise {self.nom}, pour reroll: {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
             joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs()
     
@@ -767,7 +770,7 @@ class MarteauDEternite(Objet):
     def __init__(self):
         super().__init__("Marteau d'Eternité", False, 0, -100) #-100 fuite car inutile de fuir avec cet objet
     def decompte_effet(self, joueur, joueurs_final, log_details):
-        if not joueur.vivant and joueur not in joueurs_final:
+        if not joueur.vivant and joueur not in joueurs_final and self.intact:
             log_details.append(f"Le {self.nom} de {joueur.nom} le fait compter parmi les gagnants")
             joueurs_final.append(joueur)
 
@@ -832,7 +835,7 @@ class AnneauDeVie(Objet):
     def __init__(self):
         super().__init__("Anneau de Vie", False)
     def fin_tour(self, joueur, Jeu, log_details):
-        if(joueur.pv_total >= 6):
+        if(joueur.pv_total >= 6) and self.intact:
             self.gagnePV(1,joueur,log_details)
                 
 
@@ -966,7 +969,7 @@ class CraneDuRoiLiche(Objet):
             self.execute(joueur, carte, log_details)
 
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if "Liche" in carte.types and carte.titre != "Changeforme":
+        if "Liche" in carte.types and carte.titre != "Changeforme" and self.intact:
             if joueur_proprietaire != joueur:
                 if carte in joueur.pile_monstres_vaincus:
                     joueur.pile_monstres_vaincus.remove(carte)
