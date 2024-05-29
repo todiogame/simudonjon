@@ -366,7 +366,7 @@ def loguer_x_parties(x=1):
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
         joueurs[0].objets.append(    CorneDAbordage(),)
-        joueurs[0].objets.append(    CraneDuRoiLiche(),)
+        joueurs[0].objets.append(    SceptreActif(),)
 
 
         for j in joueurs:

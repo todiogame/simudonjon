@@ -1016,6 +1016,13 @@ class CorneDAbordage(Objet):
                     log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}")
             self.destroy(joueur, Jeu, log_details)
 
+class SceptreActif(Objet):
+    def __init__(self):
+        super().__init__("Sceptre actif", False, 2)
+
+    def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur:
+            self.gagnePV(2, joueur, log_details)
 
 
 # Liste des objets
@@ -1106,6 +1113,7 @@ objets_disponibles = [
     CorneDAbordage(),
     FeuilleEternelle(),
     PatteDuRatLiche(),
+    SceptreActif(),
 ]
 
 
@@ -1198,4 +1206,5 @@ __all__ = [
             "CorneDAbordage",
             "FeuilleEternelle",
             "PatteDuRatLiche",
+            "SceptreActif",
         ]
