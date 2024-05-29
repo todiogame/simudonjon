@@ -12,7 +12,7 @@ class Objet:
         self.effet = effet
         self.intact = intact
         self.actif = actif
-        self.priorite = priorites_objets.get(nom, 50)  # Utilise la priorité du JSON ou 0 par défaut
+        self.priorite = priorites_objets.get(nom, 49.5)  # Utilise la priorité du JSON ou 0 par défaut
 
     def rules(self, joueur, carte, Jeu, log_details):
         # rule condition to use the item
@@ -524,7 +524,7 @@ class MasqueAGaz(Objet):
 
 class BouclierCameleon(Objet):
     def __init__(self):
-        super().__init__("Bouclier caméléon", False, 0, 0)
+        super().__init__("Bouclier caméléon", False, 0, -1)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif and carte.puissance >= 6 
     def worthit(self, joueur, carte, Jeu, log_details):
@@ -566,10 +566,8 @@ class BouclierCasse(Objet):
 class GlaiveDArgent(Objet):
     def __init__(self):
         super().__init__("Glaive d'argent", False)
-    
     def rules(self, joueur, carte, Jeu, log_details):
         return "Vampire" in carte.types and not Jeu.traquenard_actif
-    
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if any("Vampire" in monstre.types for monstre in joueur.pile_monstres_vaincus):
             self.gagnePV(4, joueur, log_details)
@@ -867,6 +865,67 @@ class LameDeLHarmonie(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
+class ChampignonVeneneux(Objet):
+    def __init__(self):
+        super().__init__("Champignon Vénéneux", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total > 1 and carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.perdPV(1, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class BouletDeCanon(Objet):
+    def __init__(self):
+        super().__init__("Boulet de Canon", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and carte.puissance >= 6
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class PotionOuPoison(Objet):
+    def __init__(self):
+        super().__init__("PotionOuPoison", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(6, joueur, log_details)
+        jet_de_de = random.randint(1, 6)
+        if jet_de_de == 1:
+            self.perdPV(7, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class CoquilleSalvatrice(Objet):
+    def __init__(self):
+        super().__init__("Coquille Salvatrice", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        self.survit(3, joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class FeuilleEternelle(Objet):
+    def __init__(self):
+        super().__init__("Feuille Eternelle", False, 0, 0)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and ( "Démon" in carte.types or  "Dragon" in carte.types)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= 1 and joueur.pv_total > 1 
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.perdPV(1, joueur, log_details)
+
+class PatteDuRatLiche(Objet):
+    def __init__(self):
+        super().__init__("Patte du RatLiche", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return ("Rat" in carte.types or "Lich" in carte.types) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
 class LameDraconique(Objet):
     def __init__(self):
         super().__init__("Lame Draconique", False)
@@ -1036,11 +1095,17 @@ objets_disponibles = [
     BottesDeVitesse(),
     Randotion(),
     LameDeLHarmonie(),
+    ChampignonVeneneux(),
+    BouletDeCanon(),
+    PotionOuPoison(),
+    CoquilleSalvatrice(),
     LameDraconique(),
     FouetDuFourbe(),
     CraneDuRoiLiche(),
     SeringueDuDocteurFou(),
     CorneDAbordage(),
+    FeuilleEternelle(),
+    PatteDuRatLiche(),
 ]
 
 
@@ -1122,9 +1187,15 @@ __all__ = [
             "BottesDeVitesse",
             "Randotion",
             "LameDeLHarmonie",
+            "ChampignonVeneneux",
+            "BouletDeCanon",
+            "PotionOuPoison",
+            "CoquilleSalvatrice",
             "LameDraconique",
             "FouetDuFourbe",
             "CraneDuRoiLiche",
             "SeringueDuDocteurFou",
             "CorneDAbordage",
+            "FeuilleEternelle",
+            "PatteDuRatLiche",
         ]
