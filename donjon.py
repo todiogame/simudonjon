@@ -12,6 +12,8 @@ import copy
 import itertools
 import json
 import shutil
+import sys
+
 # Nombre de simulations souhaitées
 total_simulations = 30000
 seuil_pv_essai_fuite=6
@@ -120,10 +122,17 @@ def display_simu(r=0):
 
 # for r in range(20):
 #     display_simu(r)
-display_simu()
 
-# loguer_x_parties(1)
-
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        display_simu()
+    elif len(sys.argv) == 2 and sys.argv[1].isdigit():
+        x = int(sys.argv[1])
+        loguer_x_parties(x)
+    else:
+        print("Utilisation :")
+        print("  python3 donjon.py \t\t Pour afficher la simulation")
+        print("  python3 donjon.py x \t Pour log x parties (x est un nombre)")
 
     # Calculer les meilleurs et les pires duos d'objets
     # duos_scores = {}

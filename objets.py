@@ -349,7 +349,7 @@ class PotionDeGlace(Objet):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
-        log_details.append(f"Utilisé {self.nom} pour fuir le réduire à 0 {carte.titre} !")
+        log_details.append(f"Utilisé {self.nom} pour réduire à 0 {carte.titre} !")
         carte.puissance = 0
         carte.dommages = 0
 
@@ -367,7 +367,9 @@ class PiocheDeDiamant(Objet):
     def __init__(self):
         super().__init__("Pioche de diamant", True)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and carte.puissance % 2 == 1 and ("Golem" in carte.types or carte.dommages >= (joueur.pv_total / 2))
+        return not Jeu.traquenard_actif and carte.puissance % 2 == 1
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return "Golem" in carte.types or carte.dommages >= (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if not ("Golem" in carte.types):
             self.destroy()
@@ -737,7 +739,19 @@ class AnneauPlussain(Objet):
 class GetasDuNovice(Objet):
     def __init__(self):
         super().__init__("Getas du novice", False, 2, 2)
-    #todo reroll jdf
+    def en_fuite(self, joueur, Jeu, log_details):
+        # 1 reroll
+        if (not joueur.medaille and joueur.jet_fuite < 4):
+            log_details.append(f"Utilise {self.nom}, pour reroll: {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
+            joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs()
+    
+class MarteauDEternite(Objet):
+    def __init__(self):
+        super().__init__("Marteau d'Eternité", False, 0, -100)
+    def decompte_effet(self, joueur, joueurs_final, log_details):
+        if not joueur.vivant and joueur not in joueurs_final:
+            log_details.append(f"Le {self.nom} de {joueur.nom} le fait compter parmi les gagnants")
+            joueurs_final.append(joueur)
 
 # Liste des objets
 objets_disponibles = [ 
@@ -807,7 +821,7 @@ objets_disponibles = [
     TorcheBleue(),
     AnneauPlussain(),
     GetasDuNovice(),
-    
+    MarteauDEternite(),
 ]
 
 
@@ -880,4 +894,5 @@ __all__ = [
             "TorcheBleue",
             "AnneauPlussain",
             "GetasDuNovice",
+            "MarteauDEternite",
         ]
