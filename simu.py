@@ -275,6 +275,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
             if joueur.dans_le_dj and not Jeu.execute_next_monster:
+                #sequence objets fin du tour
+                for objet in joueur.objets:
+                    objet.fin_tour(joueur, Jeu, log_details)
                 # Passer son tour, au joueur suivant
                 joueur.tour += 1
                 if len([joueur for joueur in joueurs if joueur.dans_le_dj]) > 1:

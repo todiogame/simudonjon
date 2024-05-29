@@ -39,7 +39,7 @@ class Objet:
         pass
     def debut_tour(self, joueur, Jeu, log_details): 
         pass
-    def fin_tour(self):
+    def fin_tour(self, joueur, Jeu, log_details): 
         pass
     def score_effet(self, joueur, log_details):
         pass
@@ -750,7 +750,7 @@ class GetasDuNovice(Objet):
         super().__init__("Getas du novice", False, 2, 2)
     def en_fuite(self, joueur, Jeu, log_details):
         # 1 reroll
-        if (not joueur.medaille and joueur.jet_fuite < 4):
+        if (not joueur.medailles and joueur.jet_fuite < 4):
             log_details.append(f"Utilise {self.nom}, pour reroll: {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
             joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs()
     
@@ -799,9 +799,31 @@ class EnclumeInstable(Objet):
                 joueur.ajouter_objet(objet_vole)
                 log_details.append(f"{joueur.nom} utilise {self.nom} pour voler et réparer {objet_vole.nom} de {ancien_proprietaire.nom}")
                 self.destroy()
-
-
+                            
+class AnneauDeVie(Objet):
+    def __init__(self):
+        super().__init__("Anneau de Vie", False)
+    def fin_tour(self, joueur, Jeu, log_details):
+        if(joueur.pv_total >= 6):
+            self.gagnePV(1,joueur,log_details)
                 
+
+class BottesDeVitesse(Objet):
+    def __init__(self):
+        super().__init__("Bottes de Vitesse", False, 0, 3)
+#todo vous rentrez en premier
+
+
+class Randotion(Objet):
+    def __init__(self):
+        super().__init__("Randotion", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(random.randint(1, 6), joueur, log_details)
+        self.gagnePV(random.randint(1, 6), joueur, log_details)
+        self.perdPV(random.randint(1, 6), joueur, log_details)
+        self.destroy()
                 
 # Liste des objets
 objets_disponibles = [ 
@@ -875,6 +897,9 @@ objets_disponibles = [
     CaliceDuRoiSorcier(),
     PerceuseABreche(),
     EnclumeInstable(),
+    AnneauDeVie(),
+    BottesDeVitesse(),
+    Randotion(),
 ]
 
 
@@ -951,4 +976,7 @@ __all__ = [
             "CaliceDuRoiSorcier",
             "PerceuseABreche",
             "EnclumeInstable",
+            "AnneauDeVie",
+            "BottesDeVitesse",
+            "Randotion",
         ]
