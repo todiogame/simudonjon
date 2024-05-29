@@ -270,9 +270,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 continue
             
             #use items en_vaincu
-            for objet in joueur.objets:
-                objet.en_vaincu(joueur, carte, Jeu, log_details)
-
+            for joueur_proprietaire in Jeu.joueurs:
+                for objet in joueur_proprietaire.objets:
+                    objet.en_vaincu(joueur_proprietaire, joueur, carte, Jeu, log_details)
 
             if joueur.dans_le_dj and not Jeu.execute_next_monster:
                 #sequence objets fin du tour
@@ -365,7 +365,8 @@ def loguer_x_parties(x=1):
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-        # joueurs[0].objets.append(CoffreAnime())
+        joueurs[0].objets.append(    LameDraconique(),)
+        joueurs[0].objets.append(    CraneDuRoiLiche(),)
 
 
         for j in joueurs:

@@ -31,7 +31,7 @@ class Objet:
         pass
     def rencontre_event_effet(self, joueur, carte, Jeu, log_details):
         pass
-    def vaincu_effet(self, joueur, carte, Jeu, log_details):
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         pass
     def survie_effet(self, joueur, carte, Jeu, log_details):
         pass
@@ -75,9 +75,9 @@ class Objet:
             self.combat_effet(joueur, carte, Jeu, log_details)
 
     
-    def en_vaincu(self, joueur, carte, Jeu, log_details):
+    def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
-        self.vaincu_effet(joueur, carte, Jeu, log_details) 
+        self.vaincu_effet(joueur_proprietaire, joueur, carte, Jeu, log_details) 
     
     def en_survie(self, joueur, carte, Jeu, log_details):
         if self.intact:
@@ -336,7 +336,7 @@ class ArcEnflamme(Objet):
 class ParcheminDeTeleportation(Objet):
     def __init__(self):
         super().__init__("Parchemin de Téléportation", True)
-    def vaincu_effet(self, joueur, carte, Jeu, log_details):
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if self.intact and (joueur.pv_total <= 6 and sum(objet.actif and objet.intact for objet in joueur.objets) <= 2):
             log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le donjon !\n")
             joueur.fuite()
@@ -547,6 +547,8 @@ class YoYoProtecteur(Objet):
         jet_yoyo = random.randint(1, 6)
         if jet_yoyo >= 4 and self in joueur.objets:
             self.reset_intact(log_details)
+        else:
+            log_details.append(f"{joueur.nom} essaie de reparer {self.nom}... raté ({jet_yoyo})!")
 
 class BouclierCasse(Objet):
     def __init__(self):
@@ -605,7 +607,7 @@ class GraalEnMousse(Objet):
         return carte.puissance % 2 == 0 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-    def vaincu_effet(self, joueur, carte, Jeu, log_details):
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if len(joueur.pile_monstres_vaincus) >= 7:
             self.destroy(joueur, Jeu, log_details)
 
@@ -725,7 +727,7 @@ class ChampDeForceEnMousse(Objet):
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"{joueur.nom} utilise {self.nom}... raté !")
-    def vaincu_effet(self, joueur, carte, Jeu, log_details):
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if len(joueur.pile_monstres_vaincus) >= 7:
             self.destroy(joueur, Jeu, log_details)
 
@@ -862,6 +864,62 @@ class LameDeLHarmonie(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
+class LameDraconique(Objet):
+    def __init__(self):
+        super().__init__("Lame Draconique", False)
+
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Dragon" in carte.types
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if "Dragon" in carte.types:
+            self.execute(joueur, carte, log_details)
+        else:
+            nb_dragons = sum("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus)
+            self.reduc_damage(nb_dragons, joueur, carte, log_details)
+
+class FouetDuFourbe(Objet):
+    def __init__(self):
+        super().__init__("Fouet du fourbe", True)
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        type_monstre = carte.types
+        for autre_joueur in Jeu.joueurs:
+            if autre_joueur != joueur:
+                for monstre in autre_joueur.pile_monstres_vaincus:
+                    if any(t in type_monstre for t in monstre.types):
+                        autre_joueur.pile_monstres_vaincus.remove(monstre)
+                        Jeu.defausse.append(monstre)
+                        log_details.append(f"{autre_joueur.nom} défausse {monstre.titre} à cause du {self.nom} de {joueur.nom}")
+                        break
+        self.destroy(joueur, Jeu, log_details)
+
+class CraneDuRoiLiche(Objet):
+    def __init__(self):
+        super().__init__("Crâne du Roi Liche", False)
+
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Liche" in carte.types
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if "Liche" in carte.types:
+            self.execute(joueur, carte, log_details)
+
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if "Liche" in carte.types and carte.titre != "Changeforme":
+            if joueur_proprietaire != joueur:
+                if carte in joueur.pile_monstres_vaincus:
+                    joueur.pile_monstres_vaincus.remove(carte)
+                    joueur_proprietaire.pile_monstres_vaincus.append(carte)
+                    log_details.append(f"{joueur_proprietaire.nom} récupère {carte.titre} de {joueur.nom} grâce à {self.nom}")
+                elif carte in Jeu.defausse:
+                    Jeu.defausse.remove(carte)
+                    joueur_proprietaire.pile_monstres_vaincus.append(carte)
+                    log_details.append(f"{joueur_proprietaire.nom} récupère {carte.titre} de la defausse grâce à {self.nom}")
+                else:
+                    log_details.append(f"{joueur_proprietaire.nom} essaie de récupèrer {carte.titre} mais la carte a disparu !!")
+
                 
 # Liste des objets
 objets_disponibles = [ 
@@ -940,6 +998,9 @@ objets_disponibles = [
     BottesDeVitesse(),
     Randotion(),
     LameDeLHarmonie(),
+    LameDraconique(),
+    FouetDuFourbe(),
+    CraneDuRoiLiche(),
 ]
 
 
@@ -1021,4 +1082,7 @@ __all__ = [
             "BottesDeVitesse",
             "Randotion",
             "LameDeLHarmonie",
+            "LameDraconique",
+            "FouetDuFourbe",
+            "CraneDuRoiLiche",
         ]
