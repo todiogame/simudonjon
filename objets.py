@@ -703,16 +703,20 @@ class GantsDeGaia(Objet):
                     self.piocheItem(joueur, Jeu, log_details)
                 self.destroy()
 
-class ChampDeForce(Objet):
+class ChampDeForceEnMousse(Objet):
     def __init__(self):
-        super().__init__("Champ de force", True)
-    
+        super().__init__("Champ de force en mousse", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_cf = random.randint(1, 6)
         if jet_cf >= 5:
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"Utilisé {self.nom}... raté !")
+    def vaincu_effet(self, joueur, carte, Jeu, log_details):
+        if len(joueur.pile_monstres_vaincus) >= 7:
+            self.destroy()
 
 class BoiteDePandore(Objet):
     def __init__(self):
@@ -759,6 +763,31 @@ class PerceuseABreche(Objet):
     def subit_dommages_effet(self,joueur_proprietaire, joueur, carte, Jeu, log_details):
         if self.intact and "Golem" in carte.types and joueur.nom != joueur_proprietaire.nom:
             self.gagnePV(carte.dommages, joueur_proprietaire, log_details)
+            
+class BourseGarnie(Objet):
+    def __init__(self):
+        super().__init__("Bourse Garnie", False, 3)
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(1,joueur,log_details)
+                
+class EnclumeInstable(Objet):
+    def __init__(self):
+        super().__init__("Enclume instable", True)
+    
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact:
+            objets_brisés_autres_joueurs = [obj for j in Jeu.joueurs if j != joueur for obj in j.objets if not obj.intact]
+            if objets_brisés_autres_joueurs:
+                objet_vole = random.choice(objets_brisés_autres_joueurs)
+                objet_vole.intact = True
+                ancien_proprietaire = next(j for j in Jeu.joueurs if objet_vole in j.objets)
+                ancien_proprietaire.objets.remove(objet_vole)
+                joueur.ajouter_objet(objet_vole)
+                log_details.append(f"{joueur.nom} utilise {self.nom} pour voler et réparer {objet_vole.nom} de {ancien_proprietaire.nom}")
+                self.destroy()
+
+
+                
                 
 # Liste des objets
 objets_disponibles = [ 
@@ -823,13 +852,14 @@ objets_disponibles = [
     GrimoireInconnu(),
     GantsDeCombat(),
     GantsDeGaia(),
-    ChampDeForce(),
+    ChampDeForceEnMousse(),
     BoiteDePandore(),
     TorcheBleue(),
     AnneauPlussain(),
     GetasDuNovice(),
     CaliceDuRoiSorcier(),
     PerceuseABreche(),
+    EnclumeInstable(),
 ]
 
 
@@ -897,11 +927,12 @@ __all__ = [
             "GrimoireInconnu",
             "GantsDeCombat",
             "GantsDeGaia",
-            "ChampDeForce",
+            "ChampDeForceEnMousse",
             "BoiteDePandore",
             "TorcheBleue",
             "AnneauPlussain",
             "GetasDuNovice",
             "CaliceDuRoiSorcier",
             "PerceuseABreche",
+            "EnclumeInstable",
         ]
