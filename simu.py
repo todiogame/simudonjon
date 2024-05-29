@@ -79,9 +79,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         if joueur.pv_total <= pv_min_fuite and sum(objet.actif and objet.intact for objet in joueur.objets) <= 1:
             # Tentative de fuite
-            modif = joueur.calculer_modificateurs()
-            joueur.jet_fuite = random.randint(1, 6) + modif
-            log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {modif}) ")
+            joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs()
+            log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
             joueur.jet_fuite_lance = True
             #use items en_fuite
             for objet in joueur.objets:
@@ -276,6 +275,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
             if joueur.dans_le_dj and not Jeu.execute_next_monster:
+                #sequence objets fin du tour
+                for objet in joueur.objets:
+                    objet.fin_tour(joueur, Jeu, log_details)
                 # Passer son tour, au joueur suivant
                 joueur.tour += 1
                 if len([joueur for joueur in joueurs if joueur.dans_le_dj]) > 1:
@@ -297,7 +299,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
     # Loguer les joueurs toujours dans le donjon
     if joueurs_dans_le_dj:
-        log_details.append("Les joueurs suivants sont toujours dans le donjon :")
+        log_details.append("Les joueurs suivants ont poncé le donjon :")
         for j in joueurs_dans_le_dj:
             log_details.append(f"- {j.nom}")
 
@@ -324,6 +326,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             elif j.fuite_reussie:
                 log_details.append(f"{j.nom} est exclu du décompte final car il a fui le donjon.")
             else: log_details.append(f"{j.nom}  A BUG ?? {j.vivant} {j.fuite_reussie} {j.dans_le_dj}")
+            
     # Trier les joueurs par ordre de score décroissant
     joueurs_final.sort(key=lambda j: j.score_final, reverse=True)
 

@@ -39,7 +39,7 @@ class Objet:
         pass
     def debut_tour(self, joueur, Jeu, log_details): 
         pass
-    def fin_tour(self):
+    def fin_tour(self, joueur, Jeu, log_details): 
         pass
     def score_effet(self, joueur, log_details):
         pass
@@ -50,7 +50,8 @@ class Objet:
 
     def en_subit_dommages(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
-        self.subit_dommages_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
+        if(joueur_proprietaire.dans_le_dj):
+            self.subit_dommages_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
         
     def en_activated(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         # attention, check si les items sont intacts
@@ -142,7 +143,7 @@ class Objet:
             nouvel_objet = random.choice(Jeu.objets_dispo)
             Jeu.objets_dispo.remove(nouvel_objet)
             joueur.ajouter_objet(nouvel_objet)
-            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
             
     def scoreChange(self, value, joueur, log_details):
         if value > 0:
@@ -361,7 +362,7 @@ class PotionDeGlace(Objet):
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le réduire à 0 {carte.titre} !")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour réduire à 0 {carte.titre} !")
         carte.puissance = 0
         carte.dommages = 0
         self.destroy(joueur, Jeu, log_details)
@@ -380,7 +381,9 @@ class PiocheDeDiamant(Objet):
     def __init__(self):
         super().__init__("Pioche de diamant", True)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and carte.puissance % 2 == 1 and ("Golem" in carte.types or carte.dommages >= (joueur.pv_total / 2))
+        return not Jeu.traquenard_actif and carte.puissance % 2 == 1
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return "Golem" in carte.types or carte.dommages >= (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if not ("Golem" in carte.types):
             self.destroy(joueur, Jeu, log_details)
@@ -585,7 +588,7 @@ class TalismanIncertain(Objet):
         if jet_talisman == 6:
             self.execute(joueur, carte, log_details)
         else:
-            log_details.append(f"Utilisé {self.nom}... raté !")
+            log_details.append(f"{joueur.nom} utilise {self.nom}... raté !")
             
 class PlanPresqueParfait(Objet):
     def __init__(self):
@@ -721,7 +724,7 @@ class ChampDeForceEnMousse(Objet):
         if jet_cf >= 5:
             self.execute(joueur, carte, log_details)
         else:
-            log_details.append(f"Utilisé {self.nom}... raté !")
+            log_details.append(f"{joueur.nom} utilise {self.nom}... raté !")
     def vaincu_effet(self, joueur, carte, Jeu, log_details):
         if len(joueur.pile_monstres_vaincus) >= 7:
             self.destroy(joueur, Jeu, log_details)
@@ -754,7 +757,19 @@ class AnneauPlussain(Objet):
 class GetasDuNovice(Objet):
     def __init__(self):
         super().__init__("Getas du novice", False, 2, 2)
-        #todo reroll jdf
+    def en_fuite(self, joueur, Jeu, log_details):
+        # 1 reroll
+        if (not joueur.medailles and joueur.jet_fuite < 4):
+            log_details.append(f"Utilise {self.nom}, pour reroll: {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
+            joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs()
+    
+class MarteauDEternite(Objet):
+    def __init__(self):
+        super().__init__("Marteau d'Eternité", False, 0, -100) #-100 fuite car inutile de fuir avec cet objet
+    def decompte_effet(self, joueur, joueurs_final, log_details):
+        if not joueur.vivant and joueur not in joueurs_final:
+            log_details.append(f"Le {self.nom} de {joueur.nom} le fait compter parmi les gagnants")
+            joueurs_final.append(joueur)
 
 class CaliceDuRoiSorcier(Objet):
     def __init__(self):
@@ -812,9 +827,41 @@ class CoffreAnime(Objet):
                         objet.intact = True
                         log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour réparer son {objet.nom}")
             else:log_details.append(f" {joueur_proprietaire.nom} utilise {self.nom} pour essayer de voler et réparer {objet.nom} de {joueur.nom} MAIS cela ECHOUE!")
-
-
+                            
+class AnneauDeVie(Objet):
+    def __init__(self):
+        super().__init__("Anneau de Vie", False)
+    def fin_tour(self, joueur, Jeu, log_details):
+        if(joueur.pv_total >= 6):
+            self.gagnePV(1,joueur,log_details)
                 
+
+class BottesDeVitesse(Objet):
+    def __init__(self):
+        super().__init__("Bottes de Vitesse", False, 0, 3)
+#todo vous rentrez en premier
+
+
+class Randotion(Objet):
+    def __init__(self):
+        super().__init__("Randotion", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(random.randint(1, 6), joueur, log_details)
+        self.gagnePV(random.randint(1, 6), joueur, log_details)
+        self.perdPV(random.randint(1, 6), joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+        
+class LameDeLHarmonie(Objet):
+    def __init__(self):
+        super().__init__("Lame de l'Harmonie", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        count_same_type = sum(1 for monstre in joueur.pile_monstres_vaincus if any(type_ in monstre.types for type_ in carte.types))
+        return not Jeu.traquenard_actif and count_same_type == 1
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
                 
 # Liste des objets
 objets_disponibles = [ 
@@ -884,10 +931,15 @@ objets_disponibles = [
     TorcheBleue(),
     AnneauPlussain(),
     GetasDuNovice(),
+    MarteauDEternite(),
     CaliceDuRoiSorcier(),
     PerceuseABreche(),
     EnclumeInstable(),
     CoffreAnime(),
+    AnneauDeVie(),
+    BottesDeVitesse(),
+    Randotion(),
+    LameDeLHarmonie(),
 ]
 
 
@@ -960,8 +1012,13 @@ __all__ = [
             "TorcheBleue",
             "AnneauPlussain",
             "GetasDuNovice",
+            "MarteauDEternite",
             "CaliceDuRoiSorcier",
             "PerceuseABreche",
             "EnclumeInstable",
             "CoffreAnime",
+            "AnneauDeVie",
+            "BottesDeVitesse",
+            "Randotion",
+            "LameDeLHarmonie",
         ]
