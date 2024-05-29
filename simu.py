@@ -213,6 +213,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             if not carte.executed:
                 Jeu.traquenard_actif = False
                 joueur.pv_total -= carte.dommages
+                
+
                 #item survie ici
                 # Ne pas ajouter le Gobelin Fantôme à la pile des monstres vaincus
                 if carte.effet == "MAUDIT":  
@@ -231,7 +233,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                             log_details.append(f"L'objet avale {objet_avalé.nom} donnait {objet_avalé.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
             
                 log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
-
+                
+                for joueur_proprietaire in Jeu.joueurs:
+                    for objet in joueur_proprietaire.objets:
+                        objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                        
                 if carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
                     monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
                     donjon.rajoute_en_haut_de_la_pile(monstre_remis)
@@ -341,8 +347,11 @@ def loguer_x_parties(x=1):
         objets_joueur = random.sample(objets_disponibles_simu, 6)
         for objet in objets_joueur:
             objets_disponibles_simu.remove(objet)
+        # ajouter objet tests ici
+        # objets_joueur.append(CaliceDuRoiSorcier())
         joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-
+        
+        
     seuil_pv_essai_fuite = 5
 
     for j in joueurs:
@@ -355,4 +364,4 @@ def loguer_x_parties(x=1):
         joueurs_copie = [copy.deepcopy(joueur) for joueur in joueurs]
         cartes_copie = DonjonDeck()
         print(f"\n--- Partie {i+1} ---")
-        ordonnanceur(joueurs_copie, cartes_copie, seuil_pv_essai_fuite, True)
+        ordonnanceur(joueurs_copie, cartes_copie, seuil_pv_essai_fuite,objets_disponibles_simu, True)

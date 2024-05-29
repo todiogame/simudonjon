@@ -43,9 +43,14 @@ class Objet:
         pass
     def score_effet(self, joueur, log_details):
         pass
+    def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        pass
 
 
-
+    def en_subit_dommages(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        # attention, check si les items sont intacts
+        self.subit_dommages_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
+        
     def en_rencontre(self, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         self.rencontre_effet(joueur, carte, Jeu, log_details)
@@ -89,47 +94,47 @@ class Objet:
     def execute(self, joueur, carte, log_details):
         carte.executed = True
         joueur.pile_monstres_vaincus.append(carte)
-        log_details.append(f"Utilisé {self.nom} pour exécuter {carte.titre}")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter {carte.titre}")
 
     def executeEtDefausse(self, joueur, carte, Jeu, log_details):
         carte.executed = True
         Jeu.defausse.append(carte)
-        log_details.append(f"Utilisé {self.nom} pour exécuter et défausser {carte.titre}")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter et défausser {carte.titre}")
 
     def absorbe(self, joueur, carte, log_details):
         carte.executed = True
         joueur.pv_total += carte.puissance  # Absorber les PV
         joueur.pile_monstres_vaincus.append(carte)
-        log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour absorber {carte.puissance} PV. Total {joueur.pv_total} PV.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour absorber {carte.puissance} PV. Total {joueur.pv_total} PV.")
 
     def reduc_damage(self, value, joueur, carte, log_details):
         carte.dommages = max(carte.dommages - value, 0)
-        log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
 
     def add_damage(self, value, joueur, carte, log_details):
         carte.dommages = carte.dommages + value
-        log_details.append(f"Utilisé {self.nom} sur {carte.titre} pour augmenter les dommages de {value}.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour augmenter les dommages de {value}.")
 
     def gagnePV(self, value, joueur, log_details):
         joueur.pv_total += value
-        log_details.append(f"Utilisé {self.nom} pour gagner {value} PV. Total {joueur.pv_total} PV.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour gagner {value} PV. Total {joueur.pv_total} PV.")
 
     def perdPV(self, value, joueur, log_details):
         joueur.pv_total -= value
-        log_details.append(f"Utilisé {self.nom} et perd {value} PV. Total {joueur.pv_total} PV.")
+        log_details.append(f"{joueur.nom} utilise {self.nom} et perd {value} PV. Total {joueur.pv_total} PV.")
         if(joueur.pv_total <= 0): joueur.mort()
 
     def survit(self, value, joueur, carte, log_details):
         joueur.pv_total = value
         joueur.pile_monstres_vaincus.append(carte)
-        log_details.append(f"Utilisé {self.nom} pour survivre avec {value} PV et vaincre {carte.titre}")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour survivre avec {value} PV et vaincre {carte.titre}")
 
     def piocheItem(self, joueur, Jeu, log_details):
         if len(Jeu.objets_dispo):
             nouvel_objet = random.choice(Jeu.objets_dispo)
             Jeu.objets_dispo.remove(nouvel_objet)
             joueur.ajouter_objet(nouvel_objet)
-            log_details.append(f"Utilisé {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Modificateur de: {nouvel_objet.modificateur_de}. Nouveau PV joueur: {joueur.pv_total} PV.")
             
     def scoreChange(self, value, joueur, log_details):
         if value > 0:
@@ -227,7 +232,7 @@ class GateauSpatial(Objet):
         jet_gateau = random.randint(1, 6)
         if jet_gateau == 1:
             joueur.fuite()
-            log_details.append(f"Utilisé Gâteau spatial, jet de {jet_gateau}, fuite immédiate du Donjon.\n")
+            log_details.append(f"{joueur.nom} utilise Gâteau spatial, jet de {jet_gateau}, fuite immédiate du Donjon.\n")
         else:
             self.gagnePV(jet_gateau, joueur, log_details)
 
@@ -242,7 +247,7 @@ class CouteauSuisse(Objet):
         if objets_brisés:
             objet_repare = random.choice(objets_brisés)
             objet_repare.intact = True
-            log_details.append(f"Utilisé Couteau Suisse pour réparer {objet_repare.nom}.")
+            log_details.append(f"{joueur.nom} utilise Couteau Suisse pour réparer {objet_repare.nom}.")
             if objet_repare.pv_bonus: self.gagnePV(objet_repare.pv_bonus, joueur, log_details)
 
 class CaisseEnchantee(Objet):
@@ -252,7 +257,7 @@ class CaisseEnchantee(Objet):
         return carte.puissance < 6 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_caisse = random.randint(1, 6)
-        log_details.append(f"Utilisé Caisse enchantée sur {carte.titre}, jet de {jet_caisse}")
+        log_details.append(f"{joueur.nom} utilise Caisse enchantée sur {carte.titre}, jet de {jet_caisse}")
         if jet_caisse == 1:
             self.destroy()
             log_details.append(f"Caisse enchantée brisée.")
@@ -324,7 +329,7 @@ class ParcheminDeTeleportation(Objet):
         super().__init__("Parchemin de Téléportation", True)
     def vaincu_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and (joueur.pv_total <= 6 and sum(objet.actif and objet.intact for objet in joueur.objets) <= 2):
-            log_details.append(f"Utilisé {self.nom} pour fuir le donjon !")
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le donjon !")
             self.destroy()
             joueur.fuite()
 
@@ -349,7 +354,7 @@ class PotionDeGlace(Objet):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.destroy()
-        log_details.append(f"Utilisé {self.nom} pour fuir le réduire à 0 {carte.titre} !")
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le réduire à 0 {carte.titre} !")
         carte.puissance = 0
         carte.dommages = 0
 
@@ -691,7 +696,7 @@ class GantsDeGaia(Objet):
                 for _ in range(nombre_a_defausser):
                     objet_brisé = objets_brisés.pop()
                     joueur.objets.remove(objet_brisé)
-                    log_details.append(f"Utilisé {self.nom} pour défausser objet brisé: {objet_brisé.nom}")
+                    log_details.append(f"{joueur.nom} utilise {self.nom} pour défausser objet brisé: {objet_brisé.nom}")
                 for _ in range(nombre_a_defausser):
                     self.piocheItem(joueur, Jeu, log_details)
                 self.destroy()
@@ -727,9 +732,24 @@ class AnneauPlussain(Objet):
 class GetasDuNovice(Objet):
     def __init__(self):
         super().__init__("Getas du novice", False, 2, 2)
-        
-#todo reroll jdf
+        #todo reroll jdf
 
+class CaliceDuRoiSorcier(Objet):
+    def __init__(self):
+        super().__init__("Calice du Roi Sorcier", False)
+        
+    def subit_dommages_effet(self,joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and carte.dommages >= 3 and joueur.nom != joueur_proprietaire.nom:
+            self.gagnePV(1, joueur_proprietaire, log_details)
+                
+class PerceuseABreche(Objet):
+    def __init__(self):
+        super().__init__("Perceuse a Breche", False)
+        
+    def subit_dommages_effet(self,joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and "Golem" in carte.types and joueur.nom != joueur_proprietaire.nom:
+            self.gagnePV(carte.dommages, joueur_proprietaire, log_details)
+                
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -797,6 +817,8 @@ objets_disponibles = [
     BoiteDePandore(),
     AnneauPlussain(),
     GetasDuNovice(),
+    CaliceDuRoiSorcier(),
+    PerceuseABreche(),
 ]
 
 
@@ -868,4 +890,6 @@ __all__ = [
             "BoiteDePandore",
             "AnneauPlussain",
             "GetasDuNovice",
+            "CaliceDuRoiSorcier",
+            "PerceuseABreche",
         ]
