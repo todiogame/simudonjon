@@ -1296,20 +1296,22 @@ class Chameau(Objet):
         super().__init__("Chameau", True)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact and joueur.dans_le_dj:
-            min_pv_joueur = min(j.pv_total for j in Jeu.joueurs if j.dans_le_dj)
-            if joueur.pv_total == min_pv_joueur:
+            min_pv_joueur = min(j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur)
+            if joueur.pv_total < min_pv_joueur:
                 self.gagnePV(6, joueur, log_details)
                 self.destroy(joueur, Jeu, log_details)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and joueur.dans_le_dj:
-            min_pv_joueur = min(j.pv_total for j in Jeu.joueurs if j.dans_le_dj)
-            if joueur.pv_total == min_pv_joueur:
+            min_pv_joueur = min(j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur)
+            if joueur.pv_total < min_pv_joueur:
                 self.gagnePV(6, joueur, log_details)
                 self.destroy(joueur, Jeu, log_details)
 
 class PotionDeFeuLiquide(Objet):
     def __init__(self):
         super().__init__("Potion de feu liquide", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
         self.destroy(joueur, Jeu, log_details)
