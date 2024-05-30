@@ -49,7 +49,7 @@ class DonjonDeck:
             CarteMonstre("Fée", 0, []),
             CarteMonstre("Chevaucheur de rat", 1, ["Gobelin", "Rat"], "Inflige <b>2 dommages</b> supplémentaires.", "ADD_2_DOM"),
             CarteMonstre("Bon gros rat", 0, ["Rat"], "Inflige <b>2 dommages</b> supplémentaires.", "ADD_2_DOM"),
-            CarteMonstre("L'Arracheur (P)", 3, ["Orc"], "Si l'Arracheur vous inflige des dommages, remettez la carte du dessus de votre pile de monstres vaincus <b>sur le Donjon</b>.", "ARRA"),
+            CarteMonstre("L'Arracheur", 3, ["Orc"], "Si l'Arracheur vous inflige des dommages, remettez la carte du dessus de votre pile de monstres vaincus <b>sur le Donjon</b>.", "ARRA"),
             CarteMonstre("Dragon endormi", "X", ["Dragon"], "Lancez un dé pour determiner sa puissance.\nSur <b>3 ou moins</b>, ce monstre est <b>puissance 9</b>.\nSur <b>4 ou plus</b>, ce monstre est <b>puissance 0</b>.", "SLEEPING"),
             CarteMonstre("Limon glouton", 0, [], "Si vous affrontez ce monstre, <b>brisez</b> un de vos objets intact.", "LIMON"),
             CarteMonstre("Mimique", "X", [], "La <b>puissance</b> de ce monstre est égale au nombre d'objets que vous possédez quand vous la rencontrez.", "MIMIC"),
