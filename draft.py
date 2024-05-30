@@ -55,22 +55,32 @@ def preparer_game(objets_disponibles):
     print("Objets poubelle :", [obj.nom for main in mains_joueurs for obj in main if main])
     print("\n")
 
-    calculWRtotal(objets_disponibles, noms_joueurs, objets_joueurs)
+    calculWRfinal(objets_disponibles, noms_joueurs, objets_joueurs)
+    # jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs)
 
-def calculWRtotal(objets_disponibles, noms_joueurs, objets_joueurs):
+def calculWRfinal(objets_disponibles, noms_joueurs, objets_joueurs, iter=1000):
     win_counts = {}
-    for _ in range(100):
+    for _ in range(iter):
         joueurs = []
         for nom, objets in zip(noms_joueurs, objets_joueurs):
             joueurs.append(Joueur(nom, random.randint(2, 4), objets))
         objets_disponibles_simu = list(objets_disponibles)
-        for o in objets_disponibles_simu:
-            o.intact = True
+        for o in objets_disponibles_simu: o.intact = True
         vainqueur = ordonnanceur(joueurs, DonjonDeck(), 6, objets_disponibles_simu, False)
-        win_counts[vainqueur.nom] = win_counts.get(vainqueur.nom, 0) + 1
+        if vainqueur: win_counts[vainqueur.nom] = win_counts.get(vainqueur.nom, 0) + 1
     print(f"Probas de win la game:")
     for j, count in win_counts.items():
-        print(f"{j}: {count / 100:.2%}")
+        print(f"{j}: {count / iter:.2%}")
+
+
+def jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs):
+    joueurs = []
+    for nom, objets in zip(noms_joueurs, objets_joueurs):
+        joueurs.append(Joueur(nom, random.randint(2, 4), objets))
+    objets_disponibles_simu = list(objets_disponibles)
+    for o in objets_disponibles_simu: o.intact = True
+    ordonnanceur(joueurs, DonjonDeck(), 6, objets_disponibles_simu, True)
+
 
 def choisirObjet(i, objets, mains):
     meilleur_objet = None

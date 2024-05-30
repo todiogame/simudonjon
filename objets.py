@@ -1007,7 +1007,7 @@ class PistoletPirate(Objet):
     def __init__(self):
         super().__init__("Pistolet Pirate", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and (carte.puissance == 2 or carte.puissance == 3)
+        return (carte.puissance == 2 or carte.puissance == 3) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
