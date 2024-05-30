@@ -1290,7 +1290,33 @@ class ChapeauStyle(Objet):
         super().__init__("Chapeau stylé", False, 2)
     def fin_de_decompte_effet(self, joueur, joueurs_final, log_details):
         joueur.tiebreaker = True
+        
+class Chameau(Objet):
+    def __init__(self):
+        super().__init__("Chameau", True)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.dans_le_dj:
+            min_pv_joueur = min(j.pv_total for j in Jeu.joueurs if j.dans_le_dj)
+            if joueur.pv_total == min_pv_joueur:
+                self.gagnePV(6, joueur, log_details)
+                self.destroy(joueur, Jeu, log_details)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if self.intact and joueur.dans_le_dj:
+            min_pv_joueur = min(j.pv_total for j in Jeu.joueurs if j.dans_le_dj)
+            if joueur.pv_total == min_pv_joueur:
+                self.gagnePV(6, joueur, log_details)
+                self.destroy(joueur, Jeu, log_details)
 
+class PotionDeFeuLiquide(Objet):
+    def __init__(self):
+        super().__init__("Potion de feu liquide", True)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+    def rencontre_effet(self, joueur, carte, Jeu, log_details):
+        if not self.intact and "Dragon" in carte.types:
+            self.reset_intact(log_details)
+            
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -1405,6 +1431,8 @@ objets_disponibles = [
     ArmureDuRoiLiche(),
     ElixirDeChance(),
     ChapeauStyle(),
+    Chameau(),
+    PotionDeFeuLiquide(),
 ]
 
 
@@ -1523,4 +1551,6 @@ __all__ = [
             "ArmureDuRoiLiche",
             "ElixirDeChance",
             "ChapeauStyle",
+            "Chameau",
+            "PotionDeFeuLiquide",
         ]
