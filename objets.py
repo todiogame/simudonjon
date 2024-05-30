@@ -92,7 +92,7 @@ class Objet:
         if self.intact:
             self.decompte_effet(joueur, joueurs_final, log_details)
 
-    def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, log_details):
+    def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # attention, check si les items sont intacts
         pass
             
@@ -238,14 +238,15 @@ class SingeDore(Objet):
     def __init__(self):
         super().__init__("Singe doré", False, 0, -2)
     def score_effet(self, joueur, log_details):
-        self.scoreChange(joueur.rollDice(log_details), joueur, log_details)
+        jet = random.randint(1, 6)
+        self.scoreChange(jet, joueur, log_details)
 class GateauSpatial(Objet):
     def __init__(self):
         super().__init__("Gâteau spatial", True)
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        jet_gateau = joueur.rollDice(log_details)
+        jet_gateau = joueur.rollDice(Jeu, log_details)
         if jet_gateau == 1:
             joueur.fuite()
             log_details.append(f"{joueur.nom} utilise Gâteau spatial, jet de {jet_gateau}, fuite immédiate du Donjon.\n")
@@ -273,7 +274,7 @@ class CaisseEnchantee(Objet):
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance < 6 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        jet_caisse = joueur.rollDice(log_details, carte.puissance+1)
+        jet_caisse = joueur.rollDice(Jeu, log_details, carte.puissance+1)
         log_details.append(f"{joueur.nom} utilise Caisse enchantée sur {carte.titre}, jet de {jet_caisse}")
         if jet_caisse == 1:
             log_details.append(f"Caisse enchantée brisée.")
@@ -309,8 +310,8 @@ class BouclierDragon(Objet):
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        jet1 = joueur.rollDice(log_details)
-        jet2 = joueur.rollDice(log_details)
+        jet1 = joueur.rollDice(Jeu, log_details)
+        jet2 = joueur.rollDice(Jeu, log_details)
         self.reduc_damage(jet1+jet2, joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
     def rencontre_effet(self, joueur, carte, Jeu, log_details):
@@ -552,7 +553,7 @@ class YoYoProtecteur(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
-        jet_yoyo = joueur.rollDice(log_details)
+        jet_yoyo = joueur.rollDice(Jeu, log_details)
         if jet_yoyo >= 4 and self in joueur.objets:
             self.reset_intact(log_details)
         else:
@@ -566,7 +567,7 @@ class BouclierCasse(Objet):
         return carte.puissance >= 6
     
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        jet_bouclier = joueur.rollDice(log_details)
+        jet_bouclier = joueur.rollDice(Jeu, log_details)
         self.reduc_damage(jet_bouclier, joueur, carte, log_details)
 
 class GlaiveDArgent(Objet):
@@ -584,7 +585,7 @@ class ChapeletDeVitalite(Objet):
         super().__init__("Chapelet de Vitalité", False, 3)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
-            jet_chapelet = joueur.rollDice(log_details, 6)
+            jet_chapelet = joueur.rollDice(Jeu, log_details, 6)
             if jet_chapelet == 6:
                 self.gagnePV(1, joueur, log_details)
 
@@ -593,7 +594,7 @@ class TalismanIncertain(Objet):
         super().__init__("Talisman Incertain", False, 2)
     
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        jet_talisman = joueur.rollDice(log_details, 6)
+        jet_talisman = joueur.rollDice(Jeu, log_details, 6)
         if jet_talisman == 6:
             self.execute(joueur, carte, log_details)
         else:
@@ -688,7 +689,7 @@ class GrimoireInconnu(Objet):
     
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
-            jet_grimoire = joueur.rollDice(log_details, 6)
+            jet_grimoire = joueur.rollDice(Jeu, log_details, 6)
             if jet_grimoire == 6:
                 self.piocheItem(joueur,Jeu,log_details)
 
@@ -729,7 +730,7 @@ class ChampDeForceEnMousse(Objet):
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        jet_cf = joueur.rollDice(log_details, 5)
+        jet_cf = joueur.rollDice(Jeu, log_details, 5)
         if jet_cf >= 5:
             self.execute(joueur, carte, log_details)
         else:
@@ -770,7 +771,7 @@ class GetasDuNovice(Objet):
         # 1 reroll
         if (not joueur.medailles and joueur.jet_fuite < 4) and self.intact:
             log_details.append(f"Utilise {self.nom}, pour reroll: {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
-            joueur.jet_fuite = joueur.rollDice(log_details) + joueur.calculer_modificateurs()
+            joueur.jet_fuite = joueur.rollDice(Jeu, log_details) + joueur.calculer_modificateurs()
     
 class MarteauDEternite(Objet):
     def __init__(self):
@@ -825,7 +826,7 @@ class CoffreAnime(Objet):
     def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         if self.intact:
             if objet in joueur.objets and not objet.intact:
-                jet_de = joueur.rollDice(log_details, 6)
+                jet_de = joueur.rollDice(Jeu, log_details, 6)
                 if jet_de == 6:
                     if joueur_proprietaire.nom != joueur.nom:
                         joueur.objets.remove(objet)
@@ -857,9 +858,9 @@ class Randotion(Objet):
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.gagnePV(joueur.rollDice(log_details), joueur, log_details)
-        self.gagnePV(joueur.rollDice(log_details), joueur, log_details)
-        self.perdPV(joueur.rollDice(log_details, 3,True), joueur, log_details)
+        self.gagnePV(joueur.rollDice(Jeu, log_details), joueur, log_details)
+        self.gagnePV(joueur.rollDice(Jeu, log_details), joueur, log_details)
+        self.perdPV(joueur.rollDice(Jeu, log_details, 3,True), joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
         
 class LameDeLHarmonie(Objet):
@@ -901,7 +902,7 @@ class PotionOuPoison(Objet):
         return carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.gagnePV(6, joueur, log_details)
-        jet_de_de = joueur.rollDice(log_details, 2)
+        jet_de_de = joueur.rollDice(Jeu, log_details, 2)
         if jet_de_de == 1:
             self.perdPV(7, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -1077,18 +1078,18 @@ class CapeVaudou(Objet):
 class FerACheval(Objet):
     def __init__(self):
         super().__init__("Fer a Cheval", True)
-    def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, log_details):
+    def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # attention, check si les items sont intacts
         if self.intact and not rerolled and ((jet < jet_voulu and not reversed) or (reversed and jet > jet_voulu)):
                 log_details.append(f"{joueur.nom} utilise {self.nom} pour reroll son dé de {jet}.")
-                return joueur.rollDice(log_details, jet_voulu, reversed, True)
+                return joueur.rollDice(Jeu, log_details, jet_voulu, reversed, True)
 
 class DeDuTricheur(Objet):
     def __init__(self):
         super().__init__("Dé du Tricheur", True, 3)
-    def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, log_details):
+    def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # +1 à tous vos jets de dés, sauf si vous faites 5
-        if self.intact and not reversed and jet <= 5:
+        if self.intact and not reversed and jet < 5:
             log_details.append(f"{joueur.nom} utilise {self.nom} pour passer son dé de {jet} à {jet+1}.")
             return jet + 1
 
@@ -1209,12 +1210,73 @@ class BoiteAButin(Objet):
     def fin_tour(self, joueur, Jeu, log_details):
         monstres_ajoutes = joueur.monstres_ajoutes_ce_tour
         log_details.append(f"{joueur.nom} a grinde {joueur.monstres_ajoutes_ce_tour} monstre(s) ce tour et utilise {self.nom} autant de fois. ")
-
         for _ in range(monstres_ajoutes):
-            jet_boite = joueur.rollDice(log_details)
+            jet_boite = joueur.rollDice(Jeu, log_details, 6)
             if jet_boite == 6:
                 self.piocheItem(joueur, Jeu, log_details)
 
+class PlatreeDeBerniques(Objet):
+    def __init__(self):
+        super().__init__("Platree de Berniques", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total 
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        jet = joueur.rollDice(Jeu, log_details)
+        joueur.pv_total = jet
+        log_details.append(f"{joueur.nom} utilise {self.nom} et fixe ses PV à {jet}. Total {joueur.pv_total} PV.")
+        self.destroy(joueur, Jeu, log_details)
+
+class AnneauOceanique(Objet):
+    def __init__(self):
+        super().__init__("Anneau Oceanique")
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance >= 8 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class BoomerangMystique(Objet):
+    def __init__(self):
+        super().__init__("Boomerang Mystique", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        Jeu.execute_next_monster = True
+        log_details.append(f"La prochaine carte monstre peut être exécutée.")
+        self.destroy(joueur, Jeu, log_details)
+
+class CoiffeDeSorcier(Objet):
+    def __init__(self):
+        super().__init__("Coiffe de sorcier")
+    def rules(self, joueur, carte, Jeu, log_details):
+        return ("Gobelin" in carte.types or "Vampire" in carte.types) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class ArmureDuRoiLiche(Objet):
+    def __init__(self):
+        super().__init__("Armure du Roi Liche", False, 3)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Liche" in carte.types and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class ElixirDeChance(Objet):
+    def __init__(self):
+        super().__init__("Elixir de chance", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(3, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+    def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, Jeu, log_details):
+        if self.intact and (jet < jet_voulu and not reversed) or (jet > jet_voulu and reversed):
+            self.gagnePV(3, joueur, log_details)
+            self.destroy(joueur, Jeu, log_details)
+            return 1 if reversed else 6
 
 # Liste des objets
 objets_disponibles = [ 
@@ -1323,6 +1385,12 @@ objets_disponibles = [
     EpeeMystique(),
     DelicieusePizza(), 
     BoiteAButin(),
+    PlatreeDeBerniques(),
+    AnneauOceanique(),
+    BoomerangMystique(),   
+    CoiffeDeSorcier(),
+    ArmureDuRoiLiche(),
+    ElixirDeChance(),
 ]
 
 
@@ -1434,4 +1502,10 @@ __all__ = [
             "EpeeMystique",
             "DelicieusePizza",
             "BoiteAButin",
+            "PlatreeDeBerniques",
+            "AnneauOceanique",
+            "BoomerangMystique",
+            "CoiffeDeSorcier",
+            "ArmureDuRoiLiche",
+            "ElixirDeChance",
         ]

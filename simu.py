@@ -73,7 +73,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         if joueur.pv_total <= pv_min_fuite and sum(objet.actif and objet.intact for objet in joueur.objets) <= 1:
             # Tentative de fuite
-            joueur.jet_fuite = joueur.rollDice(log_details) + joueur.calculer_modificateurs()
+            joueur.jet_fuite = joueur.rollDice(Jeu, log_details) + joueur.calculer_modificateurs()
             log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
             joueur.jet_fuite_lance = True
             #use items en_fuite
@@ -156,7 +156,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         log_details.append(f"Le Miroir Maléfique n'a pas de carte a copier, puissance zero.")
 
                 if carte.effet == "SLEEPING":
-                    jet_dragon = joueur.rollDice(log_details)
+                    jet_dragon = joueur.rollDice(Jeu, log_details)
                     if jet_dragon <= 3:
                         carte.puissance = 9
                     else:
