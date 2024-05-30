@@ -40,6 +40,7 @@ def display_simu(r=0):
         for o in objets_disponibles_simu:
             o.intact = True
             # o.priorite = priorites_objets.get(o.nom, 49.5) * (1 + random.uniform(-0.2, 0.2))
+            # o.priorite = min(100, max(0, priorites_objets.get(o.nom, 49.5) + random.uniform(-20, 20)))
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         joueurs = []

@@ -1159,8 +1159,8 @@ class TreizeASeize(Objet):
         super().__init__("Treize à Seize", False)
     def rules(self, joueur, carte, Jeu, log_details):
         if any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus):
-            return carte.puissance == 1 or carte.puissance == 6
-        return carte.puissance == 1 or carte.puissance == 3
+            return (carte.puissance == 1 or carte.puissance == 6) and not Jeu.traquenard_actif
+        return (carte.puissance == 1 or carte.puissance == 3) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
