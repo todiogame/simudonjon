@@ -56,7 +56,7 @@ def preparer_game(objets_disponibles):
     print("\n")
 
     calculWRfinal(objets_disponibles, noms_joueurs, objets_joueurs)
-    # jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs)
+    jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs)
 
 def calculWRfinal(objets_disponibles, noms_joueurs, objets_joueurs, iter=1000):
     win_counts = {}
