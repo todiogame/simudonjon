@@ -37,6 +37,8 @@ class Objet:
         pass
     def decompte_effet(self,joueur, joueurs_final, log_details):
         pass
+    def fin_de_decompte_effet(self,joueur, joueurs_final, log_details):
+        pass
     def debut_tour(self, joueur, Jeu, log_details): 
         pass
     def fin_tour(self, joueur, Jeu, log_details): 
@@ -91,6 +93,10 @@ class Objet:
     def en_decompte(self, joueur, joueurs_final, log_details):
         if self.intact:
             self.decompte_effet(joueur, joueurs_final, log_details)
+            
+    def en_fin_de_decompte(self, joueur, joueurs_final, log_details):
+        if self.intact:
+            self.fin_de_decompte_effet(joueur, joueurs_final, log_details)
 
     def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # attention, check si les items sont intacts
@@ -1096,26 +1102,26 @@ class EspritDuDonjon(Objet):
         super().__init__("Esprit du Donjon", True)
 
     def debut_tour(self, joueur, Jeu, log_details):
-        autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
-
-        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj):
-            log_details.append(f"{joueur.nom} utilise {self.nom}")
-            for autre_joueur in autres_joueurs_dans_le_dj:
-                if autre_joueur.pile_monstres_vaincus:
-                    monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
-                    autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
-                    Jeu.donjon.ajouter_monstre(monstre_remis)
-                    log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
-            for autre_joueur in autres_joueurs_dans_le_dj:
-                if autre_joueur.pile_monstres_vaincus:
-                    monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
-                    autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
-                    Jeu.donjon.ajouter_monstre(monstre_remis)
-                    log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
-                else:
-                    log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")   
-            Jeu.donjon.remelange()                 
-            self.destroy(joueur, Jeu, log_details)
+        if self.intact:
+            autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
+            if all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj):
+                log_details.append(f"{joueur.nom} utilise {self.nom}")
+                for autre_joueur in autres_joueurs_dans_le_dj:
+                    if autre_joueur.pile_monstres_vaincus:
+                        monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
+                        autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
+                        Jeu.donjon.ajouter_monstre(monstre_remis)
+                        log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
+                for autre_joueur in autres_joueurs_dans_le_dj:
+                    if autre_joueur.pile_monstres_vaincus:
+                        monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
+                        autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
+                        Jeu.donjon.ajouter_monstre(monstre_remis)
+                        log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
+                    else:
+                        log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")   
+                Jeu.donjon.remelange()                 
+                self.destroy(joueur, Jeu, log_details)
 
 class SabreMecanique(Objet):
     def __init__(self):
@@ -1276,6 +1282,13 @@ class ElixirDeChance(Objet):
             self.destroy(joueur, Jeu, log_details)
             return 1 if reversed else 6
 
+
+class ChapeauStyle(Objet):
+    def __init__(self):
+        super().__init__("Chapeau stylé", False, 2)
+    def fin_de_decompte_effet(self, joueur, joueurs_final, log_details):
+        joueur.tiebreaker = True
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -1389,6 +1402,7 @@ objets_disponibles = [
     CoiffeDeSorcier(),
     ArmureDuRoiLiche(),
     ElixirDeChance(),
+    ChapeauStyle(),
 ]
 
 
@@ -1506,4 +1520,5 @@ __all__ = [
             "CoiffeDeSorcier",
             "ArmureDuRoiLiche",
             "ElixirDeChance",
+            "ChapeauStyle",
         ]
