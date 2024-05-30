@@ -77,12 +77,10 @@ class DonjonDeck:
         self.nb_cartes = len(self.cartes)
         self.ordre = None
         self.index = 0
-        self.haut_pile = None
 
     def melange(self):
         self.ordre = np.random.permutation(self.nb_cartes)
         self.index = 0
-        self.haut_pile = None
 
     def remelange(self):
         # Conserver les cartes restantes
@@ -94,35 +92,28 @@ class DonjonDeck:
         self.nb_cartes = len(self.ordre)
     
     def ajouter_monstre(self, monstre_remis):
-        # Convertir self.ordre en liste
-        ordre_liste = self.ordre.tolist()
-        # Ajouter l'ordre du monstre
-        ordre_liste.append(monstre_remis.ordre)
-        # Convertir de nouveau en numpy array
-        self.ordre = np.array(ordre_liste)
+        monstre_remis.executed = False
+        self.ordre = np.append(self.ordre, monstre_remis.index)
+        self.nb_cartes += 1
         # Cette Fct ne re melange pas, le faire separement
 
-    
     @property
     def vide(self):
+        # assert self.nb_cartes == len(self.ordre) pour verifier
         return self.index == self.nb_cartes
 
     def prochaine_carte(self):
-        if self.haut_pile:
-            haut_pile = self.haut_pile.pop(0)
-            return haut_pile
         index = self.index
         self.index += 1
         return self.cartes[self.ordre[index]]
 
     def rajoute_en_haut_de_la_pile(self, carte):
         carte.executed = False
-        if self.haut_pile:
-            self.haut_pile.insert(0,carte)
-        else:
-            self.haut_pile = [carte]
+        self.ordre = np.insert(self.ordre, self.index, carte.index)
+        self.nb_cartes += 1
 
     def ajouter_carte(self, carte):
+        assert carte not in self.cartes # faut copy pour pas avoir la meme instance
         self.cartes.append(carte)
         self.nb_cartes += 1
         self.ordre = np.append(self.ordre, len(self.cartes) - 1)
