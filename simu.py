@@ -66,7 +66,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         
         # Le joueur pioche une carte
         carte = donjon.prochaine_carte()
-        
+
         joueur.jet_fuite_lance = False
 
         if joueur.pv_total <= pv_min_fuite and sum(objet.actif and objet.intact for objet in joueur.objets) <= 1:
@@ -123,6 +123,18 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 else:
                     log_details.append(f"{carte.titre} ne fait rien.")
             
+
+            if carte.effet == "SOULSTORM":
+                for autre_joueur in joueurs:
+                    if autre_joueur.pile_monstres_vaincus:
+                        monstre_remis = autre_joueur.pile_monstres_vaincus.pop()
+                        donjon.ajouter_monstre(monstre_remis)
+                        log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
+                    else:
+                        log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")
+                donjon.remelange()
+                log_details.append(f"Le donjon est remelangé.")
+
             # Le joueur rejoue
             joueur.rejoue = True
             
@@ -358,7 +370,7 @@ def loguer_x_parties(x=1):
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
         joueurs[0].objets.append(    FerACheval(),)
-        joueurs[1].objets.append(    DeDuTricheur())
+        joueurs[1].objets.append(    EspritDuDonjon())
 
 
         for j in joueurs:

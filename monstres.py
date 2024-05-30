@@ -68,9 +68,12 @@ class DonjonDeck:
             # CarteEvent("Inception", "Répétez l'effet de la dernière carte <b>Événement</b> de la défausse.", "INCEPTION"),
             # CarteEvent("Dépeceur de Dragons", "Les joueurs ayant des <b>Dragons</b> dans leur pile peuvent en défausser pour <b>piocher</b> autant d'objets.", "DRAG"),
             CarteEvent("Injection argileuse", "Gagnez <b>3 PV</b> pour chaque <b>Golem</b> dans votre pile.", "INJECTION"),
-            # CarteEvent("Tempête des âmes", "Tous les joueurs doivent remettre un monstre de leur pile de monstres vaincus dans le Donjon. Mélangez-le.", "SOULSTORM")
+            CarteEvent("Tempête des âmes", "Tous les joueurs doivent remettre un monstre de leur pile de monstres vaincus dans le Donjon. Mélangez-le.", "SOULSTORM"),
             CarteEvent("Traquenard", "Si la prochaine carte est un monstre, vous ne pouvez pas <b>l'exécuter</b>.", "TRAP"),
         ]
+        for i, carte in enumerate(self.cartes):
+            carte.index = i  # Assigner l'index à chaque carte
+            carte.ordre = i  # Assigner l'ordre initial à chaque carte
         self.nb_cartes = len(self.cartes)
         self.ordre = None
         self.index = 0
@@ -80,6 +83,25 @@ class DonjonDeck:
         self.ordre = np.random.permutation(self.nb_cartes)
         self.index = 0
         self.haut_pile = None
+
+    def remelange(self):
+        # Conserver les cartes restantes
+        cartes_restantes = self.ordre[self.index:]
+        # Mélanger les cartes restantes
+        self.ordre = np.random.permutation(cartes_restantes)
+        # Réinitialiser l'index
+        self.index = 0
+        self.nb_cartes = len(self.ordre)
+    
+    def ajouter_monstre(self, monstre_remis):
+        # Convertir self.ordre en liste
+        ordre_liste = self.ordre.tolist()
+        # Ajouter l'ordre du monstre
+        ordre_liste.append(monstre_remis.ordre)
+        # Convertir de nouveau en numpy array
+        self.ordre = np.array(ordre_liste)
+        # Cette Fct ne re melange pas, le faire separement
+
     
     @property
     def vide(self):
@@ -99,3 +121,8 @@ class DonjonDeck:
             self.haut_pile.insert(0,carte)
         else:
             self.haut_pile = [carte]
+
+    def ajouter_carte(self, carte):
+        self.cartes.append(carte)
+        self.nb_cartes += 1
+        self.ordre = np.append(self.ordre, len(self.cartes) - 1)
