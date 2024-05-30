@@ -1104,26 +1104,26 @@ class EspritDuDonjon(Objet):
         super().__init__("Esprit du Donjon", True)
 
     def debut_tour(self, joueur, Jeu, log_details):
-        autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
-
-        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj):
-            log_details.append(f"{joueur.nom} utilise {self.nom}")
-            for autre_joueur in autres_joueurs_dans_le_dj:
-                if autre_joueur.pile_monstres_vaincus:
-                    monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
-                    autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
-                    Jeu.donjon.ajouter_monstre(monstre_remis)
-                    log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
-            for autre_joueur in autres_joueurs_dans_le_dj:
-                if autre_joueur.pile_monstres_vaincus:
-                    monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
-                    autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
-                    Jeu.donjon.ajouter_monstre(monstre_remis)
-                    log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
-                else:
-                    log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")   
-            Jeu.donjon.remelange()                 
-            self.destroy(joueur, Jeu, log_details)
+        if self.intact:
+            autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
+            if all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj):
+                log_details.append(f"{joueur.nom} utilise {self.nom}")
+                for autre_joueur in autres_joueurs_dans_le_dj:
+                    if autre_joueur.pile_monstres_vaincus:
+                        monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
+                        autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
+                        Jeu.donjon.ajouter_monstre(monstre_remis)
+                        log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
+                for autre_joueur in autres_joueurs_dans_le_dj:
+                    if autre_joueur.pile_monstres_vaincus:
+                        monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
+                        autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
+                        Jeu.donjon.ajouter_monstre(monstre_remis)
+                        log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
+                    else:
+                        log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")   
+                Jeu.donjon.remelange()                 
+                self.destroy(joueur, Jeu, log_details)
 
 class SabreMecanique(Objet):
     def __init__(self):
