@@ -37,7 +37,7 @@ def preparer_game(objets_disponibles):
             if len(objets_joueurs[i]) < 6 and mains_joueurs[i]:
                 print(f"{noms_joueurs[i]} doit choisir entre ca: {[obj.nom for obj in mains_joueurs[i]]}")
                 if len(objets_joueurs[i]): print(f"{noms_joueurs[i]} a deja dans son build: {[obj.nom for obj in objets_joueurs[i]]}\n")
-                objet_choisi = choisirObjet(objets_joueurs[i], mains_joueurs[i])
+                objet_choisi = choisirObjet(i, objets_joueurs, mains_joueurs)
                 objets_joueurs[i].append(objet_choisi)
                 mains_joueurs[i].remove(objet_choisi)
                 choix_joueurs.append((i, objet_choisi))
@@ -53,21 +53,42 @@ def preparer_game(objets_disponibles):
         joueurs.append(Joueur(nom, random.randint(2, 4), objets))
         print(f"Joueur {nom} objets finaux: {[obj.nom for obj in objets]}\n")
     print("Objets poubelle :", [obj.nom for main in mains_joueurs for obj in main if main])
+    print("\n")
 
-def choisirObjet(objets_actuels, main):
+    calculWRtotal(objets_disponibles, noms_joueurs, objets_joueurs)
+
+def calculWRtotal(objets_disponibles, noms_joueurs, objets_joueurs):
+    win_counts = {}
+    for _ in range(100):
+        joueurs = []
+        for nom, objets in zip(noms_joueurs, objets_joueurs):
+            joueurs.append(Joueur(nom, random.randint(2, 4), objets))
+        objets_disponibles_simu = list(objets_disponibles)
+        for o in objets_disponibles_simu:
+            o.intact = True
+        vainqueur = ordonnanceur(joueurs, DonjonDeck(), 6, objets_disponibles_simu, False)
+        win_counts[vainqueur.nom] = win_counts.get(vainqueur.nom, 0) + 1
+    print(f"Probas de win la game:")
+    for j, count in win_counts.items():
+        print(f"{j}: {count / 100:.2%}")
+
+def choisirObjet(i, objets, mains):
     meilleur_objet = None
     meilleur_winrate = -1
-
+    objets_actuels = objets[i]
+    main = mains[i]
+    objets_autres_joueurs = objets[:i] + objets[i+1:]  # Retirer les objets du joueur i
+    
     for objet in main:
         combinaison = objets_actuels + [objet]
-        winrate = calculWinrate(combinaison)
+        winrate = calculWinrate(combinaison,objets_autres_joueurs)
         print(f"{objet.nom}: {winrate:.2f}", end="\n")  # Affichage du winrate de chaque objet
         if winrate > meilleur_winrate:
             meilleur_winrate = winrate
             meilleur_objet = objet
     return meilleur_objet
 
-def calculWinrate(combinaison, iterations=100):
+def calculWinrate(combinaison, objets_autres_joueurs, iterations=100):
     seuil_pv_essai_fuite = 6
     # Initialisation du compteur de victoires
     victoires = 0
@@ -75,18 +96,23 @@ def calculWinrate(combinaison, iterations=100):
     # Boucle sur le nombre d'itérations
     for _ in range(iterations):
         # Choisir aléatoirement le joueur qui jouera la combinaison à tester
-        joueur_surveille = random.choice(["Sagarex", "Francis", "Mastho", "Mr.Adam"])
+        
+        nb_joueurs = len(objets_autres_joueurs) +1
+        noms_joueurs = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
+        joueur_surveille = random.choice(noms_joueurs)
         objets_disponibles_simu = list(objets_disponibles)
         # Reparer tous les objets et attribuer une priorité aléatoire
         for o in objets_disponibles_simu:
             o.intact = True
         # Création des joueurs avec des objets aléatoires
         joueurs = []
-        for nom in ["Sagarex", "Francis", "Mastho", "Mr.Adam"]:
+        i=0
+        for nom in noms_joueurs:
             if nom == joueur_surveille:
                 objets_joueur = combinaison + random.sample(objets_disponibles_simu, 6 - len(combinaison))  # Le joueur surveillé reçoit la combinaison à tester
             else:
-                objets_joueur = random.sample(objets_disponibles_simu, 6)  # Les autres joueurs reçoivent des objets aléatoires
+                objets_joueur = objets_autres_joueurs[i] + random.sample(objets_disponibles_simu, 6 - len(objets_autres_joueurs[i]))  # Les autres joueurs reçoivent des objets aléatoires
+                i+=1
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
 
         # Exécution de l'ordonnanceur sans afficher les logs
