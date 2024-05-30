@@ -1,4 +1,5 @@
 from objets import *
+import random
 
 class Joueur:
     def __init__(self, nom, pv_base, objets=None, medailles=0):
@@ -51,3 +52,13 @@ class Joueur:
 
     def trier_objets_par_priorite(self):
         self.objets = sorted(self.objets, key=lambda obj: obj.priorite, reverse=True)
+
+    def rollDice(self, log_details, jet_voulu=4, reversed=False, rerolled=False): #de base on se considere content avec un 4.
+        jet = random.randint(1, 6)
+        log_details.append(f"{self.nom} roll un {jet}")
+        for objet in self.objets:
+            nouveau_jet = objet.en_roll(self, jet, jet_voulu, reversed, rerolled, log_details)
+            if nouveau_jet and nouveau_jet != jet:
+                # log_details.append(f"{self.nom} jet de {jet} modifié en {nouveau_jet} ")
+                jet = nouveau_jet
+        return jet

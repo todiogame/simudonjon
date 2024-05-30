@@ -3,16 +3,7 @@ import numpy as np
 from objets import *
 from perso import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
-import copy
 
-
-# Fonction pour calculer les statistiques
-def calculer_statistiques(resultats):
-    moyenne = sum(resultats) / len(resultats)
-    maximum = max(resultats)
-    minimum = min(resultats)
-    mediane = sorted(resultats)[len(resultats) // 2]
-    return moyenne, mediane, maximum, minimum
 
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     # arreter la simulation si on a un objet casse dans une main
@@ -21,6 +12,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             if not o.intact: 1/0
 
     log_details = []
+    nb_joueurs = len(joueurs)
     
     donjon.melange()
     class Jeu:
@@ -32,9 +24,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     Jeu.joueurs = joueurs
     Jeu.donjon = donjon
     Jeu.objets_dispo = objets_dispo
+    Jeu.nb_joueurs = nb_joueurs
 
     index_joueur = 0  # Initialisation de l'index du joueur courant
-    nb_joueurs = len(joueurs)
     
     for j in joueurs:
         j.trier_objets_par_priorite()
@@ -79,7 +71,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         if joueur.pv_total <= pv_min_fuite and sum(objet.actif and objet.intact for objet in joueur.objets) <= 1:
             # Tentative de fuite
-            joueur.jet_fuite = random.randint(1, 6) + joueur.calculer_modificateurs()
+            joueur.jet_fuite = joueur.rollDice(log_details) + joueur.calculer_modificateurs()
             log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
             joueur.jet_fuite_lance = True
             #use items en_fuite
@@ -162,7 +154,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         log_details.append(f"Le Miroir Maléfique n'a pas de carte a copier, puissance zero.")
 
                 if carte.effet == "SLEEPING":
-                    jet_dragon = random.randint(1, 6)
+                    jet_dragon = joueur.rollDice(log_details)
                     if jet_dragon <= 3:
                         carte.puissance = 9
                     else:
@@ -377,8 +369,8 @@ def loguer_x_parties(x=1):
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-        # joueurs[0].objets.append(    CapeVaudou(),)
-        # joueurs[0].objets.append(    SceptreActif(),)
+        joueurs[0].objets.append(    FerACheval(),)
+        joueurs[1].objets.append(    DeDuTricheur())
 
 
         for j in joueurs:
