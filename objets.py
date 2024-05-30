@@ -936,10 +936,8 @@ class PatteDuRatLiche(Objet):
 class LameDraconique(Objet):
     def __init__(self):
         super().__init__("Lame Draconique", False)
-    def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if "Dragon" in carte.types:
+        if "Dragon" in carte.types and not Jeu.traquenard_actif:
             self.execute(joueur, carte, log_details)
         else:
             nb_dragons = sum("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus)
