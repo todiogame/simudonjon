@@ -20,6 +20,7 @@ class Joueur:
         self.jet_fuite = 0
         self.rejoue = False #actuellement en train de repiocher
         self.monstres_ajoutes_ce_tour = 0
+        self.tiebreaker = False
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)

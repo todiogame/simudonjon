@@ -37,6 +37,8 @@ class Objet:
         pass
     def decompte_effet(self,joueur, joueurs_final, log_details):
         pass
+    def fin_de_decompte_effet(self,joueur, joueurs_final, log_details):
+        pass
     def debut_tour(self, joueur, Jeu, log_details): 
         pass
     def fin_tour(self, joueur, Jeu, log_details): 
@@ -91,6 +93,10 @@ class Objet:
     def en_decompte(self, joueur, joueurs_final, log_details):
         if self.intact:
             self.decompte_effet(joueur, joueurs_final, log_details)
+            
+    def en_fin_de_decompte(self, joueur, joueurs_final, log_details):
+        if self.intact:
+            self.fin_de_decompte_effet(joueur, joueurs_final, log_details)
 
     def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # attention, check si les items sont intacts
@@ -1278,6 +1284,13 @@ class ElixirDeChance(Objet):
             self.destroy(joueur, Jeu, log_details)
             return 1 if reversed else 6
 
+
+class ChapeauStyle(Objet):
+    def __init__(self):
+        super().__init__("Chapeau stylé", False, 2)
+    def fin_de_decompte_effet(self, joueur, joueurs_final, log_details):
+        joueur.tiebreaker = True
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -1391,6 +1404,7 @@ objets_disponibles = [
     CoiffeDeSorcier(),
     ArmureDuRoiLiche(),
     ElixirDeChance(),
+    ChapeauStyle(),
 ]
 
 
@@ -1508,4 +1522,5 @@ __all__ = [
             "CoiffeDeSorcier",
             "ArmureDuRoiLiche",
             "ElixirDeChance",
+            "ChapeauStyle",
         ]

@@ -317,10 +317,16 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         joueurs_final = [j for j in joueurs if j.vivant]
         log_details.append("Aucun joueur n'a poncé le donjon, tous les joueurs vivants comptent.")
 
-    #use items en_decompte
+    # use items en_decompte
     for j in joueurs:
         for objet in j.objets:
             objet.en_decompte(j, joueurs_final, log_details)
+
+    # Ajouter un appel pour les effets de fin de décompte
+    for j in joueurs:
+        for objet in j.objets:
+            if hasattr(objet, 'fin_de_decompte_effet'):
+                objet.fin_de_decompte_effet(j, joueurs_final, log_details)
 
     # Loguer les joueurs exclus et inclus
     for j in joueurs:
@@ -331,14 +337,31 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 log_details.append(f"{j.nom} est exclu du décompte final car il est mort.")
             elif j.fuite_reussie:
                 log_details.append(f"{j.nom} est exclu du décompte final car il a fui le donjon.")
-            else: log_details.append(f"{j.nom}  A BUG ?? {j.vivant} {j.fuite_reussie} {j.dans_le_dj}")
-            
+            else:
+                log_details.append(f"{j.nom}  A BUG ?? {j.vivant} {j.fuite_reussie} {j.dans_le_dj}")
+
     # Trier les joueurs par ordre de score décroissant
     joueurs_final.sort(key=lambda j: j.score_final, reverse=True)
 
+    # Déterminer le vainqueur après avoir appliqué tous les effets de décompte
+    joueurs_egalite = [j for j in joueurs_final if j.score_final == joueurs_final[0].score_final]
+
+    if len(joueurs_egalite) > 1:
+        joueurs_avec_tiebreaker = [j for j in joueurs if j.tiebreaker]
+        if joueurs_avec_tiebreaker:
+            vainqueur = joueurs_avec_tiebreaker[0]
+            log_details.append(f"{vainqueur.nom} remporte la manche grâce à son avantage en cas d'égalité.")
+        else:
+            vainqueur = random.choice(joueurs_egalite)
+            log_details.append(f"{vainqueur.nom} remporte la manche suite à un tirage au sort parmi les joueurs avec le même score.")
+    elif len(joueurs_egalite) == 1:
+        vainqueur = joueurs_egalite[0]
+    else:
+        vainqueur = None
+
     # Afficher les résultats avec une médaille pour le vainqueur
     for i, j in enumerate(joueurs_final):
-        medaille = "MEDAILLE" if i == 0 else ""
+        medaille = "MEDAILLE" if j == vainqueur else ""
         log_details.append(f"{j.nom} : {j.score_final} points, PV restant {j.pv_total}. {medaille}")
 
     log_details.append("\n")
@@ -348,10 +371,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         for detail in log_details:
             print(detail)
 
-    #return score_final#, fuite_reussie, donjon_ponce
     # Retourner le joueur vainqueur s'il y en a un
-    vainqueur = joueurs_final[0] if joueurs_final else None
     return vainqueur
+
 
 
 def loguer_x_parties(x=1):
@@ -371,8 +393,8 @@ def loguer_x_parties(x=1):
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-        joueurs[0].objets.append(    FerACheval(),)
-        joueurs[1].objets.append(    BoiteAButin())
+        joueurs[0].objets.append(    ChapeauStyle(),)
+        # joueurs[1].objets.append(    BoiteAButin())
 
 
         for j in joueurs:
