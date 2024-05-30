@@ -205,6 +205,8 @@ class MainDeMidas(Objet):
         super().__init__("Main de Midas", True)
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance <= 5 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == 5 or carte.puissance ==4 or carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.absorbe(joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -1090,6 +1092,32 @@ class DeDuTricheur(Objet):
             log_details.append(f"{joueur.nom} utilise {self.nom} pour passer son dé de {jet} à {jet+1}.")
             return jet + 1
 
+class EspritDuDonjon(Objet):
+    def __init__(self):
+        super().__init__("Esprit du Donjon", True)
+
+    def debut_tour(self, joueur, Jeu, log_details):
+        autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
+
+        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj):
+            log_details.append(f"{joueur.nom} utilise {self.nom}")
+            for autre_joueur in autres_joueurs_dans_le_dj:
+                if autre_joueur.pile_monstres_vaincus:
+                    monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
+                    autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
+                    Jeu.donjon.ajouter_monstre(monstre_remis)
+                    log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
+            for autre_joueur in autres_joueurs_dans_le_dj:
+                if autre_joueur.pile_monstres_vaincus:
+                    monstre_remis = random.choice(autre_joueur.pile_monstres_vaincus)
+                    autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
+                    Jeu.donjon.ajouter_monstre(monstre_remis)
+                    log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
+                else:
+                    log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")   
+            Jeu.donjon.remelange()                 
+            self.destroy(joueur, Jeu, log_details)
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -1186,6 +1214,7 @@ objets_disponibles = [
     CapeVaudou(),
     FerACheval(),
     DeDuTricheur(),
+    EspritDuDonjon(),
 ]
 
 
@@ -1286,4 +1315,5 @@ __all__ = [
             "CapeVaudou",
             "FerACheval",
             "DeDuTricheur",
+            "EspritDuDonjon",
         ]

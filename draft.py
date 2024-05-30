@@ -67,7 +67,7 @@ def choisirObjet(objets_actuels, main):
             meilleur_objet = objet
     return meilleur_objet
 
-def calculWinrate(combinaison, iterations=100):
+def calculWinrate(combinaison, iterations=500):
     seuil_pv_essai_fuite = 6
     # Initialisation du compteur de victoires
     victoires = 0
