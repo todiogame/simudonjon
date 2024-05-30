@@ -35,13 +35,13 @@ def preparer_game(objets_disponibles):
         choix_joueurs = []
         for i in range(nb_joueurs):
             if len(objets_joueurs[i]) < 6 and mains_joueurs[i]:
-                print(f"Main du joueur {noms_joueurs[i]} avant le choix: {[obj.nom for obj in mains_joueurs[i]]}")
-                # Choisir un objet aléatoire de la main du joueur
+                print(f"{noms_joueurs[i]} doit choisir entre ca: {[obj.nom for obj in mains_joueurs[i]]}")
+                if len(objets_joueurs[i]): print(f"{noms_joueurs[i]} a deja dans son build: {[obj.nom for obj in objets_joueurs[i]]}\n")
                 objet_choisi = choisirObjet(objets_joueurs[i], mains_joueurs[i])
                 objets_joueurs[i].append(objet_choisi)
                 mains_joueurs[i].remove(objet_choisi)
                 choix_joueurs.append((i, objet_choisi))
-                print(f"Joueur {noms_joueurs[i]} choisit: {objet_choisi.nom}\n")
+                print(f"{noms_joueurs[i]} choisit: {objet_choisi.nom}\n")
 
         # Passer les mains après tous les choix
         mains_joueurs = [mains_joueurs[(i - 1) % nb_joueurs] for i in range(nb_joueurs)]
@@ -61,11 +61,10 @@ def choisirObjet(objets_actuels, main):
     for objet in main:
         combinaison = objets_actuels + [objet]
         winrate = calculWinrate(combinaison)
-        print(f"{objet.nom}: {winrate:.2f}", end=" ")  # Affichage du winrate de chaque objet
+        print(f"{objet.nom}: {winrate:.2f}", end="\n")  # Affichage du winrate de chaque objet
         if winrate > meilleur_winrate:
             meilleur_winrate = winrate
             meilleur_objet = objet
-    print("\nMeilleur objet choisi:", meilleur_objet.nom)
     return meilleur_objet
 
 def calculWinrate(combinaison, iterations=100):
