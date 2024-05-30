@@ -108,7 +108,7 @@ class Objet:
     
     def execute(self, joueur, carte, log_details):
         carte.executed = True
-        joueur.pile_monstres_vaincus.append(carte)
+        joueur.ajouter_monstre_vaincu(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter {carte.titre}")
 
     def executeEtDefausse(self, joueur, carte, Jeu, log_details):
@@ -119,7 +119,7 @@ class Objet:
     def absorbe(self, joueur, carte, log_details):
         carte.executed = True
         joueur.pv_total += carte.puissance  # Absorber les PV
-        joueur.pile_monstres_vaincus.append(carte)
+        joueur.ajouter_monstre_vaincu(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour absorber {carte.puissance} PV. Total {joueur.pv_total} PV.")
 
     def reduc_damage(self, value, joueur, carte, log_details):
@@ -141,7 +141,7 @@ class Objet:
 
     def survit(self, value, joueur, carte, log_details):
         joueur.pv_total = value
-        joueur.pile_monstres_vaincus.append(carte)
+        joueur.ajouter_monstre_vaincu(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour survivre avec {value} PV et vaincre {carte.titre}")
 
     def piocheItem(self, joueur, Jeu, log_details):
@@ -978,11 +978,11 @@ class CraneDuRoiLiche(Objet):
             if joueur_proprietaire != joueur:
                 if carte in joueur.pile_monstres_vaincus:
                     joueur.pile_monstres_vaincus.remove(carte)
-                    joueur_proprietaire.pile_monstres_vaincus.append(carte)
+                    joueur_proprietaire.ajouter_monstre_vaincu(carte)
                     log_details.append(f"{joueur_proprietaire.nom} récupère {carte.titre} de {joueur.nom} grâce à {self.nom}")
                 elif carte in Jeu.defausse:
                     Jeu.defausse.remove(carte)
-                    joueur_proprietaire.pile_monstres_vaincus.append(carte)
+                    joueur_proprietaire.ajouter_monstre_vaincu(carte)
                     log_details.append(f"{joueur_proprietaire.nom} récupère {carte.titre} de la defausse grâce à {self.nom}")
                 else:
                     log_details.append(f"{joueur_proprietaire.nom} essaie de récupèrer {carte.titre} mais la carte a disparu !!")
@@ -1049,7 +1049,7 @@ class CorneDAbordage(Objet):
                 if autre_joueur.pile_monstres_vaincus:
                     monstre_volee = random.choice(autre_joueur.pile_monstres_vaincus)
                     autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
-                    joueur.pile_monstres_vaincus.append(monstre_volee)
+                    joueur.ajouter_monstre_vaincu(monstre_volee)
                     log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}")
             self.destroy(joueur, Jeu, log_details)
 
@@ -1175,6 +1175,8 @@ class BouclierDeLInventeur(Objet):
         super().__init__("Bouclier de l'inventeur", True)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total/2 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
         self.piocheItem(joueur, Jeu, log_details)
@@ -1187,6 +1189,32 @@ class EpeeMystique(Objet):
         return carte.puissance == joueur.calculer_modificateurs() and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
+
+class DelicieusePizza(Objet):
+    def __init__(self):
+        super().__init__("Délicieuse pizza", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total 
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        joueur.pv_total = 6
+        log_details.append(f"{joueur.nom} utilise {self.nom} et fixe ses PV à 6. Total {joueur.pv_total} PV.")
+        self.destroy(joueur, Jeu, log_details)
+
+class BoiteAButin(Objet):
+    def __init__(self):
+        super().__init__("Boîte à butin", False)
+    def fin_tour(self, joueur, Jeu, log_details):
+        monstres_ajoutes = joueur.monstres_ajoutes_ce_tour
+        log_details.append(f"{joueur.nom} a grinde {joueur.monstres_ajoutes_ce_tour} monstre(s) ce tour et utilise {self.nom} autant de fois. ")
+
+        for _ in range(monstres_ajoutes):
+            jet_boite = joueur.rollDice(log_details)
+            if jet_boite == 6:
+                self.piocheItem(joueur, Jeu, log_details)
+
 
 # Liste des objets
 objets_disponibles = [ 
@@ -1293,6 +1321,8 @@ objets_disponibles = [
     Scaphandre(),
     BouclierDeLInventeur(), 
     EpeeMystique(),
+    DelicieusePizza(), 
+    BoiteAButin(),
 ]
 
 
@@ -1402,4 +1432,6 @@ __all__ = [
             "Scaphandre",
             "BouclierDeLInventeur", 
             "EpeeMystique",
+            "DelicieusePizza",
+            "BoiteAButin",
         ]

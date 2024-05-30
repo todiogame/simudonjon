@@ -62,7 +62,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         if not joueur.rejoue:
             for objet in joueur.objets:
                 objet.debut_tour(joueur, Jeu, log_details)
-        for j in joueurs: j.rejoue = False
+        for j in joueurs:
+            j.rejoue = False
+            j.reset_monstres_ajoutes()  # Réinitialise le compteur de monstres ajoutés pour chaque joueur
         
         # Le joueur pioche une carte
         carte = donjon.prochaine_carte()
@@ -207,7 +209,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
             if Jeu.execute_next_monster and not Jeu.traquenard_actif:
                 carte.executed = True
-                joueur.pile_monstres_vaincus.append(carte)
+                joueur.ajouter_monstre_vaincu(carte)
                 Jeu.execute_next_monster = False
                 log_details.append(f"L'effet Exécute le prochain monstre est utilisé sur {carte.titre}.")
             else:
@@ -231,7 +233,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     Jeu.defausse.append(carte)
                     log_details.append(f"Le {carte.titre} disparait.")
                 else:
-                    if (joueur.vivant): joueur.pile_monstres_vaincus.append(carte)
+                    if (joueur.vivant): joueur.ajouter_monstre_vaincu(carte)
                 if carte.effet == "LIMON":
                     objets_intacts = [objet for objet in joueur.objets if objet.intact]
                     if objets_intacts:
@@ -370,7 +372,7 @@ def loguer_x_parties(x=1):
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
         joueurs[0].objets.append(    FerACheval(),)
-        joueurs[1].objets.append(    EspritDuDonjon())
+        joueurs[1].objets.append(    BoiteAButin())
 
 
         for j in joueurs:

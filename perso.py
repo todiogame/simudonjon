@@ -19,6 +19,7 @@ class Joueur:
         self.score_final = 0
         self.jet_fuite = 0
         self.rejoue = False #actuellement en train de repiocher
+        self.monstres_ajoutes_ce_tour = 0
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)
@@ -62,3 +63,11 @@ class Joueur:
                 # log_details.append(f"{self.nom} jet de {jet} modifié en {nouveau_jet} ")
                 jet = nouveau_jet
         return jet
+    
+    def reset_monstres_ajoutes(self):
+        self.monstres_ajoutes_ce_tour = 0
+
+    # Dans les parties où tu modifies le joueur.pile_monstres_vaincus, incrémente monstre_ajoutes_ce_tour
+    def ajouter_monstre_vaincu(self, carte):
+        self.pile_monstres_vaincus.append(carte)
+        self.monstres_ajoutes_ce_tour += 1
