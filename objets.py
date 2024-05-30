@@ -177,7 +177,7 @@ class Katana(Objet):
 
 class HacheExecution(Objet):
     def __init__(self):
-        super().__init__("Hache d'Exécution", True)
+        super().__init__("Hache de Glace", True)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif
     def worthit(self, joueur, carte, Jeu, log_details):
@@ -1118,6 +1118,76 @@ class EspritDuDonjon(Objet):
             Jeu.donjon.remelange()                 
             self.destroy(joueur, Jeu, log_details)
 
+class SabreMecanique(Objet):
+    def __init__(self):
+        super().__init__("Sabre mécanique", False, 0, -1)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return ("Gobelin" in carte.types or "Golem" in carte.types) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class CouronneEnMousse(Objet):
+    def __init__(self):
+        super().__init__("Couronne en Mousse", False)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.reduc_damage(2, joueur, carte, log_details)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact:
+            self.destroy(joueur, Jeu, log_details)
+
+class KatanaEnMousse(Objet):
+    def __init__(self):
+        super().__init__("Katana en Mousse", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance >= 7 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact:
+            self.destroy(joueur, Jeu, log_details)
+
+class MarteauFlamboyant(Objet):
+    def __init__(self):
+        super().__init__("Marteau flamboyant", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Golem" in carte.types or "Dragon" in carte.types
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.reduc_damage(4, joueur, carte, log_details)
+
+class TreizeASeize(Objet):
+    def __init__(self):
+        super().__init__("Treize à Seize", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        if any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus):
+            return (carte.puissance == 1 or carte.puissance == 6) and not Jeu.traquenard_actif
+        return (carte.puissance == 1 or carte.puissance == 3) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class Scaphandre(Objet):
+    def __init__(self):
+        super().__init__("Scaphandre", False, 0, -2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.reduc_damage(2, joueur, carte, log_details)
+
+class BouclierDeLInventeur(Objet):
+    def __init__(self):
+        super().__init__("Bouclier de l'inventeur", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        self.piocheItem(joueur, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class EpeeMystique(Objet):
+    def __init__(self):
+        super().__init__("Epee mystique", False, 0, 2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == joueur.calculer_modificateurs() and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -1215,6 +1285,14 @@ objets_disponibles = [
     FerACheval(),
     DeDuTricheur(),
     EspritDuDonjon(),
+    SabreMecanique(),
+    CouronneEnMousse(),
+    KatanaEnMousse(),
+    MarteauFlamboyant(), 
+    TreizeASeize(), 
+    Scaphandre(),
+    BouclierDeLInventeur(), 
+    EpeeMystique(),
 ]
 
 
@@ -1316,4 +1394,12 @@ __all__ = [
             "FerACheval",
             "DeDuTricheur",
             "EspritDuDonjon",
+            "SabreMecanique",
+            "CouronneEnMousse",
+            "KatanaEnMousse",
+            "MarteauFlamboyant",
+            "TreizeASeize",
+            "Scaphandre",
+            "BouclierDeLInventeur", 
+            "EpeeMystique",
         ]
