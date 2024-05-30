@@ -393,8 +393,8 @@ def loguer_x_parties(x=1):
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-        joueurs[0].objets.append(    ChapeauStyle(),)
-        # joueurs[1].objets.append(    BoiteAButin())
+        joueurs[0].objets.append(    Chameau(),)
+        joueurs[1].objets.append(    PotionDeFeuLiquide())
 
 
         for j in joueurs:
