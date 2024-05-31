@@ -61,7 +61,7 @@ class DonjonDeck:
             CarteMonstre("Rat charognard", "X", ["Rat"], "La <b>puissance</b> de ce monstre est égale au nombre de monstres dans votre pile de monstres vaincus.", "SCAVENGER"),
             CarteMonstre("Seigneur Vampire", 4, ["Vampire"], "Si vous avez une <b>Médaille</b>,\ninflige <b>4 dommages</b> supplémentaires.",  "LORD"),
             CarteMonstre("Gobelin Fantôme", 1, ["Gobelin"], "<b>Défaussez</b> ce monstre après l'avoir vaincu.", "MAUDIT"),
-            CarteMonstre("Changeforme", 8, ["Gobelin", "Squelette", "Orc", "Vampire", "Golem", "Liche", "Démon", "Dragon", "Rat"]),
+            # CarteMonstre("Changeforme", 8, ["Gobelin", "Squelette", "Orc", "Vampire", "Golem", "Liche", "Démon", "Dragon", "Rat"]),
             CarteEvent("Descente angélique", "Gagnez 3pv.", "HEAL"),
             CarteEvent("Bricoleur", "Vous pouvez <b>réparer</b> un de vos objets <b>brisé</b>.", "REPAIR"),
             CarteEvent("Allié", "Si la prochaine carte est un monstre, vous pouvez <b>l'exécuter</b>.", "ALLY"),
