@@ -126,6 +126,7 @@ class Objet:
 
     def executeEtDefausse(self, joueur, carte, Jeu, log_details):
         carte.executed = True
+        joueur.monstres_ajoutes_ce_tour += 1
         Jeu.defausse.append(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter et défausser {carte.titre}")
 
@@ -949,10 +950,8 @@ class PatteDuRatLiche(Objet):
 class LameDraconique(Objet):
     def __init__(self):
         super().__init__("Lame Draconique", False)
-    def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if "Dragon" in carte.types:
+        if "Dragon" in carte.types and not Jeu.traquenard_actif:
             self.execute(joueur, carte, log_details)
         else:
             nb_dragons = sum("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus)
@@ -1102,7 +1101,7 @@ class DeDuTricheur(Objet):
         super().__init__("Dé du Tricheur", True, 3)
     def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # +1 à tous vos jets de dés, sauf si vous faites 5
-        if self.intact and not reversed and jet < 5:
+        if self.intact and not reversed and jet < 5 and not jet_voulu == 6:
             log_details.append(f"{joueur.nom} utilise {self.nom} pour passer son dé de {jet} à {jet+1}.")
             return jet + 1
 
@@ -1302,22 +1301,18 @@ class ChapeauStyle(Objet):
 class Chameau(Objet):
     def __init__(self):
         super().__init__("Chameau", True)
+    def chameau(self, joueur, Jeu, log_details):
+        if self.intact and joueur.dans_le_dj:
+            autres_joueurs_dans_le_dj = [j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur]
+            if autres_joueurs_dans_le_dj:
+                min_pv_joueur = min(autres_joueurs_dans_le_dj)
+                if joueur.pv_total < min_pv_joueur:
+                    self.gagnePV(6, joueur, log_details)
+                    self.destroy(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
-        if self.intact and joueur.dans_le_dj:
-            autres_joueurs_dans_le_dj = [j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur]
-            if autres_joueurs_dans_le_dj:
-                min_pv_joueur = min(autres_joueurs_dans_le_dj)
-                if joueur.pv_total < min_pv_joueur:
-                    self.gagnePV(6, joueur, log_details)
-                    self.destroy(joueur, Jeu, log_details)
+        self.chameau(joueur, Jeu, log_details)
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if self.intact and joueur.dans_le_dj:
-            autres_joueurs_dans_le_dj = [j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur]
-            if autres_joueurs_dans_le_dj:
-                min_pv_joueur = min(autres_joueurs_dans_le_dj)
-                if joueur.pv_total < min_pv_joueur:
-                    self.gagnePV(6, joueur, log_details)
-                    self.destroy(joueur, Jeu, log_details)
+        self.chameau(joueur, Jeu, log_details)
 
 class PotionDeFeuLiquide(Objet):
     def __init__(self):
@@ -1333,7 +1328,7 @@ class PotionDeFeuLiquide(Objet):
             
 class CasquePlus(Objet):
     def __init__(self):
-        super().__init__("Casque Plus Overnerfed", False)
+        super().__init__("Casque Plus", False)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif and self.compteur <= 2
     def combat_effet(self, joueur, carte, Jeu, log_details):
