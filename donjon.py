@@ -89,7 +89,8 @@ def display_simu(r=0):
     # Calculer le winrate pour chaque objet
     df_stats_objets['Winrate'] = (df_stats_objets['Victoires'] / df_stats_objets['Total']) * 100
     df_stats_objets = df_stats_objets.sort_values(by='Winrate', ascending=False)
- 
+    df_stats_objets.reset_index(drop=True, inplace=True)
+    df_stats_objets.index += 1
     # Afficher les résultats
     print("\nStatistiques par objet:")
     print(df_stats_objets)
