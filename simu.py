@@ -71,7 +71,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         joueur.jet_fuite_lance = False
 
-        if joueur.pv_total <= pv_min_fuite and sum(objet.actif and objet.intact for objet in joueur.objets) <= 1:
+        if joueur.deciderDeFuir(Jeu, log_details):
             # Tentative de fuite
             joueur.jet_fuite = joueur.rollDice(Jeu, log_details) + joueur.calculer_modificateurs()
             log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
@@ -115,6 +115,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
             if carte.effet == "TRAP":
                 Jeu.traquenard_actif = True
+                Jeu.execute_next_monster = False
                 log_details.append(f"L'effet {carte.titre} est actif. La prochaine carte monstre Ne peut PAS être exécutée.")
 
             if carte.effet == "INJECTION":
@@ -398,8 +399,9 @@ def loguer_x_parties(x=1):
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-        joueurs[0].objets.append(    CoffreDuRoiSorcier(),)
-        joueurs[1].objets.append(    CoffreDuRoiSorcier())
+        joueurs[0].objets.append(    FerACheval(),)
+        joueurs[0].objets.append(    DeDuTricheur())
+        joueurs[0].objets.append(    BoiteAButin())
 
 
         for j in joueurs:

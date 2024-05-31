@@ -7,6 +7,7 @@ class Joueur:
         self.pv_base = pv_base
         self.pv_total = pv_base
         self.medailles = medailles
+        self.pv_min_fuite = 6
         self.vivant = True
         self.dans_le_dj = True
         self.fuite_reussie = False
@@ -73,3 +74,9 @@ class Joueur:
     def ajouter_monstre_vaincu(self, carte):
         self.pile_monstres_vaincus.append(carte)
         self.monstres_ajoutes_ce_tour += 1
+        
+    def deciderDeFuir(self, Jeu, log_details):
+        decision = (self.pv_total <= self.pv_min_fuite 
+                and sum(objet.actif and objet.intact for objet in self.objets) <= 1)
+        return decision
+        
