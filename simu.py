@@ -25,12 +25,19 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     Jeu.donjon = donjon
     Jeu.objets_dispo = objets_dispo
     Jeu.nb_joueurs = nb_joueurs
-
+    log_details = []
     index_joueur = 0  # Initialisation de l'index du joueur courant
     
     for j in joueurs:
         j.trier_objets_par_priorite()
+        for objet in j.objets:
+            objet.debut_partie(j, Jeu, log_details)
     
+    if log:
+        for detail in log_details:
+            print(detail)
+        print("\n")
+    log_details = []
     # Boucle de jeu principale
     while not Jeu.donjon.vide:
         Jeu.tour += 1
@@ -399,8 +406,8 @@ def loguer_x_parties(x=1):
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-        joueurs[0].objets.append(    CanneAChep(),)
-        # joueurs[0].objets.append(    PotionFeerique())
+        joueurs[0].objets.append(    EpeeMagiqueAleatoire(),)
+        joueurs[0].objets.append(    MasqueDeLInquisiteur())
 
 
         for j in joueurs:
