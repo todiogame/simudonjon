@@ -58,7 +58,8 @@ class Objet:
         
     def en_activated(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         # attention, check si les items sont intacts
-        self.activated_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
+        if joueur_proprietaire.dans_le_dj:
+            self.activated_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
         
     def en_mort(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         # attention, check si les items sont intacts
@@ -835,7 +836,7 @@ class CoffreAnime(Objet):
     def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         if self.intact:
             if objet in joueur.objets and not objet.intact:
-                jet_de = joueur.rollDice(Jeu, log_details, 6)
+                jet_de = joueur_proprietaire.rollDice(Jeu, log_details, 6)
                 if jet_de == 6:
                     if joueur_proprietaire.nom != joueur.nom:
                         joueur.objets.remove(objet)
