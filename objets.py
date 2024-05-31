@@ -38,8 +38,6 @@ class Objet:
         pass
     def decompte_effet(self,joueur, joueurs_final, log_details):
         pass
-    def fin_de_decompte_effet(self,joueur, joueurs_final, log_details):
-        pass
     def debut_tour(self, joueur, Jeu, log_details): 
         pass
     def debut_partie(self, joueur, Jeu, log_details): 
@@ -62,7 +60,8 @@ class Objet:
         
     def en_activated(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         # attention, check si les items sont intacts
-        self.activated_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
+        if joueur_proprietaire.dans_le_dj:
+            self.activated_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
         
     def en_mort(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         # attention, check si les items sont intacts
@@ -103,10 +102,6 @@ class Objet:
         if self.intact:
             self.decompte_effet(joueur, joueurs_final, log_details)
             
-    def en_fin_de_decompte(self, joueur, joueurs_final, log_details):
-        if self.intact:
-            self.fin_de_decompte_effet(joueur, joueurs_final, log_details)
-
     def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # attention, check si les items sont intacts
         pass
@@ -140,7 +135,8 @@ class Objet:
 
     def reduc_damage(self, value, joueur, carte, log_details):
         carte.dommages = max(carte.dommages - value, 0)
-        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
+        if(value):
+            log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
 
     def add_damage(self, value, joueur, carte, log_details):
         carte.dommages = carte.dommages + value
@@ -842,7 +838,7 @@ class CoffreAnime(Objet):
     def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         if self.intact:
             if objet in joueur.objets and not objet.intact:
-                jet_de = joueur.rollDice(Jeu, log_details, 6)
+                jet_de = joueur_proprietaire.rollDice(Jeu, log_details, 6)
                 if jet_de == 6:
                     if joueur_proprietaire.nom != joueur.nom:
                         joueur.objets.remove(objet)
@@ -1297,7 +1293,7 @@ class ElixirDeChance(Objet):
 class ChapeauStyle(Objet):
     def __init__(self):
         super().__init__("Chapeau stylé", False, 2)
-    def fin_de_decompte_effet(self, joueur, joueurs_final, log_details):
+    def decompte_effet(self, joueur, joueurs_final, log_details):
         joueur.tiebreaker = True
         
 class Chameau(Objet):
