@@ -129,12 +129,13 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
             if carte.effet == "SOULSTORM":
                 for autre_joueur in joueurs:
-                    if autre_joueur.pile_monstres_vaincus:
-                        monstre_remis = autre_joueur.pile_monstres_vaincus.pop()
-                        donjon.ajouter_monstre(monstre_remis)
-                        log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
-                    else:
-                        log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")
+                    if autre_joueur.dans_le_dj:
+                        if autre_joueur.pile_monstres_vaincus:
+                            monstre_remis = autre_joueur.pile_monstres_vaincus.pop()
+                            donjon.ajouter_monstre(monstre_remis)
+                            log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
+                        else:
+                            log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")
                 donjon.remelange()
                 log_details.append(f"Le donjon est remelangé.")
 
@@ -217,7 +218,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 #use items
                 for objet in joueur.objets:
                     objet.en_combat(joueur, carte, Jeu, log_details)
-                    if carte.executed or carte.dommages <= 0 or joueur.fuite_reussie:
+                    if carte.executed or (carte.dommages <= 0 and not carte.effet == "LIMON") or joueur.fuite_reussie:
                         break
                 if(not joueur.dans_le_dj):
                     donjon.rajoute_en_haut_de_la_pile(carte)
@@ -328,12 +329,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         for objet in j.objets:
             objet.en_decompte(j, joueurs_final, log_details)
 
-    # Ajouter un appel pour les effets de fin de décompte
-    for j in joueurs:
-        for objet in j.objets:
-            if hasattr(objet, 'fin_de_decompte_effet'):
-                objet.fin_de_decompte_effet(j, joueurs_final, log_details)
-
     # Loguer les joueurs exclus et inclus
     for j in joueurs:
         if j in joueurs_final:
@@ -393,14 +388,16 @@ def loguer_x_parties(x=1):
             o.repare()
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
+        a_test = []
+        a_test.append(ChapeauStyle())
         joueurs = []
-        for nom in ["Sagarex", "Francis", "Mastho", "Mr.Adam"]:
-            objets_joueur = random.sample(objets_disponibles_simu, 6)
-            for objet in objets_joueur:
+        for i,nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"]):
+            objets_joueur = (a_test) if i==0 else []
+            random_sample = random.sample(objets_disponibles_simu, 6 - len(a_test) if i==0 else 6)
+            for objet in random_sample:
                 objets_disponibles_simu.remove(objet)
+            objets_joueur += random_sample
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-        joueurs[0].objets.append(    CanneAChep(),)
-        # joueurs[0].objets.append(    PotionFeerique())
 
 
         for j in joueurs:

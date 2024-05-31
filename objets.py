@@ -38,8 +38,6 @@ class Objet:
         pass
     def decompte_effet(self,joueur, joueurs_final, log_details):
         pass
-    def fin_de_decompte_effet(self,joueur, joueurs_final, log_details):
-        pass
     def debut_tour(self, joueur, Jeu, log_details): 
         pass
     def fin_tour(self, joueur, Jeu, log_details): 
@@ -101,10 +99,6 @@ class Objet:
         if self.intact:
             self.decompte_effet(joueur, joueurs_final, log_details)
             
-    def en_fin_de_decompte(self, joueur, joueurs_final, log_details):
-        if self.intact:
-            self.fin_de_decompte_effet(joueur, joueurs_final, log_details)
-
     def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # attention, check si les items sont intacts
         pass
@@ -138,7 +132,8 @@ class Objet:
 
     def reduc_damage(self, value, joueur, carte, log_details):
         carte.dommages = max(carte.dommages - value, 0)
-        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
+        if(value):
+            log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
 
     def add_damage(self, value, joueur, carte, log_details):
         carte.dommages = carte.dommages + value
@@ -1295,7 +1290,7 @@ class ElixirDeChance(Objet):
 class ChapeauStyle(Objet):
     def __init__(self):
         super().__init__("Chapeau stylé", False, 2)
-    def fin_de_decompte_effet(self, joueur, joueurs_final, log_details):
+    def decompte_effet(self, joueur, joueurs_final, log_details):
         joueur.tiebreaker = True
         
 class Chameau(Objet):
