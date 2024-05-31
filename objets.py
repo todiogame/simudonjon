@@ -1370,6 +1370,13 @@ class CoffreDuRoiSorcier(Objet):
                         joueur.objets.remove(objet)
                         joueur_proprietaire.ajouter_objet(objet)
 
+class CoeurDeDragon(Objet):
+    def __init__(self):
+        super().__init__("Cœur de Dragon", False)
+    def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if "Dragon" in carte.types and self.intact and joueur_proprietaire == joueur:
+            self.gagnePV(4, joueur_proprietaire, log_details)
+
             
 # Liste des objets
 objets_disponibles = [ 
@@ -1490,6 +1497,7 @@ objets_disponibles = [
     CasquePlus(),
     AnkhDeReincarnation(),
     CoffreDuRoiSorcier(),
+    CoeurDeDragon(),
 ]
 
 
@@ -1613,4 +1621,5 @@ __all__ = [
             "CasquePlus",
             "AnkhDeReincarnation",
             "CoffreDuRoiSorcier",
+            "CoeurDeDragon",
         ]
