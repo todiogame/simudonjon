@@ -33,7 +33,7 @@ class Joueur:
     
     def reset_objets_intacts(self):
         for objet in self.objets:
-            objet.reset_intact()
+            objet.repare()
 
     def fuite(self):
         self.fuite_reussie = True

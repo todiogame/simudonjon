@@ -34,7 +34,7 @@ def display_simu(r=0):
         objets_disponibles_simu = list(objets_disponibles)
         # Reparer tous les objets et attribuer une priorité aléatoire
         for o in objets_disponibles_simu:
-            o.intact = True
+            o.repare()
             o.priorite = priorites_objets.get(o.nom, 49.5) * (1 + random.uniform(-0.3, 0.3))
             # o.priorite = min(100, max(0, priorites_objets.get(o.nom, 49.5) + random.uniform(-20, 20)))
 

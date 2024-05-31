@@ -10,7 +10,7 @@ def draftGame(log=True):
     objets_disponibles_simu = list(objets_disponibles)
     # Réparer tous les objets
     for o in objets_disponibles_simu:
-        o.intact = True
+        o.repare()
 
     # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
     joueurs = []
@@ -64,7 +64,7 @@ def calculWRfinal(objets_disponibles, noms_joueurs, objets_joueurs, log, iter=10
         for nom, objets in zip(noms_joueurs, objets_joueurs):
             joueurs.append(Joueur(nom, random.randint(2, 4), objets))
         objets_disponibles_simu = list(objets_disponibles)
-        for o in objets_disponibles_simu: o.intact = True
+        for o in objets_disponibles_simu: o.repare()
         vainqueur = ordonnanceur(joueurs, DonjonDeck(), 6, objets_disponibles_simu, False)
         if vainqueur: win_counts[vainqueur.nom] = win_counts.get(vainqueur.nom, 0) + 1
     if log: print(f"Probas de win la game:")
@@ -77,7 +77,7 @@ def jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs, log):
     for nom, objets in zip(noms_joueurs, objets_joueurs):
         joueurs.append(Joueur(nom, random.randint(2, 4), objets))
     objets_disponibles_simu = list(objets_disponibles)
-    for o in objets_disponibles_simu: o.intact = True
+    for o in objets_disponibles_simu: o.repare()
     return ordonnanceur(joueurs, DonjonDeck(), 6, objets_disponibles_simu, log)
 
 
@@ -112,7 +112,7 @@ def calculWinrate(combinaison, objets_autres_joueurs, iterations=100):
         objets_disponibles_simu = list(objets_disponibles)
         # Reparer tous les objets et attribuer une priorité aléatoire
         for o in objets_disponibles_simu:
-            o.intact = True
+            o.repare()
         # Création des joueurs avec des objets aléatoires
         joueurs = []
         i=0

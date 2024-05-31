@@ -104,7 +104,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 objets_brisés = [objet for objet in joueur.objets if not objet.intact]
                 if objets_brisés:
                     objet_reparé = random.choice(objets_brisés)
-                    objet_reparé.intact = True
+                    objet_reparé.repare()
                     joueur.pv_total += objet_reparé.pv_bonus
                     log_details.append(f"Réparé {objet_reparé.nom} grâce à {carte.titre}. PV total augmenté de {objet_reparé.pv_bonus}, PV restant: {joueur.pv_total}")
                 else: log_details.append(f"{carte.titre} n'a' rien a reparer.")
@@ -269,6 +269,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             if joueur.pv_total <= 0:
                 joueur.mort()
                 log_details.append(f"OUPS!! Mort de {joueur.nom}, a court de PV.\n")
+                
+                for joueur_proprietaire in Jeu.joueurs:
+                    for objet in joueur_proprietaire.objets:
+                        objet.en_mort(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                
                 donjon.rajoute_en_haut_de_la_pile(carte)
                 index_joueur += 1
                 if index_joueur >= nb_joueurs:
@@ -377,14 +382,14 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
 def loguer_x_parties(x=1):
-    seuil_pv_essai_fuite = 5
+    seuil_pv_essai_fuite = 6
     for i in range(x):
         
         # Créer une copie de la liste des objets disponibles pour cette simulation
         objets_disponibles_simu = list(objets_disponibles)
         # Reparer tous les objets
         for o in objets_disponibles_simu:
-            o.intact = True
+            o.repare()
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         joueurs = []
@@ -393,8 +398,8 @@ def loguer_x_parties(x=1):
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-        joueurs[0].objets.append(    Chameau(),)
-        joueurs[1].objets.append(    PotionDeFeuLiquide())
+        joueurs[0].objets.append(    CoffreDuRoiSorcier(),)
+        joueurs[1].objets.append(    CoffreDuRoiSorcier())
 
 
         for j in joueurs:
