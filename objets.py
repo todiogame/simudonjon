@@ -1371,8 +1371,105 @@ class CoeurDeDragon(Objet):
     def __init__(self):
         super().__init__("Cœur de Dragon", False)
     def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if "Dragon" in carte.types and self.intact and joueur_proprietaire == joueur:
+        if "Dragon" in carte.types and self.intact:
             self.gagnePV(4, joueur_proprietaire, log_details)
+
+class PotionDAdrenaline(Objet):
+    def __init__(self):
+        super().__init__("Potion d'adrénaline", True)
+    def potionDAdrenaline(self, joueur, Jeu, log_details):
+        if self.intact:
+            if joueur.pv_total == 1:
+                self.gagnePV(10, joueur, log_details)
+            else:
+                self.gagnePV(2, joueur, log_details)
+            self.destroy(joueur, Jeu, log_details)
+    
+    def debut_tour(self, joueur, Jeu, log_details):
+        if joueur.pv_total == 1:
+            self.potionDAdrenaline(joueur, Jeu, log_details)
+        
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if (joueur.pv_total <= carte.dommages and joueur.pv_total+2 > carte.dommages)  or joueur.pv_total == 1:
+            self.potionDAdrenaline(joueur, Jeu, log_details)
+
+class PeigneEnOr(Objet):
+    def __init__(self):
+        super().__init__("Peigne en or", False, 3)
+    def score_effet(self, joueur, log_details):
+        gobelins = sum(1 for monstre in joueur.pile_monstres_vaincus if "Gobelin" in monstre.types)
+        if gobelins > 0:
+            self.scoreChange(gobelins, joueur, log_details)
+            log_details.append(f"{joueur.nom} gagne {gobelins} points de victoire supplémentaires grâce à {self.nom} pour les Gobelins vaincus.")
+
+class LampeMagique(Objet):
+    def __init__(self):
+        super().__init__("Lampe magique", False, 3)
+    def score_effet(self, joueur, log_details):
+        demons = sum(1 for monstre in joueur.pile_monstres_vaincus if "Démon" in monstre.types)
+        if demons > 0:
+            self.scoreChange(2 * demons, joueur, log_details)
+            log_details.append(f"{joueur.nom} gagne {2 * demons} points de victoire supplémentaires grâce à {self.nom} pour les Démons vaincus.")
+
+class CanneAChep(Objet):
+    def __init__(self):
+        super().__init__("Canne à Chep", True)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.dans_le_dj:
+            joueurs_morts = [autre_joueur for autre_joueur in Jeu.joueurs if not autre_joueur.vivant]
+            if ((all(not autre_joueur.dans_le_dj for autre_joueur in Jeu.joueurs if autre_joueur != joueur) or len(joueurs_morts) >= 2)):
+                self.utiliser(joueur, Jeu, log_details)
+                self.destroy(joueur, Jeu, log_details)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        joueurs_morts = [autre_joueur for autre_joueur in Jeu.joueurs if not autre_joueur.vivant]
+        return joueur.pv_total <= carte.dommages or (all(not autre_joueur.dans_le_dj for autre_joueur in Jeu.joueurs if autre_joueur != joueur) or len(joueurs_morts) >= 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.utiliser(joueur, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+    def utiliser(self, joueur, Jeu, log_details):
+            self.gagnePV(3, joueur, log_details)
+            for autre_joueur in Jeu.joueurs:
+                if not autre_joueur.vivant:
+                    objets_intacts = [objet for objet in autre_joueur.objets if objet.intact]
+                    if objets_intacts:
+                        objet_vole = random.choice(objets_intacts)
+                        autre_joueur.objets.remove(objet_vole)
+                        joueur.ajouter_objet(objet_vole)
+                        log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {objet_vole.nom} de {autre_joueur.nom}.")
+
+
+class AnneauVolcanique(Objet):
+    def __init__(self):
+        super().__init__("Anneau volcanique", False, 3)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Golem" in carte.types and any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class Dragoune(Objet):
+    def __init__(self):
+        super().__init__("Dragoune", False, 3)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Dragon" in carte.types and len(joueur.pile_monstres_vaincus) >= 5 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class KitVaudou(Objet):
+    def __init__(self):
+        super().__init__("Kit vaudou", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total < 7 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class MarteauDeCombat(Objet):
+    def __init__(self):
+        super().__init__("Marteau de combat", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Golem" in carte.types and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
 
             
 # Liste des objets
@@ -1495,6 +1592,14 @@ objets_disponibles = [
     AnkhDeReincarnation(),
     CoffreDuRoiSorcier(),
     CoeurDeDragon(),
+    PotionDAdrenaline(),
+    PeigneEnOr(),
+    LampeMagique(),
+    CanneAChep(),
+    KitVaudou(),
+    MarteauDeCombat(),
+    AnneauVolcanique(),
+    Dragoune(),
 ]
 
 
@@ -1619,4 +1724,12 @@ __all__ = [
             "AnkhDeReincarnation",
             "CoffreDuRoiSorcier",
             "CoeurDeDragon",
+            "PotionDAdrenaline",
+            "PeigneEnOr",
+            "LampeMagique",
+            "CanneAChep",
+            "AnneauVolcanique",
+            "Dragoune",
+            "KitVaudou",
+            "MarteauDeCombat",
         ]
