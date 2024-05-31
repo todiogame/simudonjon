@@ -13,6 +13,7 @@ class Objet:
         self.intact = intact
         self.actif = actif
         self.priorite = priorites_objets.get(nom, 49.5)  # Utilise la priorité du JSON ou 0 par défaut
+        self.compteur = 0
 
     def rules(self, joueur, carte, Jeu, log_details):
         # rule condition to use the item
@@ -49,7 +50,9 @@ class Objet:
         pass
     def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         pass
-
+    def mort_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        pass
+    
     def en_subit_dommages(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         if(joueur_proprietaire.dans_le_dj):
@@ -58,6 +61,10 @@ class Objet:
     def en_activated(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         # attention, check si les items sont intacts
         self.activated_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
+        
+    def en_mort(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        # attention, check si les items sont intacts
+        self.mort_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
         
     def en_rencontre(self, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
@@ -102,9 +109,9 @@ class Objet:
         # attention, check si les items sont intacts
         pass
             
-    def reset_intact(self, log_details):
-        log_details.append(f"Reparé {self.nom}")
+    def repare(self):
         self.intact = True
+        self.compteur = 0
     def destroy(self, joueur, Jeu, log_details):
         if self.intact:
             self.intact = False
@@ -269,7 +276,7 @@ class CouteauSuisse(Objet):
         objets_brisés = [obj for obj in joueur.objets if (not obj.intact and not obj.nom == "Couteau Suisse")]
         if objets_brisés:
             objet_repare = random.choice(objets_brisés)
-            objet_repare.intact = True
+            objet_repare.repare()
             log_details.append(f"{joueur.nom} utilise Couteau Suisse pour réparer {objet_repare.nom}.")
             if objet_repare.pv_bonus: self.gagnePV(objet_repare.pv_bonus, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -322,7 +329,7 @@ class BouclierDragon(Objet):
         self.destroy(joueur, Jeu, log_details)
     def rencontre_effet(self, joueur, carte, Jeu, log_details):
         if ("Dragon" in carte.types):
-            self.reset_intact(log_details)
+            self.repare()
 
 class PotionDeMana(Objet):
     def __init__(self):
@@ -352,7 +359,7 @@ class ParcheminDeTeleportation(Objet):
     def __init__(self):
         super().__init__("Parchemin de Téléportation", True)
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if self.intact and (joueur.pv_total <= 6 and sum(objet.actif and objet.intact for objet in joueur.objets) <= 2):
+        if self.intact and joueur_proprietaire == joueur and (joueur_proprietaire.pv_total <= 3 and sum(objet.actif and objet.intact for objet in joueur.objets) <= 2):
             log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le donjon !\n")
             joueur.fuite()
             self.destroy(joueur, Jeu, log_details)
@@ -366,7 +373,7 @@ class PotionFeerique(Objet):
         super().__init__("Potion féérique", True)
     def rencontre_effet(self, joueur, carte, Jeu, log_details):
         if not self.intact and ("Fée" == carte.titre):
-            self.reset_intact(log_details)
+            self.repare()
     def survie_effet(self, joueur, carte, Jeu, log_details):
         self.survit(1, joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -561,7 +568,7 @@ class YoYoProtecteur(Objet):
         self.destroy(joueur, Jeu, log_details)
         jet_yoyo = joueur.rollDice(Jeu, log_details)
         if jet_yoyo >= 4 and self in joueur.objets:
-            self.reset_intact(log_details)
+            self.repare()
         else:
             log_details.append(f"{joueur.nom} essaie de reparer {self.nom}... raté ({jet_yoyo})!")
 
@@ -618,11 +625,11 @@ class GraalEnMousse(Objet):
     def __init__(self):
         super().__init__("Graal en Mousse", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance % 2 == 0 and not Jeu.traquenard_actif
+        return carte.puissance % 2 == 0 and not Jeu.traquenard_actif and len(joueur.pile_monstres_vaincus) < 7
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7:
+        if len(joueur.pile_monstres_vaincus) >= 7 and joueur_proprietaire == joueur and self.intact:
             self.destroy(joueur, Jeu, log_details)
 
 class ItemUseless(Objet):
@@ -734,7 +741,7 @@ class ChampDeForceEnMousse(Objet):
     def __init__(self):
         super().__init__("Champ de force en mousse", True)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif
+        return not Jeu.traquenard_actif and len(joueur.pile_monstres_vaincus) < 7
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_cf = joueur.rollDice(Jeu, log_details, 5)
         if jet_cf >= 5:
@@ -742,7 +749,7 @@ class ChampDeForceEnMousse(Objet):
         else:
             log_details.append(f"{joueur.nom} utilise {self.nom}... raté !")
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact:
+        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact and joueur_proprietaire == joueur:
             self.destroy(joueur, Jeu, log_details)
 
 class BoiteDePandore(Objet):
@@ -818,7 +825,7 @@ class EnclumeInstable(Objet):
             objets_brisés_autres_joueurs = [obj for j in Jeu.joueurs if j != joueur for obj in j.objets if not obj.intact]
             if objets_brisés_autres_joueurs:
                 objet_vole = random.choice(objets_brisés_autres_joueurs)
-                objet_vole.intact = True
+                objet_vole.repare()
                 ancien_proprietaire = next(j for j in Jeu.joueurs if objet_vole in j.objets)
                 ancien_proprietaire.objets.remove(objet_vole)
                 joueur.ajouter_objet(objet_vole)
@@ -836,11 +843,11 @@ class CoffreAnime(Objet):
                 if jet_de == 6:
                     if joueur_proprietaire.nom != joueur.nom:
                         joueur.objets.remove(objet)
-                        objet.intact = True
+                        objet.repare()
                         joueur_proprietaire.ajouter_objet(objet)
                         log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour voler et réparer {objet.nom} de {joueur.nom}")
                     else:
-                        objet.intact = True
+                        objet.repare()
                         log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour réparer son {objet.nom}")
             else:log_details.append(f" {joueur_proprietaire.nom} utilise {self.nom} pour essayer de voler et réparer {objet.nom} de {joueur.nom} MAIS cela ECHOUE!")
                             
@@ -1135,20 +1142,21 @@ class CouronneEnMousse(Objet):
     def __init__(self):
         super().__init__("Couronne en Mousse", False)
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.reduc_damage(2, joueur, carte, log_details)
+        if len(joueur.pile_monstres_vaincus) < 7:
+            self.reduc_damage(2, joueur, carte, log_details)
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact:
+        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact and joueur_proprietaire == joueur:
             self.destroy(joueur, Jeu, log_details)
 
 class KatanaEnMousse(Objet):
     def __init__(self):
         super().__init__("Katana en Mousse", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance >= 7 and not Jeu.traquenard_actif
+        return carte.puissance >= 7 and not Jeu.traquenard_actif and len(joueur.pile_monstres_vaincus) < 7
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact:
+        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact and joueur_proprietaire == joueur:
             self.destroy(joueur, Jeu, log_details)
 
 class MarteauFlamboyant(Objet):
@@ -1294,16 +1302,20 @@ class Chameau(Objet):
         super().__init__("Chameau", True)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact and joueur.dans_le_dj:
-            min_pv_joueur = min(j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur)
-            if joueur.pv_total < min_pv_joueur:
-                self.gagnePV(6, joueur, log_details)
-                self.destroy(joueur, Jeu, log_details)
+            autres_joueurs_dans_le_dj = [j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur]
+            if autres_joueurs_dans_le_dj:
+                min_pv_joueur = min(autres_joueurs_dans_le_dj)
+                if joueur.pv_total < min_pv_joueur:
+                    self.gagnePV(6, joueur, log_details)
+                    self.destroy(joueur, Jeu, log_details)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and joueur.dans_le_dj:
-            min_pv_joueur = min(j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur)
-            if joueur.pv_total < min_pv_joueur:
-                self.gagnePV(6, joueur, log_details)
-                self.destroy(joueur, Jeu, log_details)
+            autres_joueurs_dans_le_dj = [j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur]
+            if autres_joueurs_dans_le_dj:
+                min_pv_joueur = min(autres_joueurs_dans_le_dj)
+                if joueur.pv_total < min_pv_joueur:
+                    self.gagnePV(6, joueur, log_details)
+                    self.destroy(joueur, Jeu, log_details)
 
 class PotionDeFeuLiquide(Objet):
     def __init__(self):
@@ -1315,7 +1327,49 @@ class PotionDeFeuLiquide(Objet):
         self.destroy(joueur, Jeu, log_details)
     def rencontre_effet(self, joueur, carte, Jeu, log_details):
         if not self.intact and "Dragon" in carte.types:
-            self.reset_intact(log_details)
+            self.repare()
+            
+class CasquePlus(Objet):
+    def __init__(self):
+        super().__init__("Casque Plus Overnerfed", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and self.compteur <= 2
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.compteur += 1
+        # self.execute(joueur, carte, log_details)
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        log_details.append(f"Le Casque Plus fait bing, utilisations: {self.compteur}")
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.compteur >= 2 and self.intact and joueur_proprietaire.dans_le_dj and joueur_proprietaire == joueur:
+            log_details.append(f"Le Casque Plus est detruit.")
+            self.destroy(joueur_proprietaire, Jeu, log_details)
+            
+class AnkhDeReincarnation(Objet):
+    def __init__(self):
+        super().__init__("Ankh de réincarnation", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        if self.intact and joueur.pv_total <= 0:
+            self.survit(1, joueur, carte, log_details)
+            self.destroy(joueur, Jeu, log_details)
+    def en_mort(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if not self.intact and not joueur.vivant and joueur_proprietaire.dans_le_dj:
+            log_details.append(f"{self.nom} de {joueur_proprietaire.nom} se repare suite a la mort de {joueur.nom}.")
+            self.repare()
+
+class CoffreDuRoiSorcier(Objet):
+    def __init__(self):
+        super().__init__("Coffre du Roi Sorcier", False, 3)
+    def en_mort(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if joueur_proprietaire.dans_le_dj and not joueur.vivant and self.intact:
+            log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour tenter de récupérer des objets de {joueur.nom}.")
+            for objet in joueur.objets:
+                if objet.intact:
+                    jet = joueur_proprietaire.rollDice(Jeu, log_details)
+                    if jet == 6:
+                        log_details.append(f"{joueur_proprietaire.nom} récupère {objet.nom} de {joueur.nom} grâce à {self.nom}.")
+                        joueur.objets.remove(objet)
+                        joueur_proprietaire.ajouter_objet(objet)
+
             
 # Liste des objets
 objets_disponibles = [ 
@@ -1433,6 +1487,9 @@ objets_disponibles = [
     ChapeauStyle(),
     Chameau(),
     PotionDeFeuLiquide(),
+    CasquePlus(),
+    AnkhDeReincarnation(),
+    CoffreDuRoiSorcier(),
 ]
 
 
@@ -1553,4 +1610,7 @@ __all__ = [
             "ChapeauStyle",
             "Chameau",
             "PotionDeFeuLiquide",
+            "CasquePlus",
+            "AnkhDeReincarnation",
+            "CoffreDuRoiSorcier",
         ]

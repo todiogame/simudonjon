@@ -15,8 +15,8 @@ import shutil
 import sys
 
 # Nombre de simulations souhaitées
-total_simulations = 100000
-seuil_pv_essai_fuite=6
+total_simulations = 30000
+seuil_pv_essai_fuite=5
 
 def display_simu(r=0):
         
@@ -38,7 +38,7 @@ def display_simu(r=0):
         objets_disponibles_simu = list(objets_disponibles)
         # Reparer tous les objets et attribuer une priorité aléatoire
         for o in objets_disponibles_simu:
-            o.intact = True
+            o.repare()
             # o.priorite = priorites_objets.get(o.nom, 49.5) * (1 + random.uniform(-0.2, 0.2))
             # o.priorite = min(100, max(0, priorites_objets.get(o.nom, 49.5) + random.uniform(-20, 20)))
 
@@ -96,6 +96,86 @@ def display_simu(r=0):
     print(f"\nTemps total des simulations : {total_time:.2f} secondes")
     print(f"Pourcentage de donjons ponces a 3j : {dj_ponces3j / total_simulations* 100:.2f}%")
     print(f"Pourcentage de donjons ponces a 4j : {dj_ponces4j / total_simulations* 100:.2f}%")
+    
+    
+    # Calculer les meilleurs et les pires duos d'objets
+    # duos_scores = {}
+
+    # for index, row in df_resultats.iterrows():
+    #     build_objets = row['Build'].split(', ')
+    #     for duo in itertools.combinations(sorted(build_objets), 2):
+    #         if duo not in duos_scores:
+    #             duos_scores[duo] = {'victoires': 0, 'total': 0}
+    #         duos_scores[duo]['victoires'] += row['Victoire']
+    #         duos_scores[duo]['total'] += 1
+
+    # duos_stats = []
+    # for duo, scores in duos_scores.items():
+    #     winrate_duo = (scores['victoires'] / scores['total']) * 100
+    #     duos_stats.append({
+    #         'Duo': ' & '.join(duo),
+    #         'Winrate': winrate_duo,
+    #         'Total': scores['total']
+    #     })
+
+    # df_duos_scores = pd.DataFrame(duos_stats)
+    # df_duos_scores.sort_values(by='Winrate', ascending=False, inplace=True)
+    
+    # unique_duos = []
+    # seen_items = set()
+    # for _, row in df_duos_scores.iterrows():
+    #     items = row['Duo'].split(' & ')
+    #     if not any(item in seen_items for item in items):
+    #         unique_duos.append(row)
+    #         seen_items.update(items)
+    #     if len(unique_duos) == 10:
+    #         break
+    # top_10_duos = pd.DataFrame(unique_duos)
+    
+    # unique_duos = []
+    # seen_items = set()
+    # for _, row in df_duos_scores.iloc[::-1].iterrows():
+    #     items = row['Duo'].split(' & ')
+    #     if not any(item in seen_items for item in items):
+    #         unique_duos.append(row)
+    #         seen_items.update(items)
+    #     if len(unique_duos) == 10:
+    #         break
+    # flop_10_duos = pd.DataFrame(unique_duos)
+
+    # print(top_10_duos)
+    # print(flop_10_duos)
+    
+    #  # Calculer la priorité médiane et moyenne parmi les jeux joués
+    # priorite_stats = df_resultats.groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
+    # priorite_stats.columns = ['Objet', 'Priorite_mediane', 'Priorite_moyenne']
+
+    # # Calculer la priorité médiane et moyenne parmi les jeux gagnés
+    # priorite_stats_gagnees = df_resultats[df_resultats['Victoire'] == 1].groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
+    # priorite_stats_gagnees.columns = ['Objet', 'Priorite_mediane_gagnee', 'Priorite_moyenne_gagnee']
+
+    # # Fusionner les priorités médianes et moyennes avec les statistiques des objets
+    # df_stats_objets = df_stats_objets.merge(priorite_stats, on='Objet')
+    # df_stats_objets = df_stats_objets.merge(priorite_stats_gagnees, on='Objet')
+
+    # # Calculer la différence de moyenne
+    # df_stats_objets['Diff_moyenne'] = df_stats_objets['Priorite_moyenne_gagnee'] - df_stats_objets['Priorite_moyenne']
+
+    # # Trier les statistiques par différence de moyenne
+    # df_stats_objets = df_stats_objets.sort_values(by='Diff_moyenne', ascending=False)
+
+    # # Sélectionner les colonnes pertinentes pour le JSON
+    # df_priorites = df_stats_objets[['Objet', 'Priorite_mediane_gagnee']]
+    # df_priorites_sorted = df_priorites.sort_values(by='Priorite_mediane_gagnee')
+    # # Convertir en dictionnaire et exporter en JSON
+    # priorites_dict = dict(zip(df_priorites_sorted['Objet'], df_priorites_sorted['Priorite_mediane_gagnee']))
+    # with open('priorites_objets.json', 'w') as json_file:
+    #     json.dump(priorites_dict, json_file, indent=4)
+    # shutil.copyfile('priorites_objets.json', f'backupfile_{r}.json')
+    
+    
+    
+    
 
 # for r in range(10):
 #     display_simu(r)
@@ -131,10 +211,7 @@ if __name__ == "__main__":
     #         'Total': scores['total']
     #     })
 
-    # df_duos_scores = pd.DataFrame(duos_stats)
-    # df_duos_scores.sort_values(by='Winrate', ascending=False, inplace=True)
-    # top_10_duos = df_duos_scores.head(10)
-    # flop_10_duos = df_duos_scores.tail(10)
+
     
     
     
