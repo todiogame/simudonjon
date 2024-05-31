@@ -412,3 +412,4 @@ def loguer_x_parties(x=1):
         deck = DonjonDeck()
         print(f"\n--- Partie {i+1} ---")
         ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_simu, True)
+
