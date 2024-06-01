@@ -4,13 +4,13 @@ from objets import *
 from perso import Joueur
 from simu import   loguer_x_parties, ordonnanceur
 from monstres import DonjonDeck
+import json
 
 def draftGame(log=True):
     # Créer une copie de la liste des objets disponibles pour cette simulation
     objets_disponibles_simu = list(objets_disponibles)
     # Réparer tous les objets
-    for o in objets_disponibles_simu:
-        o.repare()
+    for o in objets_disponibles_simu: o.repare()
 
     # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
     joueurs = []
@@ -55,7 +55,8 @@ def draftGame(log=True):
     if log: print("\n")
 
     # calculWRfinal(objets_disponibles, noms_joueurs, objets_joueurs, log)
-    return (jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs, log), objets_dans_le_draft, objets_pris_joueurs)
+    # return (jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs, log), objets_dans_le_draft, objets_pris_joueurs)
+    return (objets_dans_le_draft, objets_pris_joueurs, objets_disponibles, noms_joueurs, objets_joueurs,)
 
 def calculWRfinal(objets_disponibles, noms_joueurs, objets_joueurs, log, iter=1000):
     win_counts = {}
@@ -135,42 +136,56 @@ def calculWinrate(combinaison, objets_autres_joueurs, iterations=100):
     winrate = victoires / iterations
     return winrate
 
-iter = 100
-item_stats = {}
+def simudraftgames(iter=100, nb_games=1000, filename="item_stats.json"):
+    # Initialize item statistics dictionary
+    item_stats = {}
 
-# Initialiser un dictionnaire pour stocker les informations sur les items
-for _ in tqdm(range(iter), desc="Simulation des drafts"):
-    resultat = draftGame(False)
-    vainqueur = resultat[0]
-    objets_dans_le_draft = resultat[1]
-    objets_pris_joueurs = resultat[2]
-    
-    # Stocker les objets présents dans le draft pour le calcul du pickrate
-    set_objets_dans_le_draft = set(objet.nom for objet in objets_dans_le_draft)
-    set_objets_pris_joueurs = set(objet.nom for objet in objets_pris_joueurs)
-    
-    for objet in set_objets_dans_le_draft:
-        item_stats[objet] = item_stats.get(objet, {'draft':0, 'pick': 0, 'win': 0})
-        item_stats[objet]['draft'] += 1
-    for objet in set_objets_pris_joueurs:
-        item_stats[objet]['pick'] += 1
-        
-    if vainqueur:
-        for objet in vainqueur.objets_initiaux:
-            item_stats[objet.nom]['win'] += 1
-            
-# Calculer le winrate pour chaque objet
-for objet, stats in item_stats.items():
-    pickrate = stats['pick'] / stats['draft'] * 100 if stats['draft'] > 0 else 0
-    winrate = stats['win'] / stats['pick'] * 100 if stats['pick'] > 0 else 0
-    stats['pickrate'] = int(pickrate)
-    stats['winrate'] = int(winrate)
+    for draft_iteration in tqdm(range(iter), desc="Simulation des drafts"):
+        resultat = draftGame(False)
+        objets_dans_le_draft = resultat[0]
+        objets_pris_joueurs = resultat[1]
+        objets_disponibles = resultat[2]
+        noms_joueurs = resultat[3]
+        objets_joueurs = resultat[4]
 
-# Trier les objets par winrate
-sorted_items = sorted(item_stats.items(), key=lambda x: x[1]['winrate'], reverse=True)
-# Afficher les objets triés par winrate avec des colonnes
-print("{:<20} {:<10} {:<10}".format("Objet", "Pickrate%", "Winrate%"))
-print("-" * 40)  # Ligne de séparation
+        # Store the objects present in the draft for pick rate calculation
+        set_objets_dans_le_draft = set(objet.nom for objet in objets_dans_le_draft)
+        set_objets_pris_joueurs = set(objet.nom for objet in objets_pris_joueurs)
 
-for objet, stats in sorted_items:
-    print("{:<20} {:<10} {:<10}".format(objet, stats['pickrate'], stats['winrate']))
+        for objet in set_objets_dans_le_draft:
+            if objet not in item_stats:
+                item_stats[objet] = {'draft': 0, 'pick': 0, 'win': 0}
+            item_stats[objet]['draft'] += 1
+
+        for objet in set_objets_pris_joueurs:
+            item_stats[objet]['pick'] += 1
+
+        # Simulate multiple games and update win stats
+        for _ in range(nb_games):
+            vainqueur = jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs, False)
+            if vainqueur:
+                for objet in vainqueur.objets_initiaux:
+                    item_stats[objet.nom]['win'] += 1
+
+        # Write the current statistics to a JSON file after each draft iteration
+        with open(filename, "w") as json_file:
+            json.dump(item_stats, json_file, indent=4)
+
+    # Calculate winrate and pickrate for each item
+    for objet, stats in item_stats.items():
+        pickrate = (stats['pick'] / stats['draft'] * 100) if stats['draft'] > 0 else 0
+        winrate = (stats['win'] / (stats['pick'] * nb_games) * 100) if stats['pick'] > 0 else 0
+        stats['pickrate'] = int(pickrate)
+        stats['winrate'] = int(winrate)
+
+    # Sort items by winrate
+    sorted_items = sorted(item_stats.items(), key=lambda x: x[1]['winrate'], reverse=True)
+
+    # Display sorted items by winrate with columns
+    print("{:<40} {:<20} {:<10} {:<10}".format("Objet", "NB picks", "Pickrate%", "Winrate%"))
+    print("-" * 80)
+    for objet, stats in sorted_items:
+        print("{:<40} {:<20} {:<10} {:<10}".format(objet, stats['pick'], stats['pickrate'], stats['winrate']))
+
+# Assuming draftGame and jouerLaGame functions are defined elsewhere
+simudraftgames()

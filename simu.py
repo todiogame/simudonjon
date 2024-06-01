@@ -348,7 +348,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     joueurs_egalite = [j for j in joueurs_final if j.score_final == joueurs_final[0].score_final]
 
     if len(joueurs_egalite) > 1:
-        joueurs_avec_tiebreaker = [j for j in joueurs if j.tiebreaker]
+        joueurs_avec_tiebreaker = [j for j in joueurs if j.tiebreaker and j.vivant]
         if joueurs_avec_tiebreaker:
             vainqueur = joueurs_avec_tiebreaker[0]
             log_details.append(f"{vainqueur.nom} remporte la manche grâce à son avantage en cas d'égalité.")
