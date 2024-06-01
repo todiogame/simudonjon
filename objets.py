@@ -40,6 +40,8 @@ class Objet:
         pass
     def debut_tour(self, joueur, Jeu, log_details): 
         pass
+    def debut_partie(self, joueur, Jeu, log_details): 
+        pass    
     def fin_tour(self, joueur, Jeu, log_details): 
         pass
     def score_effet(self, joueur, log_details):
@@ -1467,7 +1469,75 @@ class MarteauDeCombat(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
+class EpeeMagiqueAleatoire(Objet):
+    def __init__(self):
+        super().__init__("Épée magique aléatoire", False)
+        self.puissance_a_executer = -1
+    def debut_partie(self, joueur, Jeu, log_details):
+        jet = joueur.rollDice(Jeu, log_details)
+        if jet in [1, 2]:
+            self.puissance_a_executer = 5
+        elif jet in [3, 4]:
+            self.puissance_a_executer = 6
+        else:
+            self.puissance_a_executer = 7
+        log_details.append(f"{joueur.nom} utilise {self.nom}, jet de {jet}, exécute les monstres de puissance {self.puissance_a_executer}.")
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == self.puissance_a_executer and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class FausseCouronne(Objet):
+    def __init__(self):
+        super().__init__("Fausse couronne", False, 3)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return   carte.puissance % 2 == 0
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+            self.reduc_damage(1, joueur, carte, log_details)
             
+class ArbaleteTropGrosse(Objet):
+    def __init__(self):
+        super().__init__("Arbalète trop grosse", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance > joueur.pv_total and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class MasqueDeLInquisiteur(Objet):
+    def __init__(self):
+        super().__init__("Masque de l'Inquisiteur", False, 2)
+    def fin_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.pv_total == 4:           
+            self.gagnePV(4, joueur, log_details)
+
+class PareBuffleDuPonceur(Objet):
+    def __init__(self):
+        super().__init__("Pare-Buffle du Ponceur", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance >= 6
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.reduc_damage(4, joueur, carte, log_details)
+
+class FromagePuant(Objet):
+    def __init__(self):
+        super().__init__("Fromage Puant", True)
+        
+    def utiliser(self, dernier_monstre, joueur, Jeu, log_details):
+        self.gagnePV(dernier_monstre.puissance, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.pile_monstres_vaincus:
+            dernier_monstre = joueur.pile_monstres_vaincus[-1]
+            if dernier_monstre.puissance >= 6:
+                self.utiliser(dernier_monstre, joueur, Jeu, log_details)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if self.intact and joueur.pv_total <= carte.dommages and joueur.pile_monstres_vaincus:
+            dernier_monstre = joueur.pile_monstres_vaincus[-1]
+            self.utiliser(dernier_monstre, joueur, Jeu, log_details)
+
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -1596,6 +1666,12 @@ objets_disponibles = [
     MarteauDeCombat(),
     AnneauVolcanique(),
     Dragoune(),
+    EpeeMagiqueAleatoire(),
+    FausseCouronne(),
+    ArbaleteTropGrosse(),
+    MasqueDeLInquisiteur(),
+    PareBuffleDuPonceur(),
+    FromagePuant(),
 ]
 
 
@@ -1728,4 +1804,10 @@ __all__ = [
             "Dragoune",
             "KitVaudou",
             "MarteauDeCombat",
+            "EpeeMagiqueAleatoire", 
+            "FausseCouronne",
+            "ArbaleteTropGrosse",
+            "MasqueDeLInquisiteur",
+            "PareBuffleDuPonceur",
+            "FromagePuant",
         ]

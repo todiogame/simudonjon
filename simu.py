@@ -25,12 +25,19 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     Jeu.donjon = donjon
     Jeu.objets_dispo = objets_dispo
     Jeu.nb_joueurs = nb_joueurs
-
+    log_details = []
     index_joueur = 0  # Initialisation de l'index du joueur courant
     
     for j in joueurs:
         j.trier_objets_par_priorite()
+        for objet in j.objets:
+            objet.debut_partie(j, Jeu, log_details)
     
+    if log:
+        for detail in log_details:
+            print(detail)
+        print("\n")
+    log_details = []
     # Boucle de jeu principale
     while not Jeu.donjon.vide:
         Jeu.tour += 1

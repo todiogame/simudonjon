@@ -15,7 +15,7 @@ import shutil
 import sys
 
 # Nombre de simulations souhaitées
-total_simulations = 100000
+total_simulations = 10000
 seuil_pv_essai_fuite=5
 
 def display_simu(r=0):
@@ -89,8 +89,7 @@ def display_simu(r=0):
     # Calculer le winrate pour chaque objet
     df_stats_objets['Winrate'] = (df_stats_objets['Victoires'] / df_stats_objets['Total']) * 100
     df_stats_objets = df_stats_objets.sort_values(by='Winrate', ascending=False)
-    df_stats_objets.reset_index(drop=True, inplace=True)
-    df_stats_objets.index += 1
+ 
     # Afficher les résultats
     print("\nStatistiques par objet:")
     print(df_stats_objets)
@@ -100,52 +99,52 @@ def display_simu(r=0):
     
     
     # Calculer les meilleurs et les pires duos d'objets
-    # duos_scores = {}
+    duos_scores = {}
 
-    # for index, row in df_resultats.iterrows():
-    #     build_objets = row['Build'].split(', ')
-    #     for duo in itertools.combinations(sorted(build_objets), 2):
-    #         if duo not in duos_scores:
-    #             duos_scores[duo] = {'victoires': 0, 'total': 0}
-    #         duos_scores[duo]['victoires'] += row['Victoire']
-    #         duos_scores[duo]['total'] += 1
+    for index, row in df_resultats.iterrows():
+        build_objets = row['Build'].split(', ')
+        for duo in itertools.combinations(sorted(build_objets), 2):
+            if duo not in duos_scores:
+                duos_scores[duo] = {'victoires': 0, 'total': 0}
+            duos_scores[duo]['victoires'] += row['Victoire']
+            duos_scores[duo]['total'] += 1
 
-    # duos_stats = []
-    # for duo, scores in duos_scores.items():
-    #     winrate_duo = (scores['victoires'] / scores['total']) * 100
-    #     duos_stats.append({
-    #         'Duo': ' & '.join(duo),
-    #         'Winrate': winrate_duo,
-    #         'Total': scores['total']
-    #     })
+    duos_stats = []
+    for duo, scores in duos_scores.items():
+        winrate_duo = (scores['victoires'] / scores['total']) * 100
+        duos_stats.append({
+            'Duo': ' & '.join(duo),
+            'Winrate': winrate_duo,
+            'Total': scores['total']
+        })
 
-    # df_duos_scores = pd.DataFrame(duos_stats)
-    # df_duos_scores.sort_values(by='Winrate', ascending=False, inplace=True)
+    df_duos_scores = pd.DataFrame(duos_stats)
+    df_duos_scores.sort_values(by='Winrate', ascending=False, inplace=True)
     
-    # unique_duos = []
-    # seen_items = set()
-    # for _, row in df_duos_scores.iterrows():
-    #     items = row['Duo'].split(' & ')
-    #     if not any(item in seen_items for item in items):
-    #         unique_duos.append(row)
-    #         seen_items.update(items)
-    #     if len(unique_duos) == 10:
-    #         break
-    # top_10_duos = pd.DataFrame(unique_duos)
+    unique_duos = []
+    seen_items = set()
+    for _, row in df_duos_scores.iterrows():
+        items = row['Duo'].split(' & ')
+        if not any(item in seen_items for item in items):
+            unique_duos.append(row)
+            seen_items.update(items)
+        if len(unique_duos) == 10:
+            break
+    top_10_duos = pd.DataFrame(unique_duos)
     
-    # unique_duos = []
-    # seen_items = set()
-    # for _, row in df_duos_scores.iloc[::-1].iterrows():
-    #     items = row['Duo'].split(' & ')
-    #     if not any(item in seen_items for item in items):
-    #         unique_duos.append(row)
-    #         seen_items.update(items)
-    #     if len(unique_duos) == 10:
-    #         break
-    # flop_10_duos = pd.DataFrame(unique_duos)
+    unique_duos = []
+    seen_items = set()
+    for _, row in df_duos_scores.iloc[::-1].iterrows():
+        items = row['Duo'].split(' & ')
+        if not any(item in seen_items for item in items):
+            unique_duos.append(row)
+            seen_items.update(items)
+        if len(unique_duos) == 10:
+            break
+    flop_10_duos = pd.DataFrame(unique_duos)
 
-    # print(top_10_duos)
-    # print(flop_10_duos)
+    print(top_10_duos)
+    print(flop_10_duos)
     
     #  # Calculer la priorité médiane et moyenne parmi les jeux joués
     # priorite_stats = df_resultats.groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()
