@@ -66,7 +66,7 @@ class DonjonDeck:
             CarteEvent("Bricoleur", "Vous pouvez <b>réparer</b> un de vos objets <b>brisé</b>.", "REPAIR"),
             CarteEvent("Allié", "Si la prochaine carte est un monstre, vous pouvez <b>l'exécuter</b>.", "ALLY"),
             # CarteEvent("Inception", "Répétez l'effet de la dernière carte <b>Événement</b> de la défausse.", "INCEPTION"),
-            # CarteEvent("Dépeceur de Dragons", "Les joueurs ayant des <b>Dragons</b> dans leur pile peuvent en défausser pour <b>piocher</b> autant d'objets.", "DRAG"),
+            CarteEvent("Dépeceur de Dragons", "Les joueurs ayant des <b>Dragons</b> dans leur pile peuvent en défausser pour <b>piocher</b> autant d'objets.", "DRAG"),
             CarteEvent("Injection argileuse", "Gagnez <b>3 PV</b> pour chaque <b>Golem</b> dans votre pile.", "INJECTION"),
             CarteEvent("Tempête des âmes", "Tous les joueurs doivent remettre un monstre de leur pile de monstres vaincus dans le Donjon. Mélangez-le.", "SOULSTORM"),
             CarteEvent("Traquenard", "Si la prochaine carte est un monstre, vous ne pouvez pas <b>l'exécuter</b>.", "TRAP"),
