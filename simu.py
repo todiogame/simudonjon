@@ -415,7 +415,10 @@ def loguer_x_parties(x=1):
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         a_test = []
-        a_test.append(ChapeauStyle())
+        a_test.append(GriffesDeLArracheur())
+        a_test.append(AnneauDesSquelettes())
+        a_test.append(PateDAnge())
+        a_test.append(PelleDuFossoyeur())
         joueurs = []
         for i,nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"]):
             objets_joueur = (a_test) if i==0 else []
@@ -424,7 +427,6 @@ def loguer_x_parties(x=1):
                 objets_disponibles_simu.remove(objet)
             objets_joueur += random_sample
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-
 
         for j in joueurs:
             print(f"Initialisation de {j.nom} avec {j.pv_base} PV de base et les objets spécifiés")
