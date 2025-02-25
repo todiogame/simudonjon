@@ -92,7 +92,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         log_details.append(f"tour {Jeu.tour}. A pioché {carte.titre}.")
         if isinstance(carte, CarteEvent):
-            log_details.append(f"A pioché un événement: {carte.titre}.")
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
             for objet in joueur.objets:
@@ -145,6 +144,39 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                             log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")
                 donjon.remelange()
                 log_details.append(f"Le donjon est remelangé.")
+                
+            if carte.effet == "DRAG":
+                dragons_trouves = False
+                for autre_joueur in joueurs:
+                    if autre_joueur.dans_le_dj:
+                        dragons_a_defausser = [monstre for monstre in autre_joueur.pile_monstres_vaincus if "Dragon" in monstre.types]
+                        if dragons_a_defausser:
+                            dragons_trouves = True
+                        for dragon in dragons_a_defausser:
+                            autre_joueur.pile_monstres_vaincus.remove(dragon)
+                            Jeu.defausse.append(dragon)
+                            log_details.append(f"{autre_joueur.nom} défausse {dragon.titre} et pioche un objet.")
+                            if len(Jeu.objets_dispo):
+                                nouvel_objet = random.choice(Jeu.objets_dispo)
+                                Jeu.objets_dispo.remove(nouvel_objet)
+                                autre_joueur.ajouter_objet(nouvel_objet)
+                                log_details.append(f"{autre_joueur.nom} pioche un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
+                if not dragons_trouves:
+                    log_details.append("Aucun joueur n'a de Dragons à défausser.")
+
+            if carte.effet == "SHOP":
+                objets_intacts = [objet for objet in joueur.objets if objet.intact]
+                if len(objets_intacts) < 4:
+                    log_details.append(f"{joueur.nom} a moins de 4 objets intacts et utilise l'effet {carte.titre} pour piocher un objet.")
+                    if len(Jeu.objets_dispo):
+                        nouvel_objet = random.choice(Jeu.objets_dispo)
+                        Jeu.objets_dispo.remove(nouvel_objet)
+                        joueur.ajouter_objet(nouvel_objet)
+                        log_details.append(f"{joueur.nom} pioche un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
+                    else:
+                        log_details.append(f"Pas d'objet disponible pour {joueur.nom} à piocher.")
+                else:
+                    log_details.append(f"{joueur.nom} a {len(objets_intacts)} objets intacts, il n'en pioche pas.")
 
             # Le joueur rejoue
             joueur.rejoue = True
@@ -386,6 +418,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 def loguer_x_parties(x=1):
     seuil_pv_essai_fuite = 6
+    nb_items = 4
     for i in range(x):
         
         # Créer une copie de la liste des objets disponibles pour cette simulation
@@ -396,16 +429,18 @@ def loguer_x_parties(x=1):
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         a_test = []
-        a_test.append(ChapeauStyle())
+        a_test.append(GriffesDeLArracheur())
+        a_test.append(AnneauDesSquelettes())
+        a_test.append(PateDAnge())
+        a_test.append(PelleDuFossoyeur())
         joueurs = []
         for i,nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"]):
             objets_joueur = (a_test) if i==0 else []
-            random_sample = random.sample(objets_disponibles_simu, 6 - len(a_test) if i==0 else 6)
+            random_sample = random.sample(objets_disponibles_simu, nb_items - len(a_test) if i==0 else nb_items)
             for objet in random_sample:
                 objets_disponibles_simu.remove(objet)
             objets_joueur += random_sample
             joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
-
 
         for j in joueurs:
             print(f"Initialisation de {j.nom} avec {j.pv_base} PV de base et les objets spécifiés")

@@ -1381,7 +1381,7 @@ class CoffreDuRoiSorcier(Objet):
 class CoeurDeDragon(Objet):
     def __init__(self):
         super().__init__("Cœur de Dragon", False)
-    def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if "Dragon" in carte.types and self.intact:
             self.gagnePV(4, joueur_proprietaire, log_details)
 
@@ -1666,6 +1666,55 @@ class DeMaudit(Objet):
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"rate !")
+class PelleDuFossoyeur(Objet):
+    def __init__(self):
+        super().__init__("Pelle du Fossoyeur", False)
+    
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and carte in Jeu.defausse:
+            jet = joueur_proprietaire.rollDice(Jeu, log_details)
+            if jet >= 4:
+                joueur_proprietaire.ajouter_monstre_vaincu(carte)
+                Jeu.defausse.remove(carte)
+                log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour ajouter {carte.titre} à sa pile de monstres vaincus après un jet de {jet}.")
+
+class PateDAnge(Objet):
+    def __init__(self):
+        super().__init__("Pâté d'Ange", True)
+    
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= carte.dommages or all(not autre_joueur.dans_le_dj for autre_joueur in Jeu.joueurs if autre_joueur != joueur)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if self.intact:
+            self.gagnePV(7, joueur, log_details)
+            for autre_joueur in Jeu.joueurs:
+                if autre_joueur != joueur and autre_joueur.dans_le_dj:
+                    autre_joueur.pv_total += 4
+                    log_details.append(f"{autre_joueur.nom} gagne 4 PV grâce à {self.nom}. PV restant: {autre_joueur.pv_total}.")
+            self.destroy(joueur, Jeu, log_details)
+
+class AnneauDesSquelettes(Objet):
+    def __init__(self):
+        super().__init__("Anneau des Squelettes", False)
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if ("Squelette" in carte.types and not Jeu.traquenard_actif):
+            self.execute(joueur, carte, log_details)
+
+        if "Démon" in carte.types:
+            self.reduc_damage(4, joueur, carte, log_details)
+
+class GriffesDeLArracheur(Objet):
+    def __init__(self):
+        super().__init__("Griffes de l'Arracheur", False)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Orc" in carte.types and not Jeu.traquenard_actif
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        joueur.pv_total += carte.puissance
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter {carte.titre} et gagne {carte.puissance} PV. Total {joueur.pv_total} PV.")
 
 
 class Harpe(Objet):
@@ -1887,6 +1936,10 @@ objets_disponibles = [
     MailletDuRoiLiche(),
     CouteauEntreLesDents(),
     CoursierVolant(),
+    GriffesDeLArracheur(),
+    AnneauDesSquelettes(),
+    PateDAnge(),
+    PelleDuFossoyeur(),
 ]
 
 
@@ -2045,4 +2098,8 @@ __all__ = [
             "MailletDuRoiLiche",
             "CouteauEntreLesDents",
             "CoursierVolant",
+            "GriffesDeLArracheur",
+            "AnneauDesSquelettes",
+            "PateDAnge",
+            "PelleDuFossoyeur",
         ]
