@@ -5,10 +5,15 @@ from perso import Joueur
 from simu import   loguer_x_parties, ordonnanceur
 from monstres import DonjonDeck
 import json
+import pandas as pd
 
 def draftGame(log=True):
     # Créer une copie de la liste des objets disponibles pour cette simulation
     objets_disponibles_simu = list(objets_disponibles)
+    
+    
+    for objet in objets_disponibles_simu:
+            print(f"winrate {objet.nom} : {objet.winrate }")
     # Réparer tous les objets
     for o in objets_disponibles_simu: o.repare()
 
@@ -136,10 +141,69 @@ def calculWinrate(combinaison, objets_autres_joueurs, iterations=100):
     winrate = victoires / iterations
     return winrate
 
+def calculItemWinrateRandobuild(iter=100 ):
+        
+    # Initialisation des résultats
+    resultats_builds = []
+
+    # Simuler les builds aléatoires et stocker les résultats
+    for _ in tqdm(range(iter), desc="Simulation des builds"):
+        
+        # Créer une copie de la liste des objets disponibles pour cette simulation
+        objets_disponibles_simu = list(objets_disponibles)
+        # Reparer tous les objets et attribuer une priorité aléatoire
+        for o in objets_disponibles_simu:
+            o.repare()
+
+        # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
+        joueurs = []
+        nb_joueurs = random.choice([3, 4])
+        for nom in ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]:
+            objets_joueur = random.sample(objets_disponibles_simu, 6)
+            for objet in objets_joueur:
+                objets_disponibles_simu.remove(objet)
+            joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
+
+        # Création de la copie des joueurs et des cartes
+        deck = DonjonDeck()
+
+        # Exécution de l'ordonnanceur sans afficher les logs
+        vainqueur = ordonnanceur(joueurs, deck, 6, objets_disponibles_simu, False)
+
+        # Mise à jour des statistiques
+        for joueur in joueurs:
+            for objet in joueur.objets_initiaux:
+                resultats_builds.append({
+                    'Objet': objet.nom,
+                    'Build': ', '.join(o.nom for o in joueur.objets_initiaux),
+                    'Victoire': 1 if joueur == vainqueur else 0,
+                }),
+        
+    # Convertir les résultats en DataFrame
+    df_resultats = pd.DataFrame(resultats_builds)
+    pd.set_option('display.max_rows', 200)
+    # Calculer le nombre total de victoires et de défaites pour chaque objet
+    df_stats_objets = df_resultats.groupby('Objet')['Victoire'].agg(['sum', 'count']).reset_index()
+    df_stats_objets.columns = ['Objet', 'Victoires', 'Total']
+    # Calculer le winrate pour chaque objet
+    df_stats_objets['Winrate'] = (df_stats_objets['Victoires'] / df_stats_objets['Total']) * 100
+ 
+    # Mettre à jour le winrate pour chaque objet
+    for objet in objets_disponibles_simu:
+        winrate = df_stats_objets.loc[df_stats_objets['Objet'] == objet.nom, 'Winrate']
+        if not winrate.empty:
+            objet.winrate = winrate.iloc[0]
+            # print(f"winrate {objet.nom} : {objet.winrate }")
+
 def simudraftgames(iter=100, nb_games=1000, filename="item_stats.json"):
+    
+    # calculer les winrate en randobuild de tous les objets
+    calculItemWinrateRandobuild( )
+    
     # Initialize item statistics dictionary
     item_stats = {}
 
+    
     for draft_iteration in tqdm(range(iter), desc="Simulation des drafts"):
         resultat = draftGame(False)
         objets_dans_le_draft = resultat[0]

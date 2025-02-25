@@ -208,7 +208,7 @@ class MarteauDeGuerre(Objet):
         
 class EpauletteDuBourrin(Objet):
     def __init__(self):
-        super().__init__("Epaulette du Bourrin", False, 5, -2)
+        super().__init__("Epaulette du Bourrin", False, 4, -2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.reduc_damage(1, joueur, carte, log_details)
 
@@ -216,9 +216,19 @@ class MainDeMidas(Objet):
     def __init__(self):
         super().__init__("Main de Midas", True)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance <= 5 and not Jeu.traquenard_actif
+        return carte.puissance <= 5 and carte.puissance >= 4 and not Jeu.traquenard_actif
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.puissance == 5 or carte.puissance ==4 or carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.absorbe(joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+class MainDeMidasB(Objet):
+    def __init__(self):
+        super().__init__("Main de Midas B", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance <= 4 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.puissance ==4 or carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.absorbe(joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -284,17 +294,17 @@ class CaisseEnchantee(Objet):
     def __init__(self):
         super().__init__("Caisse enchantée", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance < 6 and not Jeu.traquenard_actif
+        return carte.puissance <= 6 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_caisse = joueur.rollDice(Jeu, log_details, carte.puissance+1)
         log_details.append(f"{joueur.nom} utilise Caisse enchantée sur {carte.titre}, jet de {jet_caisse}")
-        if jet_caisse == 1:
-            log_details.append(f"Caisse enchantée brisée.")
-            self.destroy(joueur, Jeu, log_details)
-        elif jet_caisse > carte.puissance:
+        if jet_caisse >= carte.puissance:
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"Pas assez !")
+        if jet_caisse == 1:
+            log_details.append(f"Caisse enchantée brisée.")
+            self.destroy(joueur, Jeu, log_details)
 
 class BouclierGolemique(Objet):
     def __init__(self):
@@ -356,12 +366,12 @@ class ArcEnflamme(Objet):
 
 class ParcheminDeTeleportation(Objet):
     def __init__(self):
-        super().__init__("Parchemin de Téléportation", True)
+        super().__init__("Parchemin de Téléportation", False, 2 , -100)
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if self.intact and joueur_proprietaire == joueur and (joueur_proprietaire.pv_total <= 3 and sum(objet.actif and objet.intact for objet in joueur.objets) <= 2):
+        if self.intact and joueur_proprietaire == joueur and (joueur_proprietaire.pv_total <= 4 and sum(objet.actif and objet.intact for objet in joueur.objets) <= 1):
             log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le donjon !\n")
             joueur.fuite()
-            self.destroy(joueur, Jeu, log_details)
+            # self.destroy(joueur, Jeu, log_details)
 
 class GrosBoulet(Objet):
     def __init__(self):
@@ -412,7 +422,7 @@ class PiocheDeDiamant(Objet):
 
 class ChapeauDuNovice(Objet):
     def __init__(self):
-        super().__init__("Chapeau du novice", False, 3)
+        super().__init__("Chapeau du novice", False)
     def rules(self, joueur, carte, Jeu, log_details):
         return ("Orc" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -429,15 +439,13 @@ class MasqueDeLaPeste(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
-class TorcheRose(Objet):
+class TorcheRouge(Objet):
     def __init__(self):
-        super().__init__("Torche Rose", False)
+        super().__init__("Torche Rouge", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return ("Squelette" in carte.types or "Orc" in carte.types) and not Jeu.traquenard_actif
+        return ("Gobelin" in carte.types or "Squelette" in carte.types or "Orc" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-    def score_effet(self, joueur, log_details):
-        self.scoreChange(-1, joueur, log_details)
 
 class RobeDeMage(Objet):
     def __init__(self):
@@ -668,14 +676,15 @@ class CoquillageMagique(Objet):
 
 class MasqueDragon(Objet):
     def __init__(self):
-        super().__init__("Masque Dragon", True)
+        super().__init__("Masque Dragon", False)
     
     def rules(self, joueur, carte, Jeu, log_details):
         return "Dragon" in carte.types and not Jeu.traquenard_actif
     
     def combat_effet(self, joueur, carte, Jeu, log_details):
-           self.piocheItem(joueur,Jeu,log_details)
-           self.destroy(joueur, Jeu, log_details)
+        self.execute(joueur, carte, log_details)
+        self.piocheItem(joueur,Jeu,log_details)
+        self.destroy(joueur, Jeu, log_details)
 
 class PiedDeBiche(Objet):
     def __init__(self):
@@ -788,6 +797,8 @@ class GetasDuNovice(Objet):
 class MarteauDEternite(Objet):
     def __init__(self):
         super().__init__("Marteau d'Eternité", False, 0, -100) #-100 fuite car inutile de fuir avec cet objet
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(-1,joueur,log_details)
     def decompte_effet(self, joueur, joueurs_final, log_details):
         if not joueur.vivant and joueur not in joueurs_final and self.intact:
             log_details.append(f"Le {self.nom} de {joueur.nom} le fait compter parmi les gagnants")
@@ -860,7 +871,7 @@ class AnneauDeVie(Objet):
 
 class BottesDeVitesse(Objet):
     def __init__(self):
-        super().__init__("Bottes de Vitesse", False, 0, 3)
+        super().__init__("Bottes de Vitesse", False, 2, 7)
 #todo vous rentrez en premier
 
 
@@ -1054,7 +1065,7 @@ class CorneDAbordage(Objet):
     def debut_tour(self, joueur, Jeu, log_details):
         autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
 
-        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj):
+        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj) and joueur.pv_total>1:
             log_details.append(f"{joueur.nom} utilise {self.nom}")
             for autre_joueur in autres_joueurs_dans_le_dj:
                 if autre_joueur.pile_monstres_vaincus:
@@ -1062,6 +1073,7 @@ class CorneDAbordage(Objet):
                     autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
                     joueur.ajouter_monstre_vaincu(monstre_volee)
                     log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}")
+            self.perdPV(1, joueur, log_details)
             self.destroy(joueur, Jeu, log_details)
 
 class SceptreActif(Objet):
@@ -1178,7 +1190,7 @@ class TreizeASeize(Objet):
 
 class Scaphandre(Objet):
     def __init__(self):
-        super().__init__("Scaphandre", False, 0, -2)
+        super().__init__("Scaphandre", False, 0, -3)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.reduc_damage(2, joueur, carte, log_details)
 
@@ -1188,15 +1200,16 @@ class BouclierDeLInventeur(Objet):
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif
     def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= joueur.pv_total/2 
+        return carte.dommages >= joueur.pv_total/2 -2
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        self.piocheItem(joueur, Jeu, log_details)
-        self.destroy(joueur, Jeu, log_details)
+        if joueur.rollDice(Jeu, log_details, 4) >= 4:
+            self.piocheItem(joueur, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)        
 
 class EpeeMystique(Objet):
     def __init__(self):
-        super().__init__("Epee mystique", False, 0, 2)
+        super().__init__("Epee mystique", False, 0, 4)
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance == joueur.calculer_modificateurs() and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -1509,8 +1522,8 @@ class MasqueDeLInquisiteur(Objet):
     def __init__(self):
         super().__init__("Masque de l'Inquisiteur", False, 2)
     def fin_tour(self, joueur, Jeu, log_details):
-        if self.intact and joueur.pv_total == 4:           
-            self.gagnePV(4, joueur, log_details)
+        if self.intact and (joueur.pv_total == 2 or joueur.pv_total == 4 or joueur.pv_total == 8):           
+            self.gagnePV(2, joueur, log_details)
 
 class PareBuffleDuPonceur(Objet):
     def __init__(self):
@@ -1537,10 +1550,193 @@ class FromagePuant(Objet):
             dernier_monstre = joueur.pile_monstres_vaincus[-1]
             self.utiliser(dernier_monstre, joueur, Jeu, log_details)
 
+class MailletDArgile(Objet):
+    def __init__(self):
+        super().__init__("Maillet D'Argile", False, 2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Golem" in carte.types and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
 
+class AllianceSanguine(Objet):
+    def __init__(self):
+        super().__init__("Alliance Sanguine", False, 1)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if joueur.pv_total <= 2:
+            self.reduc_damage(3, joueur, carte, log_details)
+
+
+class FauxDeLaMort(Objet):
+    def __init__(self):
+        super().__init__("Faux De La Mort",False, 2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == joueur.pv_total and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+
+class QueueDuCharognard(Objet):
+    def __init__(self):
+        super().__init__("Queue Du Charognard",False, 2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == len(joueur.pile_monstres_vaincus) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        
+class CasqueBerserk(Objet):
+    def __init__(self):
+        super().__init__("CasqueBerserk", False, 7)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if self.intact and (carte.puissance <= 3):
+            self.add_damage(1, joueur, carte, log_details)
+        
+# 2025
+
+class TentaculeDuKraken(Objet):
+    def __init__(self):
+        super().__init__("Tentacule du Kraken", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance % 2 == 0 
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(carte.puissance, joueur, log_details)
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        # Jeu.donjon.ajouter_monstre(carte)
+        Jeu.donjon.remelange()
+        log_details.append(f"{joueur.nom} remet {carte.titre} dans le Donjon grâce à {self.nom}.")
+        self.destroy(joueur, Jeu, log_details)
+
+# class HamacReposant(Objet):
+#     def __init__(self):
+#         super().__init__("Hamac reposant", False, 2)
+#     def debut_tour(self, joueur, Jeu, log_details):
+#         if joueur.rollDice(Jeu, log_details) >= 4:
+#             joueur.passe_tour = True
+#             log_details.append(f"{joueur.nom} passe son tour grâce à {self.nom}.")
+
+# class SacDeCouchette(Objet):
+#     def __init__(self):
+#         super().__init__("Sac de couchette", True)
+#     def fin_tour(self, joueur, Jeu, log_details):
+#         joueur.skip_turns(2, Jeu)
+#         self.piocheItem(joueur, Jeu, log_details)
+#         self.destroy(joueur, Jeu, log_details)
+
+class CorbeilleDOr(Objet):
+    def __init__(self):
+        super().__init__("Corbeille d'or", False, 0, -1)
+    def score_effet(self, joueur, log_details):
+        objets_brises = sum(1 for objet in joueur.objets if not objet.intact)
+        self.scoreChange(objets_brises, joueur, log_details)
+
+class OsseletsDeResurrection(Objet):
+    def __init__(self):
+        super().__init__("Osselets de Résurrection", False, 0)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        if joueur.pv_total >= 3:
+            self.survit(1, joueur, carte, log_details)
+
+class LunettesDuBricoleur(Objet):
+    def __init__(self):
+        super().__init__("Lunettes du Bricoleur", False, 2)
+    def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur and joueur.rollDice(Jeu, log_details) == 6:
+            objet.repare()
+            log_details.append(f"{self.nom} répare {objet.nom} automatiquement.")
+
+class AttrapeReves(Objet):
+    def __init__(self):
+        super().__init__("Attrape-Rêves", False, 2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if not carte.types:
+            self.execute(joueur, carte, log_details)
+
+class DeMaudit(Objet):
+    def __init__(self):
+        super().__init__("Dé Maudit", False, 3)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance <= 6 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        jet = joueur.rollDice(Jeu, log_details, carte.puissance+1)
+        log_details.append(f"{joueur.nom} utilise De maudit sur {carte.titre}, jet de {jet}")
+        if jet == carte.puissance:
+            self.execute(joueur, carte, log_details)
+        else:
+            log_details.append(f"rate !")
+
+
+class Harpe(Objet):
+    def __init__(self):
+        super().__init__("Harpe", False, 0, 0)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and joueur.pv_total <= 4
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total > 2 - (carte.puissance % 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.perdPV(2 - (carte.puissance % 2), joueur, log_details)
+
+class BouclierMagique(Objet):
+    def __init__(self):
+        super().__init__("Bouclier Magique", False, 3)
+    def rules(self, joueur, carte, Jeu, log_details):
+        len(joueur.pile_monstres_vaincus) <= 5
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.reduc_damage(4, joueur, carte, log_details)        
+
+
+class ViandeCrue(Objet):
+    def __init__(self):
+        super().__init__("Viande Crue", True)
+   
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus):    
+            self.gagnePV(8, joueur, log_details)
+        else:
+            self.gagnePV(2, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)    
+        
+    
+class MailletDuRoiLiche(Objet):
+    def __init__(self):
+        super().__init__("Maillet Du Roi Liche", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and ("Golem" in carte.types or "Lich" in carte.types or "Demon" in carte.types)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.gagnePV(3, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)    
+
+
+class CouteauEntreLesDents(Objet):
+    def __init__(self):
+        super().__init__("Couteau Entre Les Dents", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return ("Vampire" in carte.types or "Orc" in carte.types) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class CoursierVolant(Objet):
+    def __init__(self):
+        super().__init__("Coursier Volant", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        len(joueur.pile_monstres_vaincus) >= 4
+    def combat_effet(self, joueur, Jeu, log_details):
+        if self.intact:
+            nombre_pioche = len(joueur.pile_monstres_vaincus) // 4
+            for _ in range(nombre_pioche):
+                self.piocheItem(joueur, Jeu, log_details)
+            self.destroy(joueur, Jeu, log_details)
+        
+        
+        
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
+    MainDeMidasB(),
     HacheExecution(), 
     MarteauDeGuerre(),
     FleauDesLiches(),
@@ -1568,7 +1764,7 @@ objets_disponibles = [
     Katana(),
     ChapeauDuNovice(),
     MasqueDeLaPeste(),
-    TorcheRose(),
+    TorcheRouge(),
     RobeDeMage(),
     ValisesDeCash(),
     AnneauDuFeu(),
@@ -1672,6 +1868,25 @@ objets_disponibles = [
     MasqueDeLInquisiteur(),
     PareBuffleDuPonceur(),
     FromagePuant(),
+    MailletDArgile(),
+    AllianceSanguine(),
+    FauxDeLaMort(),
+    QueueDuCharognard(),
+    CasqueBerserk(),
+    TentaculeDuKraken(),
+    # HamacReposant(),
+    # SacDeCouchette(),
+    CorbeilleDOr(),
+    OsseletsDeResurrection(),
+    LunettesDuBricoleur(),
+    AttrapeReves(),
+    DeMaudit(),
+    Harpe(),
+    BouclierMagique(),
+    ViandeCrue(),
+    MailletDuRoiLiche(),
+    CouteauEntreLesDents(),
+    CoursierVolant(),
 ]
 
 
@@ -1679,6 +1894,7 @@ objets_disponibles = [
 __all__ = [
             "objets_disponibles",
             "MainDeMidas",
+            "MainDeMidasB",
             "HacheExecution",
             "MarteauDeGuerre",
             "FleauDesLiches",
@@ -1706,7 +1922,7 @@ __all__ = [
             "Katana",
             "ChapeauDuNovice",
             "MasqueDeLaPeste",
-            "TorcheRose",
+            "TorcheRouge",
             "RobeDeMage",
             "ValisesDeCash",
             "AnneauDuFeu",
@@ -1810,4 +2026,23 @@ __all__ = [
             "MasqueDeLInquisiteur",
             "PareBuffleDuPonceur",
             "FromagePuant",
+            "MailletDArgile",
+            "AllianceSanguine",
+            "FauxDeLaMort",
+            "QueueDuCharognard",
+            "CasqueBerserk",
+            "DeMaudit",
+            "TentaculeDuKraken",
+            # "HamacReposant",
+            # "SacDeCouchette",
+            "CorbeilleDOr",
+            "OsseletsDeResurrection",
+            "LunettesDuBricoleur",
+            "AttrapeReves",
+            "Harpe",
+            "BouclierMagique",
+            "ViandeCrue",
+            "MailletDuRoiLiche",
+            "CouteauEntreLesDents",
+            "CoursierVolant",
         ]

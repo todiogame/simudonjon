@@ -7,7 +7,7 @@ class Joueur:
         self.pv_base = pv_base
         self.pv_total = pv_base
         self.medailles = medailles
-        self.pv_min_fuite = 6
+        self.pv_min_fuite = 5
         self.vivant = True
         self.dans_le_dj = True
         self.fuite_reussie = False
