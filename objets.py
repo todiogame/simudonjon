@@ -30,7 +30,7 @@ class Objet:
         pass
     def rencontre_effet(self, joueur, carte, Jeu, log_details):
         pass
-    def rencontre_event_effet(self, joueur, carte, Jeu, log_details):
+    def rencontre_event_effet(self, joueur_proprietaire, joueur_actif, carte, Jeu, log_details):
         pass
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         pass
@@ -75,9 +75,10 @@ class Objet:
         # attention, check si les items sont intacts
         pass
 
-    def en_rencontre_event(self, joueur, carte, Jeu, log_details):
+    def en_rencontre_event(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
-        self.rencontre_event_effet(joueur, carte, Jeu, log_details)    
+        self.rencontre_event_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)    
+
     
 
     def en_combat(self, joueur, carte, Jeu, log_details):
@@ -624,7 +625,7 @@ class PlanPresqueParfait(Objet):
     def __init__(self):
         super().__init__("Plan presque parfait", False, 3)
     
-    def rencontre_event_effet(self, joueur, carte, Jeu, log_details):
+    def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         Jeu.execute_next_monster = True
         log_details.append(f"Effet {self.nom} actif: la prochaine carte monstre peut être exécutée. Sauf si...")
 
@@ -1054,7 +1055,7 @@ class SeringueDuDocteurFou(Objet):
         if not self.intact:
             self.perdPV(1, joueur, log_details)
             
-    def rencontre_event_effet(self, joueur, carte, Jeu, log_details):
+    def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if not self.intact:
             self.perdPV(1, joueur, log_details)
             
@@ -1099,7 +1100,7 @@ class CapeVaudou(Objet):
 
 class FerACheval(Objet):
     def __init__(self):
-        super().__init__("Fer a Cheval", True)
+        super().__init__("Fer a Cheval", False)
     def en_roll(self, joueur,jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # attention, check si les items sont intacts
         if self.intact and not rerolled and ((jet < jet_voulu and not reversed) or (reversed and jet > jet_voulu)):
@@ -1108,7 +1109,7 @@ class FerACheval(Objet):
 
 class DeDuTricheur(Objet):
     def __init__(self):
-        super().__init__("Dé du Tricheur", True, 3)
+        super().__init__("Dé du Tricheur", False, 3)
     def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, Jeu, log_details):
         # +1 à tous vos jets de dés, sauf si vous faites 5
         if self.intact and not reversed and jet < 5 and not jet_voulu == 6:
@@ -1780,7 +1781,86 @@ class CoursierVolant(Objet):
                 self.piocheItem(joueur, Jeu, log_details)
             self.destroy(joueur, Jeu, log_details)
         
+
+class PainMaudit(Objet):
+    def __init__(self):
+        super().__init__("Pain maudit", True)
+    
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if self.intact:
+            self.gagnePV(4, joueur, log_details)
+            demons_dragons = []
+            # Chercher dans la défausse
+            for monstre in Jeu.defausse[:]:
+                if "Démon" in monstre.types or "Dragon" in monstre.types:
+                    demons_dragons.append(monstre)
+                    Jeu.defausse.remove(monstre)
+            
+            # Chercher dans les piles de monstres vaincus
+            for j in Jeu.joueurs:
+                for monstre in j.pile_monstres_vaincus[:]:
+                    if "Démon" in monstre.types or "Dragon" in monstre.types:
+                        demons_dragons.append(monstre)
+                        j.pile_monstres_vaincus.remove(monstre)
+            
+            # Remettre les monstres dans le donjon
+            for monstre in demons_dragons:
+                Jeu.donjon.ajouter_monstre(monstre)
+                log_details.append(f"{monstre.titre} retourne dans le Donjon.")
+            
+            if demons_dragons:
+                Jeu.donjon.remelange()
+                log_details.append("Le Donjon a été mélangé.")
+            
+            self.destroy(joueur, Jeu, log_details)
         
+class PierreDuNaga(Objet):
+    def __init__(self):
+        super().__init__("Pierre du Naga", False, 2)  # False pour actif = non, et 2 pour le bonus de PV initial
+    
+
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if carte.puissance >= 7:
+            self.gagnePV(1, joueur_proprietaire, log_details)
+            log_details.append(f"{joueur_proprietaire.nom} gagne 1 PV grâce à {self.nom} car {joueur.nom} a vaincu un monstre de puissance 7 ou plus.")
+
+class CapeDePlumes(Objet):
+    def __init__(self):
+        super().__init__("Cape de Plumes", True)  # True pour actif = oui
+
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # Réduire les dommages du monstre de 8
+        reduction = 8
+        carte.dommages = max(0, carte.dommages - reduction)
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour réduire les dommages de {carte.titre} de {reduction}. Nouveaux dommages: {carte.dommages}.")
+        self.destroy(joueur, Jeu, log_details)  # La cape est détruite après utilisation
+
+class SetDeCoeurs(Objet):
+    def __init__(self):
+        super().__init__("Set de Cœurs", True)  # True pour actif = oui
+    
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total and joueur.pv_total < 7 and carte.dommages < 7
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        joueur.pv_total = 7
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour fixer ses PV à 7.")
+        self.destroy(joueur, Jeu, log_details)  # L'objet est détruit après utilisation
+
+class GrelotDuBouffon(Objet):
+    def __init__(self):
+        super().__init__("Grelot du Bouffon", False, 1)  # False pour actif = non, et 1 pour le bonus de PV initial
+    
+    def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        self.gagnePV(1, joueur_proprietaire, log_details)
+        log_details.append(f"{joueur_proprietaire.nom} gagne 1 PV grâce à {self.nom} car un événement a été pioché.")
+
         
 # Liste des objets
 objets_disponibles = [ 
@@ -1940,6 +2020,10 @@ objets_disponibles = [
     AnneauDesSquelettes(),
     PateDAnge(),
     PelleDuFossoyeur(),
+    PainMaudit(), 
+    PierreDuNaga(),
+    CapeDePlumes(),
+    SetDeCoeurs(),
 ]
 
 
@@ -2102,4 +2186,8 @@ __all__ = [
             "AnneauDesSquelettes",
             "PateDAnge",
             "PelleDuFossoyeur",
+            "PainMaudit",
+            "PierreDuNaga",
+            "CapeDePlumes",
+            "SetDeCoeurs",
         ]

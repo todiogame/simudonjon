@@ -12,8 +12,8 @@ def draftGame(log=True):
     objets_disponibles_simu = list(objets_disponibles)
     
     
-    for objet in objets_disponibles_simu:
-            print(f"winrate {objet.nom} : {objet.winrate }")
+    # for objet in objets_disponibles_simu:
+    #         print(f"winrate {objet.nom} : {objet.winrate }")
     # Réparer tous les objets
     for o in objets_disponibles_simu: o.repare()
 

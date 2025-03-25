@@ -1,592 +1,772 @@
 {
-    "Parchemin de Bahn": {
-        "draft": 3,
-        "pick": 3,
-        "win": 1078
+    "Singe dor\u00e9": {
+        "draft": 18,
+        "pick": 15,
+        "win": 4670
     },
-    "Calice du Roi Sorcier": {
-        "draft": 3,
-        "pick": 2,
-        "win": 548
-    },
-    "Potion d'adr\u00e9naline": {
-        "draft": 3,
-        "pick": 2,
-        "win": 333
-    },
-    "Scaphandre": {
-        "draft": 2,
-        "pick": 2,
-        "win": 837
-    },
-    "PotionOuPoison": {
-        "draft": 2,
-        "pick": 2,
-        "win": 339
-    },
-    "Epee mystique": {
-        "draft": 4,
-        "pick": 3,
-        "win": 786
-    },
-    "Epaulette du Bourrin": {
-        "draft": 3,
-        "pick": 3,
-        "win": 809
-    },
-    "Kit vaudou": {
-        "draft": 2,
-        "pick": 2,
-        "win": 414
-    },
-    "Pare-Buffle du Ponceur": {
-        "draft": 3,
-        "pick": 3,
-        "win": 941
-    },
-    "Bo\u00eete de Pandore": {
-        "draft": 2,
-        "pick": 1,
-        "win": 381
-    },
-    "Arc enflamm\u00e9": {
-        "draft": 4,
-        "pick": 3,
-        "win": 1113
-    },
-    "Anneau Magique": {
-        "draft": 4,
-        "pick": 4,
-        "win": 1136
-    },
-    "Armure d'honneur": {
-        "draft": 2,
-        "pick": 2,
-        "win": 504
-    },
-    "Platree de Berniques": {
-        "draft": 3,
-        "pick": 2,
-        "win": 186
-    },
-    "Bouclier Dragon": {
-        "draft": 4,
-        "pick": 3,
-        "win": 715
-    },
-    "Pistolet Pirate": {
-        "draft": 3,
-        "pick": 3,
-        "win": 991
+    "P\u00e2t\u00e9 d'Ange": {
+        "draft": 22,
+        "pick": 19,
+        "win": 4944
     },
     "Bouclier cam\u00e9l\u00e9on": {
-        "draft": 1,
-        "pick": 1,
-        "win": 381
-    },
-    "Coquillage Magique": {
-        "draft": 4,
-        "pick": 4,
-        "win": 1326
-    },
-    "Kebab revigorant": {
-        "draft": 3,
-        "pick": 3,
-        "win": 744
-    },
-    "Potion de Mana": {
-        "draft": 1,
-        "pick": 0,
-        "win": 0
-    },
-    "Anneau Plussain": {
-        "draft": 3,
-        "pick": 3,
-        "win": 700
-    },
-    "Seringue du docteur fou": {
-        "draft": 3,
-        "pick": 2,
-        "win": 438
-    },
-    "Chameau": {
-        "draft": 3,
-        "pick": 3,
-        "win": 1060
-    },
-    "Masque de la Peste": {
-        "draft": 3,
-        "pick": 3,
-        "win": 561
-    },
-    "Katana": {
-        "draft": 4,
-        "pick": 3,
-        "win": 1104
-    },
-    "Champ de force en mousse": {
-        "draft": 2,
-        "pick": 2,
-        "win": 654
-    },
-    "Item 3PV 2": {
-        "draft": 3,
-        "pick": 3,
-        "win": 799
-    },
-    "Fer a Cheval": {
-        "draft": 1,
-        "pick": 1,
-        "win": 355
-    },
-    "Corne d'abordage": {
-        "draft": 5,
-        "pick": 5,
-        "win": 2264
-    },
-    "Pied de Biche": {
-        "draft": 2,
-        "pick": 2,
-        "win": 604
-    },
-    "Masque Dragon": {
-        "draft": 3,
-        "pick": 2,
-        "win": 286
-    },
-    "Getas du novice": {
-        "draft": 2,
-        "pick": 2,
-        "win": 562
-    },
-    "Anneau des surmulots": {
-        "draft": 3,
-        "pick": 3,
-        "win": 524
-    },
-    "Canne \u00e0 Chep": {
-        "draft": 3,
-        "pick": 2,
-        "win": 330
-    },
-    "Anneau volcanique": {
-        "draft": 4,
-        "pick": 3,
-        "win": 1215
-    },
-    "Chapelet de Vitalit\u00e9": {
-        "draft": 1,
-        "pick": 0,
-        "win": 0
-    },
-    "Masque de l'Inquisiteur": {
-        "draft": 2,
-        "pick": 2,
-        "win": 485
-    },
-    "Caisse enchant\u00e9e": {
-        "draft": 2,
-        "pick": 2,
-        "win": 711
-    },
-    "Dragoune": {
-        "draft": 4,
-        "pick": 4,
-        "win": 936
-    },
-    "Armure du Roi Liche": {
-        "draft": 1,
-        "pick": 1,
-        "win": 413
-    },
-    "Lame de l'Harmonie": {
-        "draft": 2,
-        "pick": 1,
-        "win": 189
-    },
-    "Hache de Glace": {
-        "draft": 3,
-        "pick": 3,
-        "win": 760
-    },
-    "Feuille Eternelle": {
-        "draft": 2,
-        "pick": 2,
-        "win": 805
-    },
-    "Sceptre actif": {
-        "draft": 2,
-        "pick": 2,
-        "win": 500
-    },
-    "Armure Ardente": {
-        "draft": 2,
-        "pick": 2,
-        "win": 649
-    },
-    "Elixir de chance": {
-        "draft": 3,
-        "pick": 3,
-        "win": 581
-    },
-    "Fouet du fourbe": {
-        "draft": 2,
-        "pick": 1,
-        "win": 189
-    },
-    "Singe dor\u00e9": {
-        "draft": 4,
-        "pick": 4,
-        "win": 789
-    },
-    "Casque Plus": {
-        "draft": 1,
-        "pick": 0,
-        "win": 0
-    },
-    "Gros boulet": {
-        "draft": 2,
-        "pick": 2,
-        "win": 510
-    },
-    "Masque \u00e0 gaz": {
-        "draft": 2,
-        "pick": 2,
-        "win": 449
-    },
-    "C\u0153ur de Dragon": {
-        "draft": 2,
-        "pick": 2,
-        "win": 364
-    },
-    "Fleau des liches": {
-        "draft": 3,
-        "pick": 3,
-        "win": 650
-    },
-    "Couronne en Mousse": {
-        "draft": 2,
-        "pick": 2,
-        "win": 277
-    },
-    "Item 3PV": {
-        "draft": 2,
-        "pick": 2,
-        "win": 419
-    },
-    "Esprit du Donjon": {
-        "draft": 3,
-        "pick": 1,
-        "win": 219
-    },
-    "Lame Draconique": {
-        "draft": 1,
-        "pick": 1,
-        "win": 169
-    },
-    "Enclume instable": {
-        "draft": 2,
-        "pick": 1,
-        "win": 236
-    },
-    "Bouclier Golemique": {
-        "draft": 4,
-        "pick": 4,
-        "win": 1000
-    },
-    "Bottes de Vitesse": {
-        "draft": 2,
-        "pick": 0,
-        "win": 0
-    },
-    "Marteau d'Eternit\u00e9": {
-        "draft": 1,
-        "pick": 1,
-        "win": 555
-    },
-    "Robe de mage": {
-        "draft": 1,
-        "pick": 1,
-        "win": 169
-    },
-    "Chapeau du novice": {
-        "draft": 2,
-        "pick": 2,
-        "win": 296
-    },
-    "Sabre m\u00e9canique": {
-        "draft": 2,
-        "pick": 2,
-        "win": 666
-    },
-    "Marteau de Guerre": {
-        "draft": 2,
-        "pick": 2,
-        "win": 307
-    },
-    "Coiffe de sorcier": {
-        "draft": 1,
-        "pick": 0,
-        "win": 0
-    },
-    "D\u00e9 du Tricheur": {
-        "draft": 3,
-        "pick": 3,
-        "win": 508
-    },
-    "Champignon V\u00e9n\u00e9neux": {
-        "draft": 2,
-        "pick": 1,
-        "win": 175
-    },
-    "Boulet de Canon": {
-        "draft": 2,
-        "pick": 2,
-        "win": 515
-    },
-    "Perceuse a Breche": {
-        "draft": 2,
-        "pick": 2,
-        "win": 336
-    },
-    "Torche Bleue": {
-        "draft": 4,
-        "pick": 3,
-        "win": 768
-    },
-    "Valises de Cash": {
-        "draft": 4,
-        "pick": 4,
-        "win": 975
-    },
-    "Potion draconique": {
-        "draft": 2,
-        "pick": 2,
-        "win": 471
-    },
-    "Anneau Oceanique": {
-        "draft": 3,
-        "pick": 2,
-        "win": 398
-    },
-    "Coffre anim\u00e9": {
-        "draft": 1,
-        "pick": 1,
-        "win": 249
-    },
-    "Armure Damn\u00e9e": {
-        "draft": 2,
-        "pick": 2,
-        "win": 548
-    },
-    "Tunique classe": {
-        "draft": 4,
-        "pick": 4,
-        "win": 931
-    },
-    "Patins \u00e0 Glace": {
-        "draft": 4,
-        "pick": 3,
-        "win": 625
-    },
-    "Marteau de combat": {
-        "draft": 3,
-        "pick": 3,
-        "win": 730
-    },
-    "C\u0153ur de Golem": {
-        "draft": 2,
-        "pick": 2,
-        "win": 485
-    },
-    "Parchemin de T\u00e9l\u00e9portation": {
-        "draft": 1,
-        "pick": 1,
-        "win": 293
-    },
-    "Pendentif du Novice": {
-        "draft": 4,
-        "pick": 3,
-        "win": 568
-    },
-    "Ankh de r\u00e9incarnation": {
-        "draft": 2,
-        "pick": 1,
-        "win": 293
-    },
-    "Cape vaudou": {
-        "draft": 4,
-        "pick": 4,
-        "win": 895
+        "draft": 16,
+        "pick": 14,
+        "win": 4693
+    },
+    "Torche Rouge": {
+        "draft": 17,
+        "pick": 16,
+        "win": 4713
     },
     "Gants de Ga\u00efa": {
-        "draft": 2,
-        "pick": 2,
-        "win": 721
-    },
-    "Tron\u00e7onneuse enflamm\u00e9e": {
-        "draft": 2,
-        "pick": 2,
-        "win": 564
-    },
-    "Bouclier cass\u00e9": {
-        "draft": 1,
-        "pick": 1,
-        "win": 228
-    },
-    "Chapeau styl\u00e9": {
-        "draft": 3,
-        "pick": 1,
-        "win": 251
-    },
-    "Glaive d'argent": {
-        "draft": 3,
-        "pick": 3,
-        "win": 1096
-    },
-    "Item 5PV": {
-        "draft": 3,
-        "pick": 3,
-        "win": 928
-    },
-    "Potion de Glace": {
-        "draft": 1,
-        "pick": 1,
-        "win": 201
+        "draft": 15,
+        "pick": 13,
+        "win": 3539
     },
     "Item 4PV": {
-        "draft": 1,
-        "pick": 1,
-        "win": 228
+        "draft": 21,
+        "pick": 19,
+        "win": 5141
     },
-    "Randotion": {
-        "draft": 2,
-        "pick": 2,
-        "win": 429
+    "Griffes de l'Arracheur": {
+        "draft": 13,
+        "pick": 10,
+        "win": 2397
     },
-    "Anneau de Vie": {
-        "draft": 1,
-        "pick": 1,
-        "win": 228
+    "Main de Midas B": {
+        "draft": 14,
+        "pick": 12,
+        "win": 3530
     },
-    "Treize \u00e0 Seize": {
-        "draft": 3,
-        "pick": 1,
-        "win": 228
+    "Sabre m\u00e9canique": {
+        "draft": 19,
+        "pick": 16,
+        "win": 5078
     },
-    "\u00c9p\u00e9e magique al\u00e9atoire": {
-        "draft": 1,
-        "pick": 0,
-        "win": 0
+    "Parchemin de T\u00e9l\u00e9portation": {
+        "draft": 16,
+        "pick": 13,
+        "win": 3847
     },
-    "Fromage Puant": {
-        "draft": 1,
-        "pick": 1,
-        "win": 123
+    "Bouclier Dragon": {
+        "draft": 13,
+        "pick": 12,
+        "win": 3282
     },
-    "Torche Rose": {
-        "draft": 2,
-        "pick": 0,
-        "win": 0
+    "Anneau Magique": {
+        "draft": 12,
+        "pick": 10,
+        "win": 3228
     },
-    "Gants de combat": {
-        "draft": 1,
-        "pick": 1,
-        "win": 520
+    "Bouclier cass\u00e9": {
+        "draft": 13,
+        "pick": 13,
+        "win": 3588
     },
-    "Couteau Suisse": {
-        "draft": 1,
-        "pick": 0,
-        "win": 0
+    "Corne d'abordage": {
+        "draft": 15,
+        "pick": 15,
+        "win": 4639
     },
-    "Item 6PV": {
-        "draft": 2,
-        "pick": 2,
-        "win": 470
+    "Marteau d'Eternit\u00e9": {
+        "draft": 16,
+        "pick": 16,
+        "win": 5421
     },
-    "Main de Midas": {
-        "draft": 1,
-        "pick": 1,
-        "win": 520
+    "Pelle du Fossoyeur": {
+        "draft": 15,
+        "pick": 6,
+        "win": 1182
     },
-    "Marmite G\u00e9latineuse": {
-        "draft": 1,
-        "pick": 1,
-        "win": 181
-    },
-    "Pierre d'\u00e2me": {
-        "draft": 2,
-        "pick": 2,
-        "win": 441
-    },
-    "Plan presque parfait": {
-        "draft": 1,
-        "pick": 1,
-        "win": 181
-    },
-    "Katana en Mousse": {
-        "draft": 2,
-        "pick": 2,
-        "win": 266
-    },
-    "Fausse couronne": {
-        "draft": 2,
-        "pick": 2,
-        "win": 576
-    },
-    "Couronne d'\u00e9pines": {
-        "draft": 2,
-        "pick": 2,
-        "win": 591
-    },
-    "Livre Sacr\u00e9": {
-        "draft": 1,
-        "pick": 1,
-        "win": 181
-    },
-    "Pioche de diamant": {
-        "draft": 1,
-        "pick": 1,
-        "win": 356
-    },
-    "Arbal\u00e8te trop grosse": {
-        "draft": 1,
-        "pick": 1,
-        "win": 251
+    "Bo\u00eete de Pandore": {
+        "draft": 18,
+        "pick": 14,
+        "win": 3856
     },
     "Cr\u00e2ne du Roi Liche": {
-        "draft": 1,
-        "pick": 1,
-        "win": 299
+        "draft": 15,
+        "pick": 15,
+        "win": 5154
     },
-    "Potion de feu liquide": {
-        "draft": 2,
-        "pick": 1,
-        "win": 356
+    "Patte du RatLiche": {
+        "draft": 18,
+        "pick": 13,
+        "win": 3395
     },
-    "Anneau du Feu": {
-        "draft": 1,
-        "pick": 1,
-        "win": 88
+    "Potion de Glace": {
+        "draft": 15,
+        "pick": 15,
+        "win": 4099
     },
-    "Talisman Incertain": {
-        "draft": 1,
-        "pick": 1,
-        "win": 299
+    "Boomerang Mystique": {
+        "draft": 15,
+        "pick": 10,
+        "win": 2867
     },
-    "Yo-yo protecteur": {
-        "draft": 1,
-        "pick": 1,
-        "win": 111
+    "C\u0153ur de Golem": {
+        "draft": 11,
+        "pick": 11,
+        "win": 3612
+    },
+    "Peigne en or": {
+        "draft": 15,
+        "pick": 14,
+        "win": 3448
+    },
+    "Potion f\u00e9\u00e9rique": {
+        "draft": 15,
+        "pick": 14,
+        "win": 4044
+    },
+    "Champignon V\u00e9n\u00e9neux": {
+        "draft": 19,
+        "pick": 19,
+        "win": 5037
+    },
+    "Perceuse a Breche": {
+        "draft": 20,
+        "pick": 14,
+        "win": 3820
+    },
+    "Fausse couronne": {
+        "draft": 25,
+        "pick": 24,
+        "win": 6577
+    },
+    "Chapelet de Vitalit\u00e9": {
+        "draft": 17,
+        "pick": 11,
+        "win": 3271
+    },
+    "D\u00e9 du Tricheur": {
+        "draft": 18,
+        "pick": 15,
+        "win": 3393
+    },
+    "Livre Sacr\u00e9": {
+        "draft": 15,
+        "pick": 13,
+        "win": 3176
     },
     "Lampe magique": {
-        "draft": 1,
-        "pick": 1,
-        "win": 387
+        "draft": 19,
+        "pick": 17,
+        "win": 4037
+    },
+    "Couronne d'\u00e9pines": {
+        "draft": 21,
+        "pick": 21,
+        "win": 7581
+    },
+    "Casque Plus": {
+        "draft": 17,
+        "pick": 14,
+        "win": 3563
+    },
+    "Potion de Mana": {
+        "draft": 16,
+        "pick": 15,
+        "win": 3923
+    },
+    "Plan presque parfait": {
+        "draft": 11,
+        "pick": 11,
+        "win": 2840
+    },
+    "Bouclier de l'inventeur": {
+        "draft": 9,
+        "pick": 7,
+        "win": 1649
+    },
+    "Epaulette du Bourrin": {
+        "draft": 12,
+        "pick": 12,
+        "win": 4067
+    },
+    "Coquille Salvatrice": {
+        "draft": 14,
+        "pick": 14,
+        "win": 3938
+    },
+    "Fromage Puant": {
+        "draft": 20,
+        "pick": 19,
+        "win": 5872
+    },
+    "Item 3PV 2": {
+        "draft": 21,
+        "pick": 12,
+        "win": 3856
+    },
+    "Caisse enchant\u00e9e": {
+        "draft": 25,
+        "pick": 25,
+        "win": 7213
+    },
+    "Lame de l'Harmonie": {
+        "draft": 14,
+        "pick": 11,
+        "win": 3342
+    },
+    "Queue Du Charognard": {
+        "draft": 15,
+        "pick": 14,
+        "win": 4542
+    },
+    "Potion de feu liquide": {
+        "draft": 18,
+        "pick": 14,
+        "win": 3573
+    },
+    "Couteau Suisse": {
+        "draft": 14,
+        "pick": 9,
+        "win": 2217
+    },
+    "Viande Crue": {
+        "draft": 15,
+        "pick": 7,
+        "win": 1447
+    },
+    "Couronne en Mousse": {
+        "draft": 17,
+        "pick": 17,
+        "win": 5051
+    },
+    "Arbal\u00e8te trop grosse": {
+        "draft": 11,
+        "pick": 10,
+        "win": 2270
+    },
+    "Marmite G\u00e9latineuse": {
+        "draft": 17,
+        "pick": 16,
+        "win": 4340
+    },
+    "Anneau volcanique": {
+        "draft": 18,
+        "pick": 18,
+        "win": 5184
+    },
+    "Randotion": {
+        "draft": 22,
+        "pick": 18,
+        "win": 3897
+    },
+    "Anneau des Squelettes": {
+        "draft": 19,
+        "pick": 13,
+        "win": 3139
+    },
+    "Getas du novice": {
+        "draft": 13,
+        "pick": 12,
+        "win": 3353
+    },
+    "Chapeau du novice": {
+        "draft": 17,
+        "pick": 9,
+        "win": 2595
+    },
+    "Robe de mage": {
+        "draft": 15,
+        "pick": 15,
+        "win": 5354
+    },
+    "Gants de combat": {
+        "draft": 12,
+        "pick": 11,
+        "win": 3124
+    },
+    "Armure Damn\u00e9e": {
+        "draft": 18,
+        "pick": 18,
+        "win": 5020
+    },
+    "Armure d'honneur": {
+        "draft": 16,
+        "pick": 16,
+        "win": 3994
+    },
+    "Seringue du docteur fou": {
+        "draft": 20,
+        "pick": 19,
+        "win": 3980
+    },
+    "Bouclier Golemique": {
+        "draft": 17,
+        "pick": 17,
+        "win": 5334
+    },
+    "Bouclier Magique": {
+        "draft": 13,
+        "pick": 8,
+        "win": 2010
+    },
+    "Barde": {
+        "draft": 26,
+        "pick": 26,
+        "win": 7475
+    },
+    "Elixir de chance": {
+        "draft": 15,
+        "pick": 14,
+        "win": 3571
+    },
+    "C\u0153ur de Dragon": {
+        "draft": 19,
+        "pick": 19,
+        "win": 5574
+    },
+    "Pare-Buffle du Ponceur": {
+        "draft": 16,
+        "pick": 15,
+        "win": 4548
+    },
+    "Coiffe de sorcier": {
+        "draft": 20,
+        "pick": 15,
+        "win": 4111
+    },
+    "Potion d'adr\u00e9naline": {
+        "draft": 19,
+        "pick": 19,
+        "win": 5702
+    },
+    "Anneau de Vie": {
+        "draft": 15,
+        "pick": 15,
+        "win": 4958
+    },
+    "D\u00e9 Maudit": {
+        "draft": 12,
+        "pick": 11,
+        "win": 3115
+    },
+    "Bottes de Vitesse": {
+        "draft": 17,
+        "pick": 15,
+        "win": 4049
+    },
+    "D\u00e9licieuse pizza": {
+        "draft": 13,
+        "pick": 13,
+        "win": 4822
+    },
+    "Lame Draconique": {
+        "draft": 15,
+        "pick": 12,
+        "win": 3413
+    },
+    "Graal en Mousse": {
+        "draft": 14,
+        "pick": 14,
+        "win": 3932
+    },
+    "Pierre d'\u00e2me": {
+        "draft": 14,
+        "pick": 13,
+        "win": 3900
+    },
+    "Tron\u00e7onneuse enflamm\u00e9e": {
+        "draft": 14,
+        "pick": 14,
+        "win": 6381
+    },
+    "Platree de Berniques": {
+        "draft": 17,
+        "pick": 14,
+        "win": 3772
+    },
+    "Anneau des surmulots": {
+        "draft": 19,
+        "pick": 16,
+        "win": 3354
+    },
+    "Esprit du Donjon": {
+        "draft": 21,
+        "pick": 14,
+        "win": 3322
+    },
+    "Chameau": {
+        "draft": 21,
+        "pick": 16,
+        "win": 4854
+    },
+    "Tentacule du Kraken": {
+        "draft": 20,
+        "pick": 16,
+        "win": 5038
+    },
+    "Sceptre actif": {
+        "draft": 13,
+        "pick": 13,
+        "win": 3783
+    },
+    "Fleau des liches": {
+        "draft": 19,
+        "pick": 19,
+        "win": 5353
+    },
+    "Katana": {
+        "draft": 15,
+        "pick": 14,
+        "win": 5256
+    },
+    "Maillet Du Roi Liche": {
+        "draft": 14,
+        "pick": 13,
+        "win": 3271
+    },
+    "\u00c9p\u00e9e magique al\u00e9atoire": {
+        "draft": 16,
+        "pick": 11,
+        "win": 2695
+    },
+    "Torche Bleue": {
+        "draft": 22,
+        "pick": 18,
+        "win": 4652
+    },
+    "Coquillage Magique": {
+        "draft": 19,
+        "pick": 18,
+        "win": 5167
+    },
+    "Osselets de R\u00e9surrection": {
+        "draft": 17,
+        "pick": 4,
+        "win": 616
+    },
+    "Tunique classe": {
+        "draft": 19,
+        "pick": 19,
+        "win": 5514
+    },
+    "Coursier Volant": {
+        "draft": 23,
+        "pick": 12,
+        "win": 2663
+    },
+    "Bo\u00eete \u00e0 butin": {
+        "draft": 20,
+        "pick": 18,
+        "win": 4801
+    },
+    "Marteau de combat": {
+        "draft": 15,
+        "pick": 13,
+        "win": 2946
+    },
+    "Epee mystique": {
+        "draft": 18,
+        "pick": 15,
+        "win": 3519
+    },
+    "Kebab revigorant": {
+        "draft": 19,
+        "pick": 19,
+        "win": 6964
+    },
+    "Gros boulet": {
+        "draft": 16,
+        "pick": 16,
+        "win": 5052
+    },
+    "Calice du Roi Sorcier": {
+        "draft": 19,
+        "pick": 19,
+        "win": 6951
     },
     "G\u00e2teau spatial": {
-        "draft": 1,
-        "pick": 1,
-        "win": 111
+        "draft": 20,
+        "pick": 16,
+        "win": 4077
+    },
+    "Fer a Cheval": {
+        "draft": 15,
+        "pick": 7,
+        "win": 2355
+    },
+    "Anneau du Feu": {
+        "draft": 19,
+        "pick": 16,
+        "win": 4863
+    },
+    "Ankh de r\u00e9incarnation": {
+        "draft": 16,
+        "pick": 16,
+        "win": 4911
+    },
+    "Yo-yo protecteur": {
+        "draft": 12,
+        "pick": 10,
+        "win": 2147
+    },
+    "Item 6PV": {
+        "draft": 15,
+        "pick": 13,
+        "win": 3824
+    },
+    "Canne \u00e0 Chep": {
+        "draft": 12,
+        "pick": 11,
+        "win": 2630
+    },
+    "Couteau Entre Les Dents": {
+        "draft": 15,
+        "pick": 15,
+        "win": 4874
+    },
+    "Glaive d'argent": {
+        "draft": 17,
+        "pick": 15,
+        "win": 3210
+    },
+    "Hache de Glace": {
+        "draft": 17,
+        "pick": 17,
+        "win": 4941
+    },
+    "Masque de la Peste": {
+        "draft": 18,
+        "pick": 18,
+        "win": 5700
+    },
+    "Cape vaudou": {
+        "draft": 18,
+        "pick": 16,
+        "win": 4647
+    },
+    "Masque de l'Inquisiteur": {
+        "draft": 11,
+        "pick": 7,
+        "win": 1925
+    },
+    "Pied de Biche": {
+        "draft": 12,
+        "pick": 11,
+        "win": 2857
+    },
+    "Marteau flamboyant": {
+        "draft": 13,
+        "pick": 11,
+        "win": 3265
+    },
+    "Item 5PV": {
+        "draft": 19,
+        "pick": 18,
+        "win": 4589
+    },
+    "PotionOuPoison": {
+        "draft": 23,
+        "pick": 22,
+        "win": 6158
+    },
+    "Patins \u00e0 Glace": {
+        "draft": 14,
+        "pick": 12,
+        "win": 3176
+    },
+    "Maillet D'Argile": {
+        "draft": 16,
+        "pick": 12,
+        "win": 3068
+    },
+    "Scaphandre": {
+        "draft": 13,
+        "pick": 13,
+        "win": 4230
+    },
+    "Armure Ardente": {
+        "draft": 19,
+        "pick": 18,
+        "win": 5531
+    },
+    "Treize \u00e0 Seize": {
+        "draft": 17,
+        "pick": 12,
+        "win": 2608
+    },
+    "Marteau de Guerre": {
+        "draft": 9,
+        "pick": 9,
+        "win": 2692
+    },
+    "Kit vaudou": {
+        "draft": 13,
+        "pick": 11,
+        "win": 3027
+    },
+    "Coffre anim\u00e9": {
+        "draft": 13,
+        "pick": 11,
+        "win": 2571
+    },
+    "Faux De La Mort": {
+        "draft": 9,
+        "pick": 6,
+        "win": 1561
+    },
+    "Pioche de diamant": {
+        "draft": 14,
+        "pick": 14,
+        "win": 4573
+    },
+    "Main de Midas": {
+        "draft": 20,
+        "pick": 20,
+        "win": 6270
+    },
+    "Enclume instable": {
+        "draft": 15,
+        "pick": 13,
+        "win": 3887
+    },
+    "Fouet du fourbe": {
+        "draft": 14,
+        "pick": 10,
+        "win": 2532
+    },
+    "CasqueBerserk": {
+        "draft": 10,
+        "pick": 10,
+        "win": 2656
+    },
+    "Masque Dragon": {
+        "draft": 15,
+        "pick": 12,
+        "win": 3197
+    },
+    "ItemUseless": {
+        "draft": 14,
+        "pick": 3,
+        "win": 697
+    },
+    "Boulet de Canon": {
+        "draft": 11,
+        "pick": 10,
+        "win": 2789
+    },
+    "Harpe": {
+        "draft": 11,
+        "pick": 5,
+        "win": 1695
+    },
+    "Lunettes du Bricoleur": {
+        "draft": 17,
+        "pick": 8,
+        "win": 2007
+    },
+    "Champ de force en mousse": {
+        "draft": 10,
+        "pick": 10,
+        "win": 2896
+    },
+    "Pistolet Pirate": {
+        "draft": 12,
+        "pick": 8,
+        "win": 2171
+    },
+    "Grimoire Inconnu": {
+        "draft": 14,
+        "pick": 14,
+        "win": 4586
+    },
+    "Pendentif du Novice": {
+        "draft": 16,
+        "pick": 15,
+        "win": 3470
+    },
+    "Parchemin de Bahn": {
+        "draft": 20,
+        "pick": 19,
+        "win": 4776
+    },
+    "Potion draconique": {
+        "draft": 11,
+        "pick": 11,
+        "win": 3659
+    },
+    "Arc enflamm\u00e9": {
+        "draft": 22,
+        "pick": 18,
+        "win": 4967
+    },
+    "Coffre du Roi Sorcier": {
+        "draft": 12,
+        "pick": 10,
+        "win": 2404
+    },
+    "Feuille Eternelle": {
+        "draft": 20,
+        "pick": 20,
+        "win": 6343
+    },
+    "Anneau Plussain": {
+        "draft": 17,
+        "pick": 12,
+        "win": 3224
+    },
+    "Talisman Incertain": {
+        "draft": 11,
+        "pick": 11,
+        "win": 2781
+    },
+    "Dragoune": {
+        "draft": 12,
+        "pick": 12,
+        "win": 3321
+    },
+    "Anneau Oceanique": {
+        "draft": 15,
+        "pick": 10,
+        "win": 2846
+    },
+    "Attrape-R\u00eaves": {
+        "draft": 12,
+        "pick": 7,
+        "win": 1744
+    },
+    "Alliance Sanguine": {
+        "draft": 12,
+        "pick": 5,
+        "win": 1321
+    },
+    "Masque \u00e0 gaz": {
+        "draft": 15,
+        "pick": 15,
+        "win": 4432
+    },
+    "Katana en Mousse": {
+        "draft": 12,
+        "pick": 12,
+        "win": 3635
+    },
+    "Chapeau styl\u00e9": {
+        "draft": 15,
+        "pick": 10,
+        "win": 2745
+    },
+    "Corbeille d'or": {
+        "draft": 12,
+        "pick": 7,
+        "win": 2359
+    },
+    "Item 3PV": {
+        "draft": 11,
+        "pick": 10,
+        "win": 2247
+    },
+    "Valises de Cash": {
+        "draft": 14,
+        "pick": 14,
+        "win": 3557
+    },
+    "Armure du Roi Liche": {
+        "draft": 11,
+        "pick": 10,
+        "win": 2390
     }
 }

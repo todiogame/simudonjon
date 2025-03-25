@@ -94,9 +94,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         if isinstance(carte, CarteEvent):
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
-            for objet in joueur.objets:
-                objet.en_rencontre_event(joueur, carte, Jeu, log_details)
-            
+            for joueur_proprietaire in Jeu.joueurs:
+                for objet in joueur_proprietaire.objets:
+                    objet.en_rencontre_event(joueur_proprietaire, joueur, carte, Jeu, log_details)
             if carte.effet == "HEAL":
                 joueur.pv_total += 3
                 log_details.append(f"{joueur.nom} gagne 3 PV grâce à {carte.titre}. PV restant: {joueur.pv_total}")
@@ -429,10 +429,10 @@ def loguer_x_parties(x=1):
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         a_test = []
-        a_test.append(GriffesDeLArracheur())
-        a_test.append(AnneauDesSquelettes())
+        a_test.append(CapeDePlumes())
+        a_test.append(SetDeCoeurs())
         a_test.append(PateDAnge())
-        a_test.append(PelleDuFossoyeur())
+        a_test.append(PainMaudit())
         joueurs = []
         for i,nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"]):
             objets_joueur = (a_test) if i==0 else []
