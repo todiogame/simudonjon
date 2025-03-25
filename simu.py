@@ -63,7 +63,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         joueur = joueurs[index_joueur]
 
-        log_details.append(f"Tour de {joueur.nom}, {joueur.pv_total}PV {'qui rejoue' if joueur.rejoue else ''}")
+        log_details.append(f"Tour de {joueur.nom}, {joueur.pv_total}PV, {len(joueur.pile_monstres_vaincus)}MV {',qui rejoue' if joueur.rejoue else ''}")
         
         # trigger de debut de tour
         if not joueur.rejoue:
@@ -75,6 +75,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         
         # Le joueur pioche une carte
         carte = donjon.prochaine_carte()
+        if carte is None:
+            log_details.append("Le Donjon est vide. Fin de la partie.")
+            break
 
         joueur.jet_fuite_lance = False
 
@@ -243,6 +246,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     joueur.fuite()
                     donjon.rajoute_en_haut_de_la_pile(carte)
                     joueur.jet_fuite_lance = False
+                    for joueur_proprietaire in Jeu.joueurs:
+                        for objet in joueur_proprietaire.objets:
+                            objet.en_fuite_definitive(joueur_proprietaire, joueur, carte, Jeu, log_details)
                     continue
                 else:
                     # Fuite échouée, affronter le monstre normalement
@@ -418,8 +424,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
 def loguer_x_parties(x=1):
-    seuil_pv_essai_fuite = 6
-    nb_items = 4
+    seuil_pv_essai_fuite = 2
+    nb_items = 5
     for i in range(x):
         
         # Créer une copie de la liste des objets disponibles pour cette simulation
@@ -430,10 +436,10 @@ def loguer_x_parties(x=1):
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         a_test = []
-        a_test.append(PlanPresqueParfait())
+        a_test.append(AraigneeDomestique())
         a_test.append(Katana())
         a_test.append(FruitDuDestin())
-        a_test.append(PainMaudit())
+        a_test.append(ParcheminDePonçage())
         joueurs = []
         for i,nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"]):
             objets_joueur = (a_test) if i==0 else []

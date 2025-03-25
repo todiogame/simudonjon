@@ -52,7 +52,9 @@ class Objet:
         pass
     def mort_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         pass
-    
+    def fuite_definitive_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        pass
+
     def en_subit_dommages(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         if(joueur_proprietaire.dans_le_dj):
@@ -67,6 +69,10 @@ class Objet:
         # attention, check si les items sont intacts
         self.mort_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
         
+    def en_fuite_definitive(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        # attention, check si les items sont intacts
+        self.fuite_definitive_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
+
     def en_rencontre(self, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         self.rencontre_effet(joueur, carte, Jeu, log_details)
@@ -1825,8 +1831,8 @@ class PierreDuNaga(Objet):
 
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if carte.puissance >= 7:
+            log_details.append(f"{self.nom} de {joueur_proprietaire.nom} se declenche car {joueur.nom} a vaincu un monstre de puissance 7 ou plus.")
             self.gagnePV(1, joueur_proprietaire, log_details)
-            log_details.append(f"{joueur_proprietaire.nom} gagne 1 PV grâce à {self.nom} car {joueur.nom} a vaincu un monstre de puissance 7 ou plus.")
 
 class CapeDePlumes(Objet):
     def __init__(self):
@@ -1892,6 +1898,80 @@ class FruitDuDestin(Objet):
             log_details.append(f"{joueur.nom} utilise {self.nom} sur les {chosen_type} pour gagner {nb} PV. ({len(monsters)} monstres et {len(events)} events )")
 
         self.destroy(joueur, Jeu, log_details)
+
+class CocktailMolotov(Objet):
+    def __init__(self):
+        super().__init__("Cocktail Molotov", True)
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # Défaussez sans les jouer 3 cartes du dessus du Donjon.
+        log_details.append(f"{joueur.nom} utilise {self.nom}.")
+        for _ in range(3):
+            if not Jeu.donjon.vide:
+                # Utiliser la méthode 'prochaine_carte()' pour respecter l'ordre mélangé.
+                card = Jeu.donjon.prochaine_carte()
+                remaining = Jeu.donjon.nb_cartes - Jeu.donjon.index
+                if hasattr(card, 'types') and not getattr(card, 'event', False):
+                    joueur.ajouter_monstre_vaincu(card)
+                    log_details.append(f"{card.titre} ajouté à la pile des monstres vaincus. Cartes restantes dans le donjon: {remaining}")
+                else:
+                    Jeu.defausse.append(card)
+                    log_details.append(f"{card.titre} défaussé sans être joué.")
+            else:
+                log_details.append("Le Donjon est vide.")
+                break
+        self.destroy(joueur, Jeu, log_details)
+
+class ParcheminDePonçage(Objet):
+    def __init__(self):
+        super().__init__("Parchemin de ponçage", True, 1)
+    
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (carte.puissance % 2 == 1)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if self.intact:
+            puissance = carte.puissance
+            self.execute(joueur, carte, log_details)
+            for _ in range(puissance):
+                if not Jeu.donjon.vide:
+                    card = Jeu.donjon.prochaine_carte()
+                    Jeu.defausse.append(card)
+                    remaining = Jeu.donjon.nb_cartes - Jeu.donjon.index
+                    log_details.append(f"{card.titre} défaussé. Cartes restantes dans le Donjon: {remaining}")
+                else:
+                    log_details.append("Le Donjon est vide.")
+                    break
+            self.destroy(joueur, Jeu, log_details)
+
+class AraigneeDomestique(Objet):
+    def __init__(self):
+        super().__init__("Araignée domestique", False)
+    
+    def steal_monsters(self,  owner,target, Jeu, log_details):
+        
+        stolen = 0
+        for _ in range(2):
+            if target.pile_monstres_vaincus:
+                monstre = target.pile_monstres_vaincus.pop(0)
+                owner.ajouter_monstre_vaincu(monstre)
+                stolen += 1
+                log_details.append(f"{owner.nom} vole {monstre.titre} dans la pile de {target.nom}.")
+            else:
+                break
+        if stolen == 0:
+            log_details.append(f"{owner.nom} n'a pas pu voler de monstres dans la pile de {target.nom}.")
+        self.destroy(owner, Jeu, log_details)
+
+    def en_mort(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if joueur != joueur_proprietaire and joueur_proprietaire.dans_le_dj:
+            self.steal_monsters(joueur_proprietaire, joueur, Jeu, log_details)
+    
+    def en_fuite_definitive(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if joueur != joueur_proprietaire and joueur_proprietaire.dans_le_dj:
+            self.steal_monsters(joueur_proprietaire, joueur, Jeu, log_details)
 
 
         
@@ -2058,6 +2138,9 @@ objets_disponibles = [
     CapeDePlumes(),
     SetDeCoeurs(),
     FruitDuDestin(),
+    CocktailMolotov(),
+    ParcheminDePonçage(),
+    AraigneeDomestique(),
 ]
 
 
@@ -2225,4 +2308,7 @@ __all__ = [
             "CapeDePlumes",
             "SetDeCoeurs",
             "FruitDuDestin",
+            "CocktailMolotov",
+            "ParcheminDePonçage",
+            "AraigneeDomestique",
         ]
