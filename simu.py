@@ -179,6 +179,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     log_details.append(f"{joueur.nom} a {len(objets_intacts)} objets intacts, il n'en pioche pas.")
 
             # Le joueur rejoue
+            Jeu.defausse.append(carte)
             joueur.rejoue = True
             
         if isinstance(carte, CarteMonstre):
@@ -429,9 +430,9 @@ def loguer_x_parties(x=1):
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         a_test = []
-        a_test.append(CapeDePlumes())
-        a_test.append(SetDeCoeurs())
-        a_test.append(PateDAnge())
+        a_test.append(PlanPresqueParfait())
+        a_test.append(Katana())
+        a_test.append(FruitDuDestin())
         a_test.append(PainMaudit())
         joueurs = []
         for i,nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"]):

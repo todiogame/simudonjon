@@ -626,8 +626,9 @@ class PlanPresqueParfait(Objet):
         super().__init__("Plan presque parfait", False, 3)
     
     def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        Jeu.execute_next_monster = True
-        log_details.append(f"Effet {self.nom} actif: la prochaine carte monstre peut être exécutée. Sauf si...")
+        if joueur_proprietaire == joueur:
+            Jeu.execute_next_monster = True
+            log_details.append(f"Effet {self.nom} actif: la prochaine carte monstre peut être exécutée. Sauf si...")
 
 class GraalEnMousse(Objet):
     def __init__(self):
@@ -1794,17 +1795,17 @@ class PainMaudit(Objet):
             self.gagnePV(4, joueur, log_details)
             demons_dragons = []
             # Chercher dans la défausse
-            for monstre in Jeu.defausse[:]:
-                if "Démon" in monstre.types or "Dragon" in monstre.types:
-                    demons_dragons.append(monstre)
-                    Jeu.defausse.remove(monstre)
+            for card in Jeu.defausse[:]:
+                if hasattr(card, 'types') and ("Démon" in card.types or "Dragon" in card.types):
+                    demons_dragons.append(card)
+                    Jeu.defausse.remove(card)
             
             # Chercher dans les piles de monstres vaincus
             for j in Jeu.joueurs:
-                for monstre in j.pile_monstres_vaincus[:]:
-                    if "Démon" in monstre.types or "Dragon" in monstre.types:
-                        demons_dragons.append(monstre)
-                        j.pile_monstres_vaincus.remove(monstre)
+                for card in j.pile_monstres_vaincus[:]:
+                    if hasattr(card, 'types') and ("Démon" in card.types or "Dragon" in card.types):
+                        demons_dragons.append(card)
+                        j.pile_monstres_vaincus.remove(card)
             
             # Remettre les monstres dans le donjon
             for monstre in demons_dragons:
@@ -1839,11 +1840,11 @@ class CapeDePlumes(Objet):
         reduction = 8
         carte.dommages = max(0, carte.dommages - reduction)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour réduire les dommages de {carte.titre} de {reduction}. Nouveaux dommages: {carte.dommages}.")
-        self.destroy(joueur, Jeu, log_details)  # La cape est détruite après utilisation
+        self.destroy(joueur, Jeu, log_details)  
 
 class SetDeCoeurs(Objet):
     def __init__(self):
-        super().__init__("Set de Cœurs", True)  # True pour actif = oui
+        super().__init__("Set de Cœurs", True)  
     
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= joueur.pv_total and joueur.pv_total < 7 and carte.dommages < 7
@@ -1851,15 +1852,47 @@ class SetDeCoeurs(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         joueur.pv_total = 7
         log_details.append(f"{joueur.nom} utilise {self.nom} pour fixer ses PV à 7.")
-        self.destroy(joueur, Jeu, log_details)  # L'objet est détruit après utilisation
+        self.destroy(joueur, Jeu, log_details) 
 
 class GrelotDuBouffon(Objet):
     def __init__(self):
-        super().__init__("Grelot du Bouffon", False, 1)  # False pour actif = non, et 1 pour le bonus de PV initial
+        super().__init__("Grelot du Bouffon", False, 1)  
     
     def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         self.gagnePV(1, joueur_proprietaire, log_details)
         log_details.append(f"{joueur_proprietaire.nom} gagne 1 PV grâce à {self.nom} car un événement a été pioché.")
+
+class FruitDuDestin(Objet):
+    def __init__(self):
+        super().__init__("Fruit du Destin", True)
+    
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # Séparer les cartes monstres et évènements de la défausse
+        monsters = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
+        events = [c for c in Jeu.defausse if getattr(c, 'event', False)]
+        
+        if not (monsters or events):
+            log_details.append(f"{self.nom} n'a aucun effet : aucune carte monstre ou évènement en défausse.")
+        else:
+            # Choisir le type de carte à défausser
+            if len(monsters) >= len(events):
+                chosen_cards = monsters
+                chosen_type = "monstre"
+            else:
+                chosen_cards = events
+                chosen_type = "évènement"
+            
+            nb = len(chosen_cards)
+
+            
+            self.gagnePV(nb, joueur, log_details)
+            log_details.append(f"{joueur.nom} utilise {self.nom} sur les {chosen_type} pour gagner {nb} PV. ({len(monsters)} monstres et {len(events)} events )")
+
+        self.destroy(joueur, Jeu, log_details)
+
 
         
 # Liste des objets
@@ -2024,6 +2057,7 @@ objets_disponibles = [
     PierreDuNaga(),
     CapeDePlumes(),
     SetDeCoeurs(),
+    FruitDuDestin(),
 ]
 
 
@@ -2190,4 +2224,5 @@ __all__ = [
             "PierreDuNaga",
             "CapeDePlumes",
             "SetDeCoeurs",
+            "FruitDuDestin",
         ]
