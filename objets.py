@@ -204,6 +204,7 @@ class HacheExecution(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
+        # self discard ?
 
 class MarteauDeGuerre(Objet):
     def __init__(self):
@@ -419,7 +420,7 @@ class PiocheDeDiamant(Objet):
     def __init__(self):
         super().__init__("Pioche de diamant", True)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and carte.puissance % 2 == 1
+        return not Jeu.traquenard_actif and carte.puissance <= 5
     def worthit(self, joueur, carte, Jeu, log_details):
         return "Golem" in carte.types or carte.dommages >= (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -640,11 +641,10 @@ class GraalEnMousse(Objet):
     def __init__(self):
         super().__init__("Graal en Mousse", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance % 2 == 0 and not Jeu.traquenard_actif and len(joueur.pile_monstres_vaincus) < 7
+        return ((carte.puissance == 0 or carte.puissance == 2 or carte.puissance == 4 or carte.puissance == 6 ) and not Jeu.traquenard_actif)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7 and joueur_proprietaire == joueur and self.intact:
+        if len(joueur.pile_monstres_vaincus) >= 5 and self.intact:
             self.destroy(joueur, Jeu, log_details)
 
 class ItemUseless(Objet):
@@ -757,15 +757,14 @@ class ChampDeForceEnMousse(Objet):
     def __init__(self):
         super().__init__("Champ de force en mousse", True)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and len(joueur.pile_monstres_vaincus) < 7
+        return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_cf = joueur.rollDice(Jeu, log_details, 5)
         if jet_cf >= 5:
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"{joueur.nom} utilise {self.nom}... raté !")
-    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact and joueur_proprietaire == joueur:
+        if len(joueur.pile_monstres_vaincus) >= 5 and self.intact:
             self.destroy(joueur, Jeu, log_details)
 
 class BoiteDePandore(Objet):
@@ -787,11 +786,25 @@ class TorcheBleue(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
+class TorcheEnMousse(Objet):
+    def __init__(self):
+        super().__init__("Torche En Mousse", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance <= 3 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        if len(joueur.pile_monstres_vaincus) >= 5 and self.intact:
+            self.destroy(joueur, Jeu, log_details)
+            
 class AnneauPlussain(Objet):
     def __init__(self):
         super().__init__("Anneau Plussain", False, 1, 1)
     def score_effet(self, joueur, log_details):
         self.scoreChange(1,joueur,log_details)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == 1 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
         
 class GetasDuNovice(Objet):
     def __init__(self):
@@ -1032,6 +1045,7 @@ class PendentifDuNovice(Objet):
         return not Jeu.traquenard_actif and "Gobelin" in carte.types and not joueur.medailles
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
+        self.gagnePV(1, joueur, log_details)
       
 class PistoletPirate(Objet):
     def __init__(self):
@@ -1073,7 +1087,7 @@ class CorneDAbordage(Objet):
     def debut_tour(self, joueur, Jeu, log_details):
         autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
 
-        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj) and joueur.pv_total>1:
+        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj) and joueur.pv_total>2:
             log_details.append(f"{joueur.nom} utilise {self.nom}")
             for autre_joueur in autres_joueurs_dans_le_dj:
                 if autre_joueur.pile_monstres_vaincus:
@@ -1081,7 +1095,7 @@ class CorneDAbordage(Objet):
                     autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
                     joueur.ajouter_monstre_vaincu(monstre_volee)
                     log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}")
-            self.perdPV(1, joueur, log_details)
+            self.perdPV(2, joueur, log_details)
             self.destroy(joueur, Jeu, log_details)
 
 class SceptreActif(Objet):
@@ -1161,21 +1175,18 @@ class CouronneEnMousse(Objet):
     def __init__(self):
         super().__init__("Couronne en Mousse", False)
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) < 7:
-            self.reduc_damage(2, joueur, carte, log_details)
-    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact and joueur_proprietaire == joueur:
+        self.reduc_damage(2, joueur, carte, log_details)    
+        if len(joueur.pile_monstres_vaincus) >= 5 and self.intact:
             self.destroy(joueur, Jeu, log_details)
 
 class KatanaEnMousse(Objet):
     def __init__(self):
         super().__init__("Katana en Mousse", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance >= 7 and not Jeu.traquenard_actif and len(joueur.pile_monstres_vaincus) < 7
+        return carte.puissance >= 7 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus) >= 7 and self.intact and joueur_proprietaire == joueur:
+        if len(joueur.pile_monstres_vaincus) >= 5 and self.intact:
             self.destroy(joueur, Jeu, log_details)
 
 class MarteauFlamboyant(Objet):
@@ -1239,13 +1250,13 @@ class DelicieusePizza(Objet):
 class BoiteAButin(Objet):
     def __init__(self):
         super().__init__("Boîte à butin", False)
-    def fin_tour(self, joueur, Jeu, log_details):
-        monstres_ajoutes = joueur.monstres_ajoutes_ce_tour
-        log_details.append(f"{joueur.nom} a grinde {joueur.monstres_ajoutes_ce_tour} monstre(s) ce tour et utilise {self.nom} autant de fois. ")
-        for _ in range(monstres_ajoutes):
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and joueur_proprietaire.dans_le_dj and joueur_proprietaire == joueur:
             jet_boite = joueur.rollDice(Jeu, log_details, 6)
             if jet_boite == 6:
                 self.piocheItem(joueur, Jeu, log_details)
+                self.piocheItem(joueur, Jeu, log_details)
+                self.destroy(joueur, Jeu, log_details)
 
 class PlatreeDeBerniques(Objet):
     def __init__(self):
@@ -1446,7 +1457,7 @@ class CanneAChep(Objet):
         self.utiliser(joueur, Jeu, log_details)
         self.destroy(joueur, Jeu, log_details)
     def utiliser(self, joueur, Jeu, log_details):
-            self.gagnePV(3, joueur, log_details)
+            self.gagnePV(4, joueur, log_details)
             for autre_joueur in Jeu.joueurs:
                 if not autre_joueur.vivant:
                     objets_intacts = [objet for objet in autre_joueur.objets if objet.intact]
@@ -1633,7 +1644,7 @@ class TentaculeDuKraken(Objet):
 
 class CorbeilleDOr(Objet):
     def __init__(self):
-        super().__init__("Corbeille d'or", False, 0, -1)
+        super().__init__("Corbeille d'or", False, 1, 0)
     def score_effet(self, joueur, log_details):
         objets_brises = sum(1 for objet in joueur.objets if not objet.intact)
         self.scoreChange(objets_brises, joueur, log_details)
@@ -1674,6 +1685,7 @@ class DeMaudit(Objet):
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"rate !")
+#pelle outdated            
 class PelleDuFossoyeur(Objet):
     def __init__(self):
         super().__init__("Pelle du Fossoyeur", False)
@@ -1740,7 +1752,7 @@ class BouclierMagique(Objet):
     def __init__(self):
         super().__init__("Bouclier Magique", False, 3)
     def rules(self, joueur, carte, Jeu, log_details):
-        len(joueur.pile_monstres_vaincus) <= 5
+        len(joueur.pile_monstres_vaincus) >= 7
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.reduc_damage(4, joueur, carte, log_details)        
 
@@ -1753,7 +1765,7 @@ class ViandeCrue(Objet):
         if any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus):    
             self.gagnePV(8, joueur, log_details)
         else:
-            self.gagnePV(2, joueur, log_details)
+            self.gagnePV(3, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)    
         
     
@@ -1761,7 +1773,7 @@ class MailletDuRoiLiche(Objet):
     def __init__(self):
         super().__init__("Maillet Du Roi Liche", True)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and ("Golem" in carte.types or "Lich" in carte.types or "Demon" in carte.types)
+        return not Jeu.traquenard_actif and ("Golem" in carte.types or "Lich" in carte.types or "Démon" in carte.types)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         self.gagnePV(3, joueur, log_details)
@@ -1775,19 +1787,6 @@ class CouteauEntreLesDents(Objet):
         return ("Vampire" in carte.types or "Orc" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-
-class CoursierVolant(Objet):
-    def __init__(self):
-        super().__init__("Coursier Volant", True)
-    def rules(self, joueur, carte, Jeu, log_details):
-        len(joueur.pile_monstres_vaincus) >= 4
-    def combat_effet(self, joueur, Jeu, log_details):
-        if self.intact:
-            nombre_pioche = len(joueur.pile_monstres_vaincus) // 4
-            for _ in range(nombre_pioche):
-                self.piocheItem(joueur, Jeu, log_details)
-            self.destroy(joueur, Jeu, log_details)
-        
 
 class PainMaudit(Objet):
     def __init__(self):
@@ -1964,7 +1963,7 @@ class AraigneeDomestique(Objet):
         if stolen == 0:
             log_details.append(f"{owner.nom} n'a pas pu voler de monstres dans la pile de {target.nom}.")
         self.destroy(owner, Jeu, log_details)
-
+# attention l'araignee n'est pas a jour. elle vole tous les joueurs au lieu de juste le premier
     def en_mort(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         if joueur != joueur_proprietaire and joueur_proprietaire.dans_le_dj:
             self.steal_monsters(joueur_proprietaire, joueur, Jeu, log_details)
@@ -1974,6 +1973,29 @@ class AraigneeDomestique(Objet):
             self.steal_monsters(joueur_proprietaire, joueur, Jeu, log_details)
 
 
+class Exterminator(Objet):
+    def __init__(self):
+        super().__init__("Exterminator", False, 0, -2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return ("Dragon" in carte.types or "Rat" in carte.types) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class CodexDiabolus(Objet):
+    def __init__(self):
+        super().__init__("Codex Diabolus", False, 0, -2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return ("Vampire" in carte.types or "Démon" in carte.types) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class LanceDuDestin(Objet):
+    def __init__(self):
+        super().__init__("LanceDuDestin", False, 0, 0)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (carte.puissance == 6 or carte.puissance == 8 or carte.puissance == 10) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
         
 # Liste des objets
 objets_disponibles = [ 
@@ -2128,7 +2150,6 @@ objets_disponibles = [
     ViandeCrue(),
     MailletDuRoiLiche(),
     CouteauEntreLesDents(),
-    CoursierVolant(),
     GriffesDeLArracheur(),
     AnneauDesSquelettes(),
     PateDAnge(),
@@ -2141,6 +2162,10 @@ objets_disponibles = [
     CocktailMolotov(),
     ParcheminDePonçage(),
     AraigneeDomestique(),
+    Exterminator(),
+    CodexDiabolus(),
+    LanceDuDestin(),
+    TorcheEnMousse(),
 ]
 
 
@@ -2298,7 +2323,6 @@ __all__ = [
             "ViandeCrue",
             "MailletDuRoiLiche",
             "CouteauEntreLesDents",
-            "CoursierVolant",
             "GriffesDeLArracheur",
             "AnneauDesSquelettes",
             "PateDAnge",
@@ -2311,4 +2335,8 @@ __all__ = [
             "CocktailMolotov",
             "ParcheminDePonçage",
             "AraigneeDomestique",
+            "Exterminator",
+            "CodexDiabolus",
+            "LanceDuDestin",
+            "TorcheEnMousse",
         ]
