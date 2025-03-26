@@ -204,8 +204,10 @@ class HacheExecution(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
-        # self discard ?
-
+        for obj in joueur.objets:
+            if obj.nom == self.nom:
+                joueur.objets.remove(obj)
+                break
 class MarteauDeGuerre(Objet):
     def __init__(self):
         super().__init__("Marteau de Guerre",False, 0, -1)
@@ -1652,10 +1654,16 @@ class CorbeilleDOr(Objet):
 class OsseletsDeResurrection(Objet):
     def __init__(self):
         super().__init__("Osselets de Résurrection", False, 0)
-    def survie_effet(self, joueur, carte, Jeu, log_details):
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    # def survie_effet(self, joueur, carte, Jeu, log_details):
+    #     if joueur.pv_total >= 3:
+    #         self.survit(1, joueur, carte, log_details)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
         if joueur.pv_total >= 3:
+            carte.executed = True
             self.survit(1, joueur, carte, log_details)
-
+            
 class LunettesDuBricoleur(Objet):
     def __init__(self):
         super().__init__("Lunettes du Bricoleur", False, 2)
@@ -1720,6 +1728,7 @@ class AnneauDesSquelettes(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if ("Squelette" in carte.types and not Jeu.traquenard_actif):
             self.execute(joueur, carte, log_details)
+            self.gagnePV(1, joueur, log_details)
 
         if "Démon" in carte.types:
             self.reduc_damage(4, joueur, carte, log_details)
@@ -2166,6 +2175,7 @@ objets_disponibles = [
     CodexDiabolus(),
     LanceDuDestin(),
     TorcheEnMousse(),
+    GrelotDuBouffon(),
 ]
 
 
@@ -2339,4 +2349,5 @@ __all__ = [
             "CodexDiabolus",
             "LanceDuDestin",
             "TorcheEnMousse",
+            "GrelotDuBouffon",
         ]
