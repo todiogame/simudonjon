@@ -6,13 +6,14 @@ from tqdm import tqdm
 import numpy as np
 from simu import   loguer_x_parties, ordonnanceur
 from objets import *
-from perso import Joueur
+from joueurs import Joueur
 from monstres import DonjonDeck
 import copy
 import itertools
 import json
 import shutil
 import sys
+from personnages import persos_disponibles
 
 # Nombre de simulations souhaitées
 total_simulations = 150000
@@ -41,14 +42,26 @@ def display_simu(r=0):
             o.repare()
             o.priorite = min(100, max(0, priorites_objets.get(o.nom, 49.5) + random.uniform(-20, 20)))
 
-        # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
-        joueurs = []
-        nb_joueurs = random.choice([3, 4])
-        for nom in ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]:
-            objets_joueur = random.sample(objets_disponibles_simu, 6)
-            for objet in objets_joueur:
-                objets_disponibles_simu.remove(objet)
-            joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
+        # Initialisation des joueurs avec des perso aléatoires 
+    joueurs = []
+    nb_joueurs = random.choice([3, 4]) # Ou 4 pour loguer_x_parties
+    player_base_names = ["Sagarex", "Francis", "Mastho", "Mr.Adam"]
+    player_names = player_base_names[:nb_joueurs]
+
+    # Assigner une instance unique et aléatoire de Perso
+    personnages_assigner = random.sample(persos_disponibles, nb_joueurs) 
+
+    for i, nom_base in enumerate(player_names):
+        objets_joueur = random.sample(objets_disponibles_simu, 6)
+        for objet in objets_joueur:
+            objets_disponibles_simu.remove(objet)
+
+        # Récupérer l'instance Perso assignée
+        perso_instance = personnages_assigner[i]
+
+        # Créer le Joueur en passant l'instance Perso
+        joueur_cree = Joueur(nom_base, perso_instance, objets_joueur) # Le constructeur Joueur prend l'instance
+        joueurs.append(joueur_cree)
 
         # Création de la copie des joueurs et des cartes
         deck = DonjonDeck()

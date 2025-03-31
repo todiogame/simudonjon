@@ -1,7 +1,7 @@
 import random
 from tqdm import tqdm
 from objets import *
-from perso import Joueur
+from joueurs import Joueur
 from simu import   loguer_x_parties, ordonnanceur
 from monstres import DonjonDeck
 import json

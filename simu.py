@@ -1,10 +1,10 @@
 import random
 import numpy as np
 from objets import *
-from perso import Joueur
+from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
-
-
+from personnages import *
+from personnages import persos_disponibles
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     # arreter la simulation si on a un objet casse dans une main
     for j in joueurs:
@@ -63,10 +63,12 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         joueur = joueurs[index_joueur]
 
-        log_details.append(f"Tour de {joueur.nom}, {joueur.pv_total}PV, {len(joueur.pile_monstres_vaincus)}MV {',qui rejoue' if joueur.rejoue else ''}")
+        log_details.append(f"Tour de {joueur.nom} ({joueur.perso_obj.nom}), {joueur.pv_total}PV, {len(joueur.pile_monstres_vaincus)}MV {',qui rejoue' if joueur.rejoue else ''}")
         
         # trigger de debut de tour
         if not joueur.rejoue:
+            if hasattr(joueur, 'perso_obj'):
+                joueur.perso_obj.debut_tour(joueur, Jeu, log_details)
             for objet in joueur.objets:
                 objet.debut_tour(joueur, Jeu, log_details)
         for j in joueurs:
@@ -95,7 +97,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
 
-        log_details.append(f"tour {Jeu.tour}. A pioché {carte.titre}.")
+        log_details.append(f"tour {joueur.tour}. A pioché {carte.titre}.")
         if isinstance(carte, CarteEvent):
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
@@ -426,39 +428,111 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
 def loguer_x_parties(x=1):
-    seuil_pv_essai_fuite = 2
-    nb_items = 5
+    # Constantes pour cette fonction de test/log
+    seuil_pv_essai_fuite = 6 # Cohérent avec prio.py/donjon.py
+    nb_items_par_joueur = 5 # Nombre d'items pour les joueurs non-test
+    nb_joueurs_total = 4    # On garde 4 joueurs pour ce mode log
+    nom_joueur_test = "Sagarex"
+    perso_test = Princesse() # Personnage spécifique pour Sagarex
+    noms_joueurs_base = ["Sagarex", "Francis", "Mastho", "Mr.Adam", "Diouze", "Nicoco"]
+
+    # Liste des objets spécifiques pour le joueur de test
+    # IMPORTANT: Assure-toi que ces classes existent bien dans objets.py
+    noms_objets_test = [
+        "Concentré de fun",
+        "Bouillon d'âmes",
+        "Cape de Plumes",
+        "Aspis d'Héraclès",
+        "Pelle du Fossoyeur"
+    ]
+
     for i in range(x):
-        
-        # Créer une copie de la liste des objets disponibles pour cette simulation
-        objets_disponibles_simu = list(objets_disponibles)
-        # Reparer tous les objets
-        for o in objets_disponibles_simu:
-            o.repare()
+        print(f"\n--- Partie Test Log {i+1} ---")
 
-        # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
-        a_test = []
-        a_test.append(ConcentreDeFun())
-        a_test.append(BouillonDAmes())
-        a_test.append(CapeDePlumes())
-        a_test.append(AspisHeracles())
-        a_test.append(PelleDuFossoyeur())
+        # Préparer les objets disponibles pour cette partie
+        objets_pool_global = list(objets_disponibles) # Copie de la liste globale
+        objets_disponibles_partie = []
+        objets_test_instances = []
+
+        # Extraire les objets de test et créer la liste des objets restants
+        for objet_global in objets_pool_global:
+            objet_global.repare() # Réparer tous les objets de la copie
+            if objet_global.nom in noms_objets_test:
+                objets_test_instances.append(objet_global)
+            else:
+                objets_disponibles_partie.append(objet_global)
+
+        # Vérifier si on a trouvé tous les objets de test
+        if len(objets_test_instances) != len(noms_objets_test):
+            print(f"ERREUR: Impossible de trouver tous les objets de test requis.")
+            print(f"  Requis: {noms_objets_test}")
+            print(f"  Trouvés: {[o.nom for o in objets_test_instances]}")
+            continue # Passer à la prochaine partie de log
+
+        # Préparer les personnages
         joueurs = []
-        for i,nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"]):
-            objets_joueur = (a_test) if i==0 else []
-            random_sample = random.sample(objets_disponibles_simu, nb_items - len(a_test) if i==0 else nb_items)
-            for objet in random_sample:
-                objets_disponibles_simu.remove(objet)
-            objets_joueur += random_sample
-            joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
+        noms_joueurs = noms_joueurs_base[:nb_joueurs_total]
 
+        # Assigner les personnages
+        persos_assigner = []
+        # Exclure le perso de test de la liste pour l'assignation aléatoire
+        autres_persos_pool = [p for p in persos_disponibles if p.nom != perso_test.nom]
+        if len(autres_persos_pool) < nb_joueurs_total - 1:
+             print(f"ERREUR: Pas assez de personnages disponibles ({len(autres_persos_pool)}) pour les autres joueurs.")
+             continue
+
+        persos_autres_assignes = random.sample(autres_persos_pool, nb_joueurs_total - 1)
+
+        # Créer la liste ordonnée des persos pour chaque joueur
+        perso_map = {}
+        perso_map[nom_joueur_test] = perso_test
+        idx_autres = 0
+        for nom in noms_joueurs:
+            if nom != nom_joueur_test:
+                perso_map[nom] = persos_autres_assignes[idx_autres]
+                idx_autres += 1
+
+        # Créer les joueurs
+        for nom_joueur in noms_joueurs:
+            perso_instance = perso_map[nom_joueur]
+            objets_joueur = []
+
+            if nom_joueur == nom_joueur_test:
+                objets_joueur = objets_test_instances[:] # Utiliser les objets de test
+            else:
+                # Assigner des objets aléatoires aux autres
+                if len(objets_disponibles_partie) < nb_items_par_joueur:
+                    print(f"ERREUR: Pas assez d'objets disponibles ({len(objets_disponibles_partie)}) pour {nom_joueur}.")
+                    # Gérer l'erreur - ici on saute la partie
+                    break # Sortir de la boucle de création joueur
+                objets_joueur = random.sample(objets_disponibles_partie, nb_items_par_joueur)
+                # Retirer les objets assignés du pool pour éviter duplicats
+                for obj in objets_joueur:
+                    objets_disponibles_partie.remove(obj)
+
+            # Si on n'a pas pu assigner d'objets à un joueur non-test, on arrête
+            if nom_joueur != nom_joueur_test and not objets_joueur:
+                 joueurs = [] # Vider la liste pour indiquer l'échec
+                 break
+
+            # Créer l'instance Joueur
+            joueur_cree = Joueur(nom_joueur, perso_instance, objets_joueur)
+            joueurs.append(joueur_cree)
+
+        # Vérifier si la création a échoué
+        if len(joueurs) != nb_joueurs_total:
+             print("Échec de la création des joueurs pour cette partie.")
+             continue # Passer à la partie suivante
+
+        # Logs initiaux
         for j in joueurs:
-            print(f"Initialisation de {j.nom} avec {j.pv_base} PV de base et les objets spécifiés")
-            print(f"Objets : {[objet.nom for objet in j.objets]}")
-            
-        print(f"Seuil de PV pour tenter la fuite : {seuil_pv_essai_fuite}\n")
-        # Réparer tous les objets avant chaque partie
-        deck = DonjonDeck()
-        print(f"\n--- Partie {i+1} ---")
-        ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_simu, True)
+            # Le log détaillé est déjà dans Joueur.__init__
+            print(f"  -> {j.nom} ({j.personnage_nom}) commence avec {j.pv_total} PV.")
+            print(f"     Objets: {[o.nom for o in j.objets]}")
 
+        print(f"Seuil de PV pour tenter la fuite : {seuil_pv_essai_fuite}\n")
+
+        # Lancer la simulation
+        deck = DonjonDeck()
+        # Les objets restants dans objets_disponibles_partie sont passés à l'ordonnanceur
+        ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_partie, True) # log=True

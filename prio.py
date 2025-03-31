@@ -6,7 +6,7 @@ from tqdm import tqdm
 import numpy as np
 from simu import   loguer_x_parties, ordonnanceur
 from objets import *
-from perso import Joueur
+from joueurs import Joueur
 from monstres import DonjonDeck
 import copy
 import itertools
