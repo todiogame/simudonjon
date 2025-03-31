@@ -187,11 +187,43 @@ class ChevalierDragon(Perso):
             # Utilise la méthode executeEtDefausse héritée de Perso
             self.executeEtDefausse(joueur, carte, Jeu, log_details)
             
+class PersoUseless2PV(Perso):
+    def __init__(self):
+        # Le PV de base (5) est géré par la classe Joueur
+        super().__init__("Perso Useless 2PV", 2)
+        
+class Tricheur(Perso):
+    def __init__(self):
+        super().__init__("Tricheur", 3)
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(1,joueur,log_details)
+        
+class DocteurDePeste(Perso):
+    def __init__(self):
+        super().__init__(nom="DocteurDePeste", pv_bonus=2)
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        if "Rat" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
+            # Utilise la méthode executeEtDefausse héritée de Perso
+            self.executeEtDefausse(joueur, carte, Jeu, log_details)
+            
+class RoiSorcier(Perso):
+    def __init__(self):
+        super().__init__("Roi Sorcier", False)
+        
+    def subit_dommages_effet(self,joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if carte.dommages >= 4 and joueur.nom != joueur_proprietaire.nom:
+            self.gagnePV(1, joueur_proprietaire, log_details)
+            
 persos_disponibles=[
     Ninja(),
     Princesse(),
     MercenaireOrc(),
     ChevalierDragon(), # Ajouté
+    PersoUseless2PV(),
+    Tricheur(),
+    DocteurDePeste(),
+    RoiSorcier()
 ]
 
 __all__=[
@@ -199,4 +231,8 @@ __all__=[
     "Princesse",
     "MercenaireOrc",
     "ChevalierDragon", # Ajouté
+    "PersoUseless2PV",
+    "Tricheur",
+    "DocteurDePeste",
+    "RoiSorcier"
 ]

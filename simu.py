@@ -266,6 +266,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 log_details.append(f"L'effet Exécute le prochain monstre est utilisé sur {carte.titre}.")
             else:
                 #use items
+                joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
                 for objet in joueur.objets:
                     objet.en_combat(joueur, carte, Jeu, log_details)
                     if carte.executed or (carte.dommages <= 0 and not carte.effet == "LIMON") or joueur.fuite_reussie:
@@ -299,6 +300,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
                 
                 for joueur_proprietaire in Jeu.joueurs:
+                    joueur_proprietaire.perso_obj.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
                     for objet in joueur_proprietaire.objets:
                         objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
                         
