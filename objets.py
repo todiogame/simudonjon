@@ -304,11 +304,11 @@ class CaisseEnchantee(Objet):
     def __init__(self):
         super().__init__("Caisse enchantée", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance <= 6 and not Jeu.traquenard_actif
+        return carte.puissance < 6 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_caisse = joueur.rollDice(Jeu, log_details, carte.puissance+1)
         log_details.append(f"{joueur.nom} utilise Caisse enchantée sur {carte.titre}, jet de {jet_caisse}")
-        if jet_caisse >= carte.puissance:
+        if jet_caisse > carte.puissance:
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"Pas assez !")
@@ -1693,19 +1693,74 @@ class DeMaudit(Objet):
             self.execute(joueur, carte, log_details)
         else:
             log_details.append(f"rate !")
-#pelle outdated            
+
 class PelleDuFossoyeur(Objet):
     def __init__(self):
-        super().__init__("Pelle du Fossoyeur", False)
-    
-    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if self.intact and carte in Jeu.defausse:
-            jet = joueur_proprietaire.rollDice(Jeu, log_details)
-            if jet >= 4:
-                joueur_proprietaire.ajouter_monstre_vaincu(carte)
-                Jeu.defausse.remove(carte)
-                log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour ajouter {carte.titre} à sa pile de monstres vaincus après un jet de {jet}.")
+        super().__init__("Pelle du Fossoyeur", True)
 
+    # Helper method containing the core logic
+    def _activer_pelle(self, joueur, Jeu, log_details):
+        # Identify monsters in discard
+        monstres_defausse = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
+
+        # Activation Log
+        log_details.append(f"{joueur.nom} utilise {self.nom}")
+
+        # Prioritized Selection (exactly 4)
+        golem_or_dispo = []
+        dragons_dispo = []
+        autres_dispo = []
+        for monstre in monstres_defausse:
+            # ... (sorting logic as before) ...
+            if getattr(monstre, 'effet', None) == "GOLD":
+                golem_or_dispo.append(monstre)
+            elif "Dragon" in getattr(monstre, 'types', []):
+                dragons_dispo.append(monstre)
+            else:
+                autres_dispo.append(monstre)
+
+        monstres_choisis = []
+        MAX_CHOIX = 4 # Should always be 4 now
+
+        if golem_or_dispo:
+            monstres_choisis.append(golem_or_dispo[0])
+        random.shuffle(dragons_dispo)
+        while len(monstres_choisis) < MAX_CHOIX and dragons_dispo:
+            monstres_choisis.append(dragons_dispo.pop())
+        random.shuffle(autres_dispo)
+        while len(monstres_choisis) < MAX_CHOIX and autres_dispo:
+            monstres_choisis.append(autres_dispo.pop())
+
+        # Log chosen monsters
+        noms_choisis = [m.titre for m in monstres_choisis]
+        log_details.append(f"--> Récupère {len(monstres_choisis)} monstres (priorité GolemOr>Dragon>Autre): {noms_choisis}")
+
+        # Remove from discard
+        ids_choisis = {id(m) for m in monstres_choisis}
+        Jeu.defausse = [c for c in Jeu.defausse if id(c) not in ids_choisis]
+
+        # Add to player's victory pile
+        for monstre in monstres_choisis:
+            joueur.ajouter_monstre_vaincu(monstre)
+
+        # Destroy the item
+        self.destroy(joueur, Jeu, log_details)
+        return True # Indicate successful activation
+
+    # Trigger 1: Fin de tour
+    def fin_tour(self, joueur, Jeu, log_details):
+        monstres_defausse = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
+
+        if self.intact and len(monstres_defausse) >= 4:
+            self._activer_pelle(joueur, Jeu, log_details)
+
+    # Trigger 2: Fuite définitive
+    def fuite_definitive_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+            # Check if intact and if the owner is the one fleeing
+            if self.intact and joueur_proprietaire == joueur:
+                self._activer_pelle(joueur, Jeu, log_details)
+                
+                
 class PateDAnge(Objet):
     def __init__(self):
         super().__init__("Pâté d'Ange", True)
@@ -2006,6 +2061,94 @@ class LanceDuDestin(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         
+class AspisHeracles(Objet):
+    def __init__(self):
+        super().__init__("Aspis d'Héraclès", True) # True car c'est un objet Actif
+
+    def rules(self, joueur, carte, Jeu, log_details):
+        # On ne peut pas l'utiliser si Traquenard est actif
+        return not Jeu.traquenard_actif
+
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # Logique simple pour décider quand l'utiliser (peut être affinée)
+        # Par exemple, si le monstre fait beaucoup de dégâts ou est puissant
+        return carte.dommages > (joueur.pv_total / 2) or carte.puissance >= 6
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        puissance_monstre = carte.puissance # Sauvegarder la puissance avant défausse
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        if puissance_monstre >= 7:
+            self.gagnePV(3, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details) # Se détruit après utilisation
+        
+class BouillonDAmes(Objet):
+    def __init__(self):
+        super().__init__("Bouillon d'âmes", True)
+
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # Heuristique simple pour l'IA
+        return carte.dommages > (joueur.pv_total / 2) or carte.puissance >= 6
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+
+        # Identifier les monstres en défausse (comme FruitDuDestin)
+        monstres_a_remettre = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
+
+        if monstres_a_remettre:
+            # Les retirer de la défausse
+            Jeu.defausse = [c for c in Jeu.defausse if not (hasattr(c, 'types') and not getattr(c, 'event', False))]
+
+            # Log amélioré avec la liste des noms
+            noms_monstres = [m.titre for m in monstres_a_remettre]
+            log_details.append(f"{joueur.nom} utilise {self.nom}. Remet {len(monstres_a_remettre)} monstres dans le Donjon et mélange.")
+            log_details.append(f"--> Monstres remis: {noms_monstres}") # Log ajouté
+
+            # Les remettre dans le pool du Donjon (comme EspritDuDonjon)
+            for monstre in monstres_a_remettre:
+                Jeu.donjon.ajouter_monstre(monstre) # Ajoute l'index à la fin de self.ordre
+
+            # Mélanger le deck restant (comme EspritDuDonjon / Soulstorm)
+            Jeu.donjon.remelange() # Mélange les cartes restantes à partir de l'index actuel
+
+        else:
+            log_details.append(f"{joueur.nom} utilise {self.nom}, mais la défausse ne contient aucun monstre.")
+
+        self.destroy(joueur, Jeu, log_details)        
+
+
+class ConcentreDeFun(Objet):
+    def __init__(self):
+        super().__init__("Concentré de fun", True)
+
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        # ordonnanceur calls this when joueur.pv_total <= 0
+        # Set PV to base hero PV
+        self.survit(joueur.pv_base, joueur, carte, log_details)
+
+        # Check for Traquenard in discard
+        traquenard_card = None
+        for c in Jeu.defausse:
+            # Check if it's an event card with the correct title
+            if getattr(c, 'event', False) and getattr(c, 'titre', None) == "Traquenard":
+                traquenard_card = c
+                break # Found it
+
+        if traquenard_card:
+            try:
+                Jeu.defausse.remove(traquenard_card)
+                Jeu.donjon.rajoute_en_haut_de_la_pile(traquenard_card)
+                log_details.append(f"La carte Traquenard est retirée de la défausse et remise sur le Donjon.")
+            except ValueError:
+                # Should not happen if found, but good practice
+                log_details.append(f"Erreur: Impossible de retirer Traquenard de la défausse.")
+
+
+        self.destroy(joueur, Jeu, log_details) # Destroy after use
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -2176,6 +2319,9 @@ objets_disponibles = [
     LanceDuDestin(),
     TorcheEnMousse(),
     GrelotDuBouffon(),
+    AspisHeracles(),
+    BouillonDAmes(),
+    ConcentreDeFun(),
 ]
 
 
@@ -2350,4 +2496,7 @@ __all__ = [
             "LanceDuDestin",
             "TorcheEnMousse",
             "GrelotDuBouffon",
+            "AspisHeracles",
+            "BouillonDAmes",
+            "ConcentreDeFun"
         ]

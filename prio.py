@@ -125,7 +125,7 @@ def display_simu(r=0):
 
 # Nombre de simulations souhaitées
 total_simulations = 30000
-seuil_pv_essai_fuite=6
+seuil_pv_essai_fuite=5
 
 shutil.copyfile('priorites_objets.json', f'priorites_objets_backup.json')
 for r in range(100):

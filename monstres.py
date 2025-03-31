@@ -93,7 +93,7 @@ class DonjonDeck:
         self.nb_cartes = len(self.ordre)
     
     def ajouter_monstre(self, monstre_remis):
-        monstre_remis.executed = False
+        # monstre_remis.executed = False --> maintenant quand on pioche la carte
         self.ordre = np.append(self.ordre, monstre_remis.index)
         self.nb_cartes += 1
         # Cette Fct ne re melange pas, le faire separement

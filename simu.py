@@ -78,6 +78,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         if carte is None:
             log_details.append("Le Donjon est vide. Fin de la partie.")
             break
+        if isinstance(carte, CarteMonstre):
+            carte.executed = False
 
         joueur.jet_fuite_lance = False
 
@@ -436,10 +438,11 @@ def loguer_x_parties(x=1):
 
         # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
         a_test = []
-        a_test.append(AraigneeDomestique())
-        a_test.append(Katana())
-        a_test.append(FruitDuDestin())
-        a_test.append(ParcheminDePonçage())
+        a_test.append(ConcentreDeFun())
+        a_test.append(BouillonDAmes())
+        a_test.append(CapeDePlumes())
+        a_test.append(AspisHeracles())
+        a_test.append(PelleDuFossoyeur())
         joueurs = []
         for i,nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"]):
             objets_joueur = (a_test) if i==0 else []
