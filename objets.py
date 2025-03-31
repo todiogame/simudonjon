@@ -168,7 +168,7 @@ class Objet:
             nouvel_objet = random.choice(Jeu.objets_dispo)
             Jeu.objets_dispo.remove(nouvel_objet)
             joueur.ajouter_objet(nouvel_objet)
-            log_details.append(f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom},  {f"PV bonus: {nouvel_objet.pv_bonus}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV." if nouvel_objet.pv_bonus else ''}")
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom},")
             
     def scoreChange(self, value, joueur, log_details):
         if value > 0:

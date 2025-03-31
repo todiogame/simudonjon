@@ -16,7 +16,7 @@ import sys
 from personnages import persos_disponibles
 
 # Nombre de simulations souhaitées
-total_simulations = 15000
+total_simulations = 100000
 seuil_pv_essai_fuite=5
 
 def display_simu(r=0):
@@ -42,6 +42,10 @@ def display_simu(r=0):
         for o in objets_disponibles_simu:
             o.repare()
             o.priorite = min(100, max(0, priorites_objets.get(o.nom, 49.5) + random.uniform(-20, 20)))
+
+        persos_disponibles_simu = list(persos_disponibles)
+        for p in persos_disponibles_simu:
+            p.compteur = 0
 
         # Initialisation des joueurs avec des perso aléatoires 
         joueurs = []

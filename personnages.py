@@ -144,7 +144,7 @@ class Perso:
             nouvel_objet = random.choice(Jeu.objets_dispo)
             Jeu.objets_dispo.remove(nouvel_objet)
             joueur.ajouter_objet(nouvel_objet)
-            log_details.append(f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom},  {f"PV bonus: {nouvel_objet.pv_bonus}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV." if nouvel_objet.pv_bonus else ''}")
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom}. Total {len(joueur.objets)} ")
             
     def scoreChange(self, value, joueur, log_details):
         if value > 0:
@@ -160,16 +160,14 @@ class Ninja(Perso):
 
 class Princesse(Perso):
     def __init__(self):
-        # Le PV de base (2) est géré par la classe Joueur
         super().__init__("Princesse", 2)
-        self.premier_objet_pioche = False # Etat pour la capacité unique
 
     def debut_tour(self, joueur, Jeu, log_details):
         # Se déclenche seulement au tour 1 du joueur
-        if joueur.tour == 1 and not self.premier_objet_pioche:
-            log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité au début du tour 1.")
-            self.piocheItem(joueur, Jeu, log_details) # Utilise la méthode héritée
-            self.premier_objet_pioche = True # Marquer comme utilisé
+        if self.compteur == 0:
+            log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité pour piocher un objet")
+            self.piocheItem(joueur, Jeu, log_details)
+            self.compteur+=1 # Marquer comme utilisé
 
 
 class MercenaireOrc(Perso):
@@ -191,7 +189,12 @@ class PersoUseless2PV(Perso):
     def __init__(self):
         # Le PV de base (5) est géré par la classe Joueur
         super().__init__("Perso Useless 2PV", 2)
-        
+
+class PersoUseless3PV(Perso):
+    def __init__(self):
+        # Le PV de base (5) est géré par la classe Joueur
+        super().__init__("Perso Useless 3PV", 3)
+
 class Tricheur(Perso):
     def __init__(self):
         super().__init__("Tricheur", 3)
@@ -215,15 +218,63 @@ class RoiSorcier(Perso):
         if carte.dommages >= 4 and joueur.nom != joueur_proprietaire.nom:
             self.gagnePV(1, joueur_proprietaire, log_details)
             
+class InventeurGenial(Perso):
+    def __init__(self):
+        # pv_bonus=3 pour les PV de base
+        super().__init__(nom="Inventeur génial", pv_bonus=3, modificateur_de=0)
+        self.capacite_utilisee = False # Pour s'assurer que c'est une fois par partie
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # Vérifier si capacité dispo et conditions remplies
+        if not self.capacite_utilisee:
+            # Trouver les objets brisés (non intacts)
+            objets_brises = [o for o in joueur.objets if not getattr(o, 'intact', True)]
+
+            # Condition: au moins 2 objets brisés
+            if len(objets_brises) >= 2:
+                # Décision IA : on utilise dès que possible
+                log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité (une fois par partie).")
+
+                # Choisir 2 objets brisés au hasard à défausser
+                objets_a_defausser = random.sample(objets_brises, 2)
+                noms_defausse = [o.nom for o in objets_a_defausser]
+                log_details.append(f"--> Défausse {noms_defausse}.")
+
+                # Les retirer de l'inventaire du joueur et ajuster PV total si besoin
+                for obj in objets_a_defausser:
+                    joueur.objets.remove(obj)
+                    joueur.pv_total -= getattr(obj, 'pv_bonus', 0)
+
+                self.piocheItem(joueur, Jeu, log_details)
+                self.capacite_utilisee = True
+
+
+
+    class Flutiste(Perso):
+        def __init__(self):
+            # pv_bonus=3 for base HP
+            super().__init__(nom="Flutiste", pv_bonus=3, modificateur_de=0)
+
+        def combat_effet(self, joueur, carte, Jeu, log_details):
+            # Ability 1: Execute Goblins + Gain PV
+            is_gobelin = "Gobelin" in getattr(carte, 'types', [])
+
+            if is_gobelin and not Jeu.traquenard_actif and not carte.executed:
+                log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité contre {carte.titre}.")
+                self.execute(joueur, carte, log_details) 
+                self.gagnePV(1, joueur, log_details)
+
 persos_disponibles=[
     Ninja(),
     Princesse(),
     MercenaireOrc(),
     ChevalierDragon(), # Ajouté
     PersoUseless2PV(),
+    PersoUseless3PV(),
     Tricheur(),
     DocteurDePeste(),
-    RoiSorcier()
+    RoiSorcier(),
+    InventeurGenial(),
 ]
 
 __all__=[
@@ -232,7 +283,9 @@ __all__=[
     "MercenaireOrc",
     "ChevalierDragon", # Ajouté
     "PersoUseless2PV",
+    "PersoUseless3PV",
     "Tricheur",
     "DocteurDePeste",
-    "RoiSorcier"
+    "RoiSorcier",
+    "InventeurGenial",
 ]
