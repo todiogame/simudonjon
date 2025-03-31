@@ -419,7 +419,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             print(detail)
 
     # Retourner le joueur vainqueur s'il y en a un
-    return vainqueur
+    return vainqueur, joueurs
 
 
 
