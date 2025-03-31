@@ -13,7 +13,7 @@ import itertools
 import json
 import shutil
 import sys
-from personnages import persos_disponibles
+from heros import persos_disponibles
 
 # Nombre de simulations souhaitées
 total_simulations = 100000

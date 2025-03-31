@@ -3,8 +3,8 @@ import numpy as np
 from objets import *
 from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
-from personnages import *
-from personnages import persos_disponibles
+from heros import *
+from heros import persos_disponibles
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     # arreter la simulation si on a un objet casse dans une main
     for j in joueurs:
@@ -134,8 +134,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             if carte.effet == "INJECTION":
                 golem_count = sum(1 for monstre in joueur.pile_monstres_vaincus if "Golem" in monstre.types)
                 if golem_count > 0:
-                    joueur.pv_total += 3 * golem_count
-                    log_details.append(f"Gagnez {3 * golem_count} PV grâce à {carte.titre} (3 PV pour chaque Golem). PV restant: {joueur.pv_total}")
+                    joueur.pv_total += 2 * golem_count
+                    log_details.append(f"Gagnez {2 * golem_count} PV grâce à {carte.titre} (2 PV pour chaque Golem). PV restant: {joueur.pv_total}")
                 else:
                     log_details.append(f"{carte.titre} ne fait rien.")
             
@@ -168,6 +168,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                                 Jeu.objets_dispo.remove(nouvel_objet)
                                 autre_joueur.ajouter_objet(nouvel_objet)
                                 log_details.append(f"{autre_joueur.nom} pioche un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
+                        break
                 if not dragons_trouves:
                     log_details.append("Aucun joueur n'a de Dragons à défausser.")
 
@@ -217,6 +218,18 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     carte.puissance = len(objets_intacts)
                     log_details.append(f"Rencontré Mimique, puissance déterminée à {carte.puissance} (égale au nombre d'objets possédés).")
 
+                if carte.effet == "MONKEY_TEAM":
+                    nb_joueurs_dans_le_dj = 0
+                    for j in Jeu.joueurs:
+                        if j.dans_le_dj:
+                            nb_joueurs_dans_le_dj += 1
+                    carte.puissance = nb_joueurs_dans_le_dj * 2
+                    log_details.append(f"Rencontré Equipe de singes, puissance déterminée à {carte.puissance} (2x le nombre de joueurs dans le donjon).")
+                    
+                if carte.effet == "REAPER":
+                    carte.puissance = joueur.pv_total // 2
+                    log_details.append(f"Rencontré Faucheuse, puissance déterminée à {carte.puissance} (la moitie des PV (arrondi inferieur)).")
+
                 if carte.effet == "NOOB":
                     if joueur.medailles > 0:
                         carte.puissance = 2
@@ -239,6 +252,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 carte.dommages += 4
                 log_details.append(f"Rencontré Seigneur Vampire, inflige 4 dommages supplémentaires grâce aux médailles, dommages {carte.dommages}.")
             
+            # todo changer en_rencontre pour trigger sur tous les joueurs (maj les  objets)
+            # pour ajouter codex et flutiste
             #use items en_rencontre
             for objet in joueur.objets:
                 objet.en_rencontre(joueur, carte, Jeu, log_details)

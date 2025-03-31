@@ -179,12 +179,13 @@ class MercenaireOrc(Perso):
 class ChevalierDragon(Perso):
     def __init__(self):
         super().__init__(nom="Chevalier Dragon", pv_bonus=2)
+        self.capacite_utilisee = False # Pour s'assurer que c'est une fois par partie
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if "Dragon" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
-            # Utilise la méthode executeEtDefausse héritée de Perso
-            self.executeEtDefausse(joueur, carte, Jeu, log_details)
-            
+        # Vérifier si capacité dispo et conditions remplies
+        if not self.capacite_utilisee and "Dragon" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
+            self.execute(joueur, carte, log_details)
+
 class PersoUseless2PV(Perso):
     def __init__(self):
         # Le PV de base (5) est géré par la classe Joueur
@@ -208,7 +209,8 @@ class DocteurDePeste(Perso):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if "Rat" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
             # Utilise la méthode executeEtDefausse héritée de Perso
-            self.executeEtDefausse(joueur, carte, Jeu, log_details)
+            # self.executeEtDefausse(joueur, carte, Jeu, log_details)
+            self.execute(joueur, carte, log_details)
             
 class RoiSorcier(Perso):
     def __init__(self):
@@ -269,8 +271,8 @@ persos_disponibles=[
     Princesse(),
     MercenaireOrc(),
     ChevalierDragon(), # Ajouté
-    PersoUseless2PV(),
-    PersoUseless3PV(),
+    # PersoUseless2PV(),
+    # PersoUseless3PV(),
     Tricheur(),
     DocteurDePeste(),
     RoiSorcier(),

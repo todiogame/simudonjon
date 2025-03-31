@@ -61,7 +61,11 @@ class DonjonDeck:
             CarteMonstre("Rat charognard", 0, ["Rat"], "La <b>puissance</b> de ce monstre est égale au nombre de monstres dans votre pile de monstres vaincus.", "SCAVENGER"),
             CarteMonstre("Seigneur Vampire", 4, ["Vampire"], "Si vous avez une <b>Médaille</b>,\ninflige <b>4 dommages</b> supplémentaires.",  "LORD"),
             CarteMonstre("Gobelin Fantôme", 1, ["Gobelin"], "<b>Défaussez</b> ce monstre après l'avoir vaincu.", "MAUDIT"),
-            # CarteMonstre("Changeforme", 8, ["Gobelin", "Squelette", "Orc", "Vampire", "Golem", "Liche", "Démon", "Dragon", "Rat"]),
+            # CarteMonstre("Ange Guardien", 8, [], "Vous pouvez <b>défausser</b> l'Ange Gardien plutôt que le combattre.\nSi vous le battez, vous obtenez <b>l'Égide </b>.", "GUARDIAN_ANGEL"),
+            # CarteMonstre("Changeforme", 8, [], "Attribuez à ce monstre un <b>type</b> de votre choix.\nIl perd ce type une fois vaincu.", "SHAPESHIFTER"),
+            CarteMonstre("Equipe de singes", 0, [], "La <b>puissance</b> de ce monstre est égale à <b>deux fois</b> le nombre de joueurs dans le Donjon.", "MONKEY_TEAM"),
+            # CarteMonstre("Kraken", 10, [], "Si c'est <b>la première fois</b> que le Kraken apparait, vous pouvez le remettre <b>sous le Donjon.</b>", "KRAKEN"),
+            CarteMonstre("Faucheuse", 0, [], "La <b>puissance</b> de ce monstre est égale à la <b>moitié de vos Points de Vie</b> quand vous la rencontrez,\narrondis à l'inférieur.", "REAPER"),
             CarteEvent("Descente angélique", "Gagnez 3pv.", "HEAL"),
             CarteEvent("Bricoleur", "Vous pouvez <b>réparer</b> un de vos objets <b>brisé</b>.", "REPAIR"),
             CarteEvent("Allié", "Si la prochaine carte est un monstre, vous pouvez <b>l'exécuter</b>.", "ALLY"),
@@ -110,7 +114,7 @@ class DonjonDeck:
 
 
     def rajoute_en_haut_de_la_pile(self, carte):
-        carte.executed = False
+        # carte.executed = False
         self.ordre = np.insert(self.ordre, self.index, carte.index)
         self.nb_cartes += 1
 

@@ -84,7 +84,18 @@ class Joueur:
         self.monstres_ajoutes_ce_tour += 1
         
     def deciderDeFuir(self, Jeu, log_details):
-        decision = (self.pv_total <= self.pv_min_fuite 
-                and sum(objet.actif and objet.intact for objet in self.objets) <= 1)
+        decision_pv_faible = (self.pv_total <= self.pv_min_fuite
+                               and sum(objet.actif and objet.intact for objet in self.objets) <= 1)
+
+        # Vérifier si tous les autres joueurs sont morts
+        # le marteau d'eternite counter mais bon on est plus a ca pret
+        autres_joueurs_morts = True
+        joueurs_vivants = 0
+        for joueur in Jeu.joueurs:
+            if joueur.vivant:
+                joueurs_vivants += 1
+
+        autres_joueurs_morts = (joueurs_vivants <= 1) # Only the current player is alive
+
+        decision = decision_pv_faible or autres_joueurs_morts
         return decision
-        

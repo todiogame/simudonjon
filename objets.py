@@ -1086,19 +1086,28 @@ class CorneDAbordage(Objet):
     def __init__(self):
         super().__init__("Corne d'abordage", True)
 
-    def debut_tour(self, joueur, Jeu, log_details):
-        autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
+    def _activer_corne(self, joueur, Jeu, log_details, contexte=""):
+        log_details.append(f"{joueur.nom} utilise {self.nom}{' en ' + contexte if contexte else ''}")
+        autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]    
+        for autre_joueur in autres_joueurs_dans_le_dj:
+            if autre_joueur.pile_monstres_vaincus:
+                monstre_volee = random.choice(autre_joueur.pile_monstres_vaincus)
+                autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
+                joueur.ajouter_monstre_vaincu(monstre_volee)
+                log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}{' en ' + contexte if contexte else ''}")
+        self.perdPV(2, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
 
-        if self.intact and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj) and joueur.pv_total>2:
-            log_details.append(f"{joueur.nom} utilise {self.nom}")
-            for autre_joueur in autres_joueurs_dans_le_dj:
-                if autre_joueur.pile_monstres_vaincus:
-                    monstre_volee = random.choice(autre_joueur.pile_monstres_vaincus)
-                    autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
-                    joueur.ajouter_monstre_vaincu(monstre_volee)
-                    log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}")
-            self.perdPV(2, joueur, log_details)
-            self.destroy(joueur, Jeu, log_details)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact:
+            autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
+            if all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj) and joueur.pv_total > 2:
+                self._activer_corne(joueur, Jeu, log_details)
+
+    def fuite_definitive_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur:
+            if joueur.pv_total > 2:
+                self._activer_corne(joueur, Jeu, log_details, contexte="fuyant")
 
 class SceptreActif(Objet):
     def __init__(self):
@@ -1936,7 +1945,9 @@ class FruitDuDestin(Objet):
         super().__init__("Fruit du Destin", True)
     
     def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= joueur.pv_total
+        monsters = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
+        events = [c for c in Jeu.defausse if getattr(c, 'event', False)]
+        return carte.dommages >= joueur.pv_total and (monsters or events) 
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         # Séparer les cartes monstres et évènements de la défausse
@@ -2108,12 +2119,9 @@ class BouillonDAmes(Objet):
             log_details.append(f"--> Monstres remis: {noms_monstres}") # Log ajouté
 
             # Les remettre dans le pool du Donjon (comme EspritDuDonjon)
+            random.shuffle(monstres_a_remettre)
             for monstre in monstres_a_remettre:
-                Jeu.donjon.ajouter_monstre(monstre) # Ajoute l'index à la fin de self.ordre
-
-            # Mélanger le deck restant (comme EspritDuDonjon / Soulstorm)
-            Jeu.donjon.remelange() # Mélange les cartes restantes à partir de l'index actuel
-
+                Jeu.donjon.rajoute_en_haut_de_la_pile(monstre)
         else:
             log_details.append(f"{joueur.nom} utilise {self.nom}, mais la défausse ne contient aucun monstre.")
 
