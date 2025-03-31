@@ -51,7 +51,7 @@ def display_simu(r=0):
         deck = DonjonDeck()
 
         # Exécution de l'ordonnanceur sans afficher les logs
-        vainqueur = ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_simu, False)
+        vainqueur, _ = ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_simu, False)
 
         # Mise à jour du highscore max et du meilleur vainqueur
         if vainqueur and vainqueur.score_final > highscore_max:

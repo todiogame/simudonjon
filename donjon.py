@@ -27,6 +27,7 @@ def display_simu(r=0):
         
     # Initialisation des résultats
     resultats_builds = []
+    resultats_personnages = []
     highscore_max = 0
     dj_ponces3j=0
     dj_ponces4j=0
@@ -43,35 +44,43 @@ def display_simu(r=0):
             o.priorite = min(100, max(0, priorites_objets.get(o.nom, 49.5) + random.uniform(-20, 20)))
 
         # Initialisation des joueurs avec des perso aléatoires 
-    joueurs = []
-    nb_joueurs = random.choice([3, 4]) # Ou 4 pour loguer_x_parties
-    player_base_names = ["Sagarex", "Francis", "Mastho", "Mr.Adam"]
-    player_names = player_base_names[:nb_joueurs]
+        joueurs = []
+        nb_joueurs = random.choice([3, 4]) # Ou 4 pour loguer_x_parties
+        player_base_names = ["Sagarex", "Francis", "Mastho", "Mr.Adam"]
+        player_names = player_base_names[:nb_joueurs]
 
-    # Assigner une instance unique et aléatoire de Perso
-    personnages_assigner = random.sample(persos_disponibles, nb_joueurs) 
+        # Assigner une instance unique et aléatoire de Perso
+        personnages_assigner = random.sample(persos_disponibles, nb_joueurs) 
 
-    for i, nom_base in enumerate(player_names):
-        objets_joueur = random.sample(objets_disponibles_simu, 6)
-        for objet in objets_joueur:
-            objets_disponibles_simu.remove(objet)
+        for i, nom_base in enumerate(player_names):
+            objets_joueur = random.sample(objets_disponibles_simu, 6)
+            for objet in objets_joueur:
+                objets_disponibles_simu.remove(objet)
 
-        # Récupérer l'instance Perso assignée
-        perso_instance = personnages_assigner[i]
+            # Récupérer l'instance Perso assignée
+            perso_instance = personnages_assigner[i]
 
-        # Créer le Joueur en passant l'instance Perso
-        joueur_cree = Joueur(nom_base, perso_instance, objets_joueur) # Le constructeur Joueur prend l'instance
-        joueurs.append(joueur_cree)
+            # Créer le Joueur en passant l'instance Perso
+            joueur_cree = Joueur(nom_base, perso_instance, objets_joueur) # Le constructeur Joueur prend l'instance
+            joueurs.append(joueur_cree)
 
         # Création de la copie des joueurs et des cartes
         deck = DonjonDeck()
 
         # Exécution de l'ordonnanceur sans afficher les logs
-        vainqueur = ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_simu, False)
+        vainqueur, joueurs_finaux = ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_simu, False)
 
         # Mise à jour du highscore max et du meilleur vainqueur
         if vainqueur and vainqueur.score_final > highscore_max:
             highscore_max = vainqueur.score_final
+        
+        for joueur in joueurs: # Utiliser la liste de cette partie
+            perso_nom = getattr(joueur, 'personnage_nom', 'Inconnu')
+            a_gagne = 1 if joueur == vainqueur else 0
+            resultats_personnages.append({
+                'Personnage': perso_nom,
+                'Victoire': a_gagne
+            })
         
         # Mise à jour des statistiques
         for joueur in joueurs:
@@ -85,6 +94,8 @@ def display_simu(r=0):
         if any(joueur.dans_le_dj for joueur in joueurs): 
             if nb_joueurs == 3: dj_ponces3j+=1
             if nb_joueurs == 4: dj_ponces4j+=1
+            
+            
 
     # Mesurer le temps de simulation
     end_time = time.time()
@@ -109,7 +120,25 @@ def display_simu(r=0):
     print(f"Pourcentage de donjons ponces a 3j : {dj_ponces3j / total_simulations* 100:.2f}%")
     print(f"Pourcentage de donjons ponces a 4j : {dj_ponces4j / total_simulations* 100:.2f}%")
     
-    
+        # --- AJOUT : Traitement Résultats Personnages ---
+    if resultats_personnages:
+        df_resultats_persos = pd.DataFrame(resultats_personnages)
+        # Compter combien de fois chaque perso a joué et gagné
+        df_stats_persos = df_resultats_persos.groupby('Personnage')['Victoire'].agg(
+            Victoires='sum',
+            Total_Parties='count' # 'count' compte toutes les lignes pour ce perso
+        ).reset_index()
+
+        # Calculer Winrate
+        df_stats_persos['Winrate (%)'] = (df_stats_persos['Victoires'] * 100 / df_stats_persos['Total_Parties']).round(2)
+        # Trier par Winrate
+        df_stats_persos = df_stats_persos.sort_values(by='Winrate (%)', ascending=False)
+
+        print("\nStatistiques par Personnage:")
+        print(df_stats_persos.to_string(index=False)) # Affichage sans index
+    else:
+        print("\nPas de données collectées pour les statistiques par personnage.")
+    # --- FIN AJOUT ---
     # Calculer les meilleurs et les pires duos d'objets
     duos_scores = {}
 
