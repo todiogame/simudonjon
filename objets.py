@@ -1619,7 +1619,7 @@ class CasqueBerserk(Objet):
     def __init__(self):
         super().__init__("CasqueBerserk", False, 7)
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if self.intact and (carte.puissance <= 3):
+        if self.intact and (carte.puissance <= 2) and (carte.dommages > 0) :
             self.add_damage(1, joueur, carte, log_details)
         
 # 2025
@@ -1939,7 +1939,8 @@ class GrelotDuBouffon(Objet):
         super().__init__("Grelot du Bouffon", False, 1)  
     
     def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        self.gagnePV(1, joueur_proprietaire, log_details)
+        if(joueur_proprietaire.dans_le_dj):
+            self.gagnePV(1, joueur_proprietaire, log_details)
 
 class FruitDuDestin(Objet):
     def __init__(self):
@@ -2065,7 +2066,7 @@ class CodexDiabolus(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
     def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if "Démon" in carte.types and joueur_proprietaire.dans_le_dj and joueur_proprietaire.vivant and joueur_proprietaire != joueur:
+        if "Démon" in carte.types and joueur_proprietaire.dans_le_dj and joueur_proprietaire != joueur:
             dommages_suppl = 2
             carte.dommages+=dommages_suppl
             log_details.append(f"{carte.titre} est booste de {dommages_suppl} dommages (total {carte.dommages}) par {joueur_proprietaire.nom} ({self.nom})")
