@@ -25,6 +25,8 @@ class Perso:
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         pass
+    def combat_effet_late(self, joueur, carte, Jeu, log_details):
+        pass
     def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         pass
     def rencontre_event_effet(self, joueur_proprietaire, joueur_actif, carte, Jeu, log_details):
@@ -80,7 +82,12 @@ class Perso:
     def en_combat(self, joueur, carte, Jeu, log_details):
         if self.condition(joueur, carte, Jeu, log_details):
             self.combat_effet(joueur, carte, Jeu, log_details)
+            
+    def en_combat_late(self, joueur, carte, Jeu, log_details):
+        if self.condition(joueur, carte, Jeu, log_details):
+            self.combat_effet_late(joueur, carte, Jeu, log_details)
 
+    
     
     def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if(joueur_proprietaire.dans_le_dj):
@@ -258,7 +265,7 @@ class Flutiste(Perso):
         super().__init__(nom="Flutiste", pv_bonus=3, modificateur_de=0)
 
     def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if "Gobelin" in carte.types and joueur_proprietaire.dans_le_dj and joueur_proprietaire.vivant:
+        if "Gobelin" in carte.types and joueur_proprietaire.dans_le_dj:
             dommages_suppl = 1
             carte.dommages+=dommages_suppl
             log_details.append(f"{carte.titre} est booste de {dommages_suppl} dommages par {joueur_proprietaire.nom} ({self.nom})")
@@ -269,20 +276,45 @@ class Flutiste(Perso):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details) 
         self.gagnePV(1, joueur, log_details)
+    
+class SavantFou(Perso):
+    def __init__(self):
+        super().__init__("Savant Fou", False)
         
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        log_details.append(f"{joueur.nom} tente le pouvoir du Savant Fou {joueur_proprietaire.nom}")
+    
+        if joueur.nom == joueur_proprietaire.nom:
+            jet_savant = joueur.rollDice(Jeu, log_details, 5)
+            log_details.append(f"{joueur.nom} lance le pouvoir du Savant Fou sur {carte.titre}, jet de {jet_savant}")
+            if jet_savant >= 5:
+                self.gagnePV(1, joueur_proprietaire, log_details)
+
+class Avatar(Perso):
+    def __init__(self):
+        super().__init__(nom="Avatar", pv_bonus=2)
+        self.capacite_utilisee = False # Pour s'assurer que c'est une fois par partie
+
+    def combat_effet_late(self, joueur, carte, Jeu, log_details):
+        # Vérifier si capacité dispo et conditions remplies
+        if not self.capacite_utilisee and not Jeu.traquenard_actif and not carte.executed and carte.dommages > (joueur.pv_total / 2) :
+            self.executeEtDefausse(joueur, carte, Jeu, log_details)
+   
 
 persos_disponibles=[
     Ninja(),
     Princesse(),
     MercenaireOrc(),
-    ChevalierDragon(), # Ajouté
-    # PersoUseless2PV(),
-    # PersoUseless3PV(),
+    ChevalierDragon(),
+    PersoUseless2PV(),
+    PersoUseless3PV(),
     Tricheur(),
     DocteurDePeste(),
     RoiSorcier(),
     InventeurGenial(),
     Flutiste(),
+    SavantFou(),
+    Avatar(),
 ]
 
 __all__=[

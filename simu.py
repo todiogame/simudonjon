@@ -294,6 +294,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 if(not joueur.dans_le_dj):
                     donjon.rajoute_en_haut_de_la_pile(carte)
                     continue
+                joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
                 
             if not carte.executed:
                 Jeu.traquenard_actif = False
@@ -355,6 +356,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 continue
             
             #use items en_vaincu
+            joueur.perso_obj.en_vaincu(joueur, joueur, carte, Jeu, log_details) #opti, que le savant fou
             for joueur_proprietaire in Jeu.joueurs:
                 for objet in joueur_proprietaire.objets:
                     objet.en_vaincu(joueur_proprietaire, joueur, carte, Jeu, log_details)
