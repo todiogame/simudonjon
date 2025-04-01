@@ -75,6 +75,7 @@ class DonjonDeck:
             CarteEvent("Injection argileuse", "Gagnez <b>3 PV</b> pour chaque <b>Golem</b> dans votre pile.", "INJECTION"),
             CarteEvent("Tempête des âmes", "Tous les joueurs doivent remettre un monstre de leur pile de monstres vaincus dans le Donjon. Mélangez-le.", "SOULSTORM"),
             CarteEvent("Traquenard", "Si la prochaine carte est un monstre, vous ne pouvez pas <b>l'exécuter</b>.", "TRAP"),
+            CarteEvent("Roue de la fortune", "Vous <b>pouvez</b> lancer le dé, et <b>gagner autant de PV</b>. Mais si vous obtenez 1, <b>brisez un objet</b>.", "FORTUNE_WHEEL"),
         ]
         for i, carte in enumerate(self.cartes):
             carte.index = i  # Assigner l'index à chaque carte

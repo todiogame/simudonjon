@@ -1,0 +1,1066 @@
+{
+    "Égide": {
+        "color_code": 5,
+        "description": "<b>Survivez</b> avec vos PV de héros."
+    },
+    "Main de Midas": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> un monstre de puissance 4 ou 5, et ajoutez sa puissance à vos PV."
+    },
+    "Parchemin de Bahn": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> et<b>défaussez</b> un monstre, puis gagnez <b>1 PV</b>."
+    },
+    "Marteau de guerre": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> les <b>Golems</b> et les <b>Squelettes</b>.\\n<b>Jet de fuite -1</b>"
+    },
+    "Singe doré": {
+        "color_code": 5,
+        "description": "<b>Jet de fuite -2</b>\\nAu décompte final, lancez le dé. Gagnez autant de <b>Points de Victoire</b>."
+    },
+    "Gâteau spatial": {
+        "color_code": 3,
+        "description": "Lancez le dé. Gagnez autant de <b>PV</b>.\\nSur un 1, vous fuyez le Donjon."
+    },
+    "Couteau Suisse": {
+        "color_code": 3,
+        "description": "<b>Réparez</b> un de vos objets <b>brisé</b>."
+    },
+    "Sablier occulte": {
+        "color_code": 4,
+        "description": "Remettez le monstre sur le dessus du Donjon. C'est au tour du joueur précedent de jouer."
+    },
+    "Coeur de Tarasque": {
+        "color_code": 1,
+        "description": "<b>PV + 3</b>\\nA la fin du tour, si vous avez vaincu au moins 2 monstres, gagnez <b>1 PV</b>"
+    },
+    "Caisse enchantée": {
+        "color_code": 3,
+        "description": "Une fois par monstre, vous pouvez lancer le dé. Exécutez-le si vous obtenez <b>plus</b> que sa puissance. Sur un 1, <b>brisez</b> cet objet."
+    },
+    "Fléau des liches": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> les <b>Liches</b> et gagnez 6 PV"
+    },
+    "Enclume instable": {
+        "color_code": 3,
+        "description": "Volez l'objet <b>brisé</b> d'un autre joueur et <b>réparez-le</b>."
+    },
+    "Coffre animé": {
+        "color_code": 5,
+        "description": "Quand un joueur active ou brise un objet, lancez le dé. Sur un <b>6</b>, volez-le et <b>réparez-le</b>."
+    },
+    "Ceinture du Ponceur": {
+        "color_code": 1,
+        "description": "<b>PV + 12</b>\\nSi vous avez <b>moins de 6 PV</b>, vous ne pouvez pas <b>tenter de fuir</b> le Donjon."
+    },
+    "Bouclier Golemique": {
+        "color_code": 1,
+        "description": "<b>PV + 3</b>\\nSi vous n'avez pas de <b>Golem</b> dans votre pile,\\n<b>exécutez</b> les <b>Golems</b>."
+    },
+    "Barde": {
+        "color_code": 2,
+        "description": "<b>PV + 3</b>\\nActivez pour <b>exécuter</b> un monstre (perdez les 3 PV)."
+    },
+    "Masque Dragon": {
+        "color_code": 5,
+        "description": "Activez pour <b>exécuter</b> un <b>Dragon</b> puis <b>piochez un objet</b>"
+    },
+    "Bouclier Dragon": {
+        "color_code": 1,
+        "description": "Lancez 2 fois le dé, réduisez d'autant les dommages d'un monstre. Quand vous rencontrez  un <b>Dragon</b>, réparez cet objet."
+    },
+    "Potion de Mana": {
+        "color_code": 3,
+        "description": "<b>Défaussez</b> un monstre de votre pile pour <b>survivre</b> avec vos PV de héros."
+    },
+    "Kebab revigorant": {
+        "color_code": 2,
+        "description": "Vous ne pouvez pas activer cet objet avant votre troisième tour de jeu.\\n<b>Gagnez 7 PV</b>."
+    },
+    "Arc enflammé": {
+        "color_code": 1,
+        "description": "<b>PV + 7</b>\\nLes monstres de <b>puissance impaire</b> vous infligent 1 dommage supplémentaire."
+    },
+    "Hache de Glace": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> un monstre, puis défaussez cet objet."
+    },
+    "Imprimante": {
+        "color_code": 3,
+        "description": "Avant d'entrer dans le donjon, choisissez un de vos autre objets. L'Imprimante en devient une copie."
+    },
+    "Gros boulet": {
+        "color_code": 1,
+        "description": "<b>PV + 7</b>\\n<b>Jet de fuite -1</b>"
+    },
+    "Parchemin de Téléportation": {
+        "color_code": 4,
+        "description": "<b>PV + 2</b>\\nA la fin de votre tour, vous pouvez fuir du Donjon."
+    },
+    "Potion féérique": {
+        "color_code": 2,
+        "description": "<b>Survivez</b> avec 1 PV. Quand la <b>Fée</b> est vaincue, <b>réparez</b> cet objet."
+    },
+    "Potion de Glace": {
+        "color_code": 3,
+        "description": "La <b>puissance</b> d'un monstre devient <b>0</b>."
+    },
+    "Epée vengeresse": {
+        "color_code": 5,
+        "description": "Avant d'entrer dans le donjon, choisissez un chiffre. <b>Exécutez</b> tous les monstres de cette puissance."
+    },
+    "Dague vengeresse": {
+        "color_code": 5,
+        "description": "Avant d'entrer dans le donjon, choisissez un <b>type</b> de monstre. <b>Exécutez</b> tous les monstres de ce type."
+    },
+    "Potion draconique": {
+        "color_code": 4,
+        "description": "<b>Survivez</b> avec 1 PV, ou, si vous affrontez un <b>Dragon</b>, survivez avec 9 PV."
+    },
+    "Pioche de diamant": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre de puissance 5 ou moins. Si c'est un <b>Golem</b>, cet objet ne se <b>brise</b> pas."
+    },
+    "Totem d'immunité": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> puis <b>défaussez</b> un monstre. Si vous mourrez avec cet objet intact, ne perdez pas de <b>Médaille</b>."
+    },
+    "Ceinture du novice": {
+        "color_code": 2,
+        "description": "<b>PV + 3</b>\\nSi vous n'avez pas de <b>Médaille</b>, ajoutez <b>3</b> à cette valeur."
+    },
+    "Getas du novice": {
+        "color_code": 2,
+        "description": "<b>PV + 2</b>\\n<b>Jet de fuite + 2</b>\\nSi vous n'avez pas de <b>Médaille</b> vous pouvez relancer vos jets de fuite (avant de piocher)."
+    },
+    "Livre sacré": {
+        "color_code": 5,
+        "description": "<b>PV + 2</b>\\n<b>Exécutez</b> les <b>Squelettes</b>."
+    },
+    "Pendentif du novice": {
+        "color_code": 2,
+        "description": "<b>PV + 3</b>\\n<b>Exécutez</b> les <b>Gobelins</b> et si vous n'avez <b>pas de Médaille</b>, gagnez 1 PV."
+    },
+    "Anneau du novice": {
+        "color_code": 2,
+        "description": "<b>Survivez</b> avec 1 PV, OU si vous n'avez pas de <b>Médaille</b>, avec vos PV de héros."
+    },
+    "Chapeau du novice": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> un <b>Orc</b>. Si vous n'avez pas de <b>Médaille</b> et que la prochaine carte est un monstre, <b>exécutez</b> le aussi."
+    },
+    "Cape du novice": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> un monstre de puissance <b>impaire</b> ou, si vous n'avez pas de <b>Médaille</b>, <b>exécutez</b> n'importe quel monstre."
+    },
+    "Patte du Rat Liche": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> les <b>Liches</b> et les <b>Rats</b>."
+    },
+    "Pomme d'Adam": {
+        "color_code": 3,
+        "description": "<b>Gagnez 3 PV</b>. Consultez secrètement les 3 premières cartes du Donjon."
+    },
+    "Masque de la Peste": {
+        "color_code": 4,
+        "description": "<b>PV + 3</b>\\n<b>Exécutez</b> les <b>Rats</b>."
+    },
+    "Ultime Sceptre": {
+        "color_code": 3,
+        "description": "Au début de la partie, choisissez un adversaire.\\nVous avez accès aux pouvoirs de son héros."
+    },
+    "Bouclier du Ponceur": {
+        "color_code": 1,
+        "description": "<b>PV + 2</b>\\n<b>Exécutez</b> les <b>Orcs</b>."
+    },
+    "Bécane du Ponceur": {
+        "color_code": 1,
+        "description": "<b>PV + 6</b>\\nVous rentrez en premier dans le Donjon."
+    },
+    "Platrée de berniques": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> un monstre et lancez le dé. Fixez vos PV à cette valeur."
+    },
+    "Tatouage maudit": {
+        "color_code": 4,
+        "description": "<b>PV + 6</b>\\nA chaque fois que vous obtenez un 1 au dé, <b>perdez 1 PV</b>."
+    },
+    "Pistolet pirate": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> les monstres de <b>puissance 2</b> et <b>3</b>."
+    },
+    "Armure en cuir": {
+        "color_code": 2,
+        "description": "<b>PV + 5</b>"
+    },
+    "Cotte de mailles": {
+        "color_code": 1,
+        "description": "<b>PV + 4</b>\\n<b>Exécutez</b> les monstres de <b>puissance 0</b>."
+    },
+    "Robe de mage": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> les <b>Démons</b> puis <b>gagnez 5 PV</b>"
+    },
+    "Armure ardente": {
+        "color_code": 1,
+        "description": "<b>PV + 4</b>\\nRéduisez les dommages de 5 contre les <b>Dragons</b>."
+    },
+    "Marteau flamboyant": {
+        "color_code": 1,
+        "description": "Réduisez les dommages de 4 contre les <b>Golems</b> et les <b>Dragons</b>"
+    },
+    "Marteau d'Eternité": {
+        "color_code": 5,
+        "description": "Vous comptez dans le décompte final même si vous mourrez.\\n<b>Points de Victoire -1</b>"
+    },
+    "Treize à Seize": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> les monstres de <b>puissance 1</b> et <b>3</b>. Si vous avez un Dragon dans votre pile, <b>exécutez</b> les <b>1</b> et <b>6</b> à la place."
+    },
+    "Scaphandre": {
+        "color_code": 3,
+        "description": "Réduisez les dommages de 2.\\n<b>Jet de fuite -3</b>"
+    },
+    "Tronçonneuse enflammée": {
+        "color_code": 1,
+        "description": "Perdez 3 PV pour <b>exécuter</b> un monstre."
+    },
+    "Pistolet Laser": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre de <b>puissance</b> impaire. Si la prochaine carte est un monstre de puissance inferieure, vous pouvez l'<b>exécuter</b> aussi."
+    },
+    "Grenade Singe": {
+        "color_code": 3,
+        "description": "Renvoyez le monstre dans le Donjon et mélangez-le."
+    },
+    "Sceptre Changeur": {
+        "color_code": 4,
+        "description": "<b>Défaussez</b> le monstre sans le combattre, puis <b>choisissez</b> un nouveau monstre du Donjon à combattre à la place (et mélangez)."
+    },
+    "Tunique classe": {
+        "color_code": 5,
+        "description": "<b>PV + 4\\nPoints de Victoire + 1\\nJet de fuite -1</b>"
+    },
+    "Trousse de soin": {
+        "color_code": 2,
+        "description": "Gagnez autant de PV que vous venez d'en perdre."
+    },
+    "Armure de mage": {
+        "color_code": 4,
+        "description": "Réduisez les dommages de 5 contre les <b>Liches</b> et les <b>Démons</b>"
+    },
+    "Parchemin divinatoire": {
+        "color_code": 3,
+        "description": "Au lieu de piocher, choisissez une carte à jouer dans le Donjon (puis mélangez-le)."
+    },
+    "Potion d'adrénaline": {
+        "color_code": 3,
+        "description": "Si vous avez exactement 1 PV, <b>gagnez 10 PV</b>, sinon gagnez 2 PV."
+    },
+    "Bombe pirate": {
+        "color_code": 4,
+        "description": "Vous pouvez <b>briser</b> un autre objet pour <b>exécuter</b> un monstre."
+    },
+    "Anneau de Vie": {
+        "color_code": 5,
+        "description": "A la fin du tour, si vous avez au moins <b>6 PV<b> et tué au moins un monstre ce tour, <b>gagnez 1 PV</b>."
+    },
+    "Anneau Océanique": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> les monstres de <b>puissance 8 et plus</b>."
+    },
+    "Anneau du Feu": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> les <b>Vampires</b> et <b>gagnez 2 PV</b>."
+    },
+    "Boomerang mystique": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre. Si la prochaine carte est un monstre, <b>exécutez</b>-le."
+    },
+    "Anneau de Glace": {
+        "color_code": 4,
+        "description": "Réduisez les dommages de 1.\\n<b>Exécutez</b> les <b>Squelettes</b>"
+    },
+    "Anneau Magique": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les monstres de <b>puissance 1</b> et <b>2</b>. Ajoutez leur puissance à vos PV."
+    },
+    "Anneau du Vent": {
+        "color_code": 2,
+        "description": "Remettez le monstre à la position de votre choix dans le Donjon."
+    },
+    "Coiffe de sorcier": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> les <b>Gobelins</b> et les <b>Vampires</b>."
+    },
+    "Délicieuse pizza": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre. Fixez vos PV à 6."
+    },
+    "Crâne du Roi Liche": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> les <b>Liches</b>. Vous récupérez dans votre pile les <b>Liches</b> vaincues ou défaussées par les autres joueurs."
+    },
+    "Armure du Roi Liche": {
+        "color_code": 5,
+        "description": "<b>PV + 3</b>\\n<b>Exécutez</b> les <b>Liches</b>"
+    },
+    "Torche rouge": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> les <b>Gobelins</b>, les <b>Squelettes</b> et les <b>Orcs</b>."
+    },
+    "Torche bleue": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> les monstres de <b>puissance 2 et moins</b>."
+    },
+    "Journal du futur": {
+        "color_code": 5,
+        "description": "Au début de votre tour, vous pouvez regarder secrètement la troisième carte du Donjon."
+    },
+    "Anneau des surmulots": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les <b>Rats</b>.\\nGagnez <b>3 PV</b> à chaque fois."
+    },
+    "Boule de cristal": {
+        "color_code": 4,
+        "description": "Avant de piocher, annoncez un <b>nombre</b>. Si c'est un monstre de la puissance annoncée, <b>éxecutez-le</b>."
+    },
+    "Armure Damnée": {
+        "color_code": 1,
+        "description": "<b>PV + 7\\nPoints de Victoire -1</b>"
+    },
+    "Fouet du fourbe": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre. Les autres joueurs qui ont un monstre du même <b>type</b> dans leur pile en défaussent un."
+    },
+    "Coquillage magique": {
+        "color_code": 3,
+        "description": "<b>Piochez</b> un nouvel objet."
+    },
+    "Crâne du Nécromancien": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> un monstre en defaussant un monstre de votre pile de puissance supérieure\\n(un X vaut 0)."
+    },
+    "Feuille éternelle": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les <b>Dragons</b> et les <b>Démons</b>, perdez <b>1 PV</b> à chaque utilisation."
+    },
+    "Elixir de chance": {
+        "color_code": 2,
+        "description": "Gagnez <b>3 PV</b>. Si vous venez de lancer le dé, vous pouvez modifier le résultat."
+    },
+    "Armure d'honneur": {
+        "color_code": 1,
+        "description": "<b>PV + 3</b>\\nMême si vous mourrez, vous comptez dans le décompte final avec un score de 4 (pas de modifications)."
+    },
+    "Binocles de l'inventeur": {
+        "color_code": 3,
+        "description": "Quand vous subissez des dommages contre un monstre, vous pouvez regarder secrètement la prochaine carte du Donjon."
+    },
+    "Boîte à butin": {
+        "color_code": 3,
+        "description": "Apres avoir vaincu un monstre, vous pouvez lancer un dé. Sur un 6, <b>piochez 2 objets</b> et brisez cet objet."
+    },
+    "Bourse garnie": {
+        "color_code": 5,
+        "description": "<b>PV + 3\\nPoints de Victoire + 1</b>"
+    },
+    "Katana": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> les monstres de puissance 7 ou plus."
+    },
+    "Lance de silence": {
+        "color_code": 3,
+        "description": "<b>Gagnez 2 PV</b>\\nIgnorez le texte d'un évènement ou l'effet spécial d'une carte monstre (un monstre de puissance X devient puissance 0)."
+    },
+    "Pierre d'âme": {
+        "color_code": 5,
+        "description": "<b>PV + 3</b>\\nSi vous avez au moins un Dragon dans votre pile, <b>Points de Victoire + 3</b>."
+    },
+    "Cœur de Golem": {
+        "color_code": 1,
+        "description": "<b>PV + 3</b>\\nSi vous avez un <b>Golem</b> dans votre pile, réduisez les dommages de 1."
+    },
+    "Calice du Roi Sorcier": {
+        "color_code": 4,
+        "description": "Quand un autre joueur subit 3 dommages ou plus contre un monstre, <b>gagnez 1 PV</b>."
+    },
+    "Perceuse à brèche": {
+        "color_code": 2,
+        "description": "Quand un autre joueur subit des dommages contre un <b>Golem</b>, <b>gagnez autant de PV</b>."
+    },
+    "Lame Draconique": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les <b>Dragons</b>.\\nSi vous avez un <b>Dragon</b> dans votre pile, réduisez les dommages de 1."
+    },
+    "Hache Mystique": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> un monstre de puissance paire. Si la prochaine carte est un monstre de puissance paire, <b>exécutez</b>-le aussi."
+    },
+    "Armure vivante": {
+        "color_code": 2,
+        "description": "<b>PV + 1\\nPV + </b>le nombre de joueurs dans la partie"
+    },
+    "Deuxieme impression:": {
+        "color_code": 0,
+        "description": ""
+    },
+    "Sceptre du Nécromancien": {
+        "color_code": 4,
+        "description": "Echangez le monstre que vous combattez par un monstre de votre pile de monstres vaincus."
+    },
+    "Bottes de vitesse": {
+        "color_code": 2,
+        "description": "<b>PV + 2\\nJet de fuite + le nombre de cartes dans votre pile de monstres</b>"
+    },
+    "Peigne en or": {
+        "color_code": 5,
+        "description": "<b>PV + 3</b>\\nChaque <b>Gobelin</b> dans votre pile de monstres vaincus vous rapporte <b>1 Point de Victoire</b> supplémentaire."
+    },
+    "Lampe magique": {
+        "color_code": 5,
+        "description": "<b>PV + 3</b>\\nChaque <b>Démon</b> dans votre pile de monstres vaincus vous rapporte <b>2 Points de Victoire</b> supplémentaires."
+    },
+    "Sac à dos scellé": {
+        "color_code": 5,
+        "description": "<b>PV + 3</b>\\nVous ne pouvez pas perdre des monstres de votre pile à cause des monstres, des événements ou des autres joueurs."
+    },
+    "Couronne d'épines": {
+        "color_code": 5,
+        "description": "Réduisez les dommages de 2, mais subissez au minimum 1 dommage."
+    },
+    "Bouillon d'âmes": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre. Mélangez tous les monstres de la défausse et remettez-les <b>sur</b> le Donjon."
+    },
+    "Cœur de Dragon": {
+        "color_code": 1,
+        "description": "Pour chaque <b>Dragon</b> vaincu par n'importe quel joueur, <b>gagnez 4 PV</b>."
+    },
+    "Fil du destin": {
+        "color_code": 3,
+        "description": "Regardez secrètement les 4 prochaines cartes du Donjon, et reposez-les dans l'ordre de votre choix."
+    },
+    "Coffre du Roi Sorcier": {
+        "color_code": 4,
+        "description": "<b>PV+ 3</b>\\nQuand un joueur meurt, lancez un dé pour chacun de ses objets. Sur un 6, vous le récupérez."
+    },
+    "Elixir de curiosité": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre, si vous n'avez aucun monstre du même <b>type</b> dans votre pile de monstres vaincus."
+    },
+    "Tapis volant": {
+        "color_code": 3,
+        "description": "Fuyez le Donjon à tout moment, en defaussant un monstre de votre pile de monstres vaincus."
+    },
+    "Anneau Plussain": {
+        "color_code": 5,
+        "description": "<b>PV + 1\\nJet de fuite + 1\\nPoints de Victoire + 1</b>\\n<b>Exécutez</b> les monstres de <b>puissance 1</b>"
+    },
+    "Masque maudit": {
+        "color_code": 4,
+        "description": "<b>PV + 7\\n-1</b> à tous vos jets de dé\\n(minimum 1)."
+    },
+    "Parfum régénérant": {
+        "color_code": 2,
+        "description": "Tous les joueurs peuvent gagner des PV, jusqu'à avoir au maximum 8 PV."
+    },
+    "Griffes éclair": {
+        "color_code": 1,
+        "description": "Quand vous <b>exécutez</b> un monstre, si la prochaine carte est un monstre de puissance 5 ou moins, <b>exécutez-le</b> aussi et passez votre tour."
+    },
+    "Perle rare": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre.\\nSi cette carte est intacte à la fin de la partie, <b>+ 2 points de Victoire</b>."
+    },
+    "Coupe des champions": {
+        "color_code": 5,
+        "description": "<b>PV + 1</b>\\nSi vous remportez la manche, gagnez 2 Médailles au lieu d'une."
+    },
+    "Canne à Chep": {
+        "color_code": 3,
+        "description": "<b>Gagnez 4 PV</b> et volez un objet à chaque joueur <b>mort</b>."
+    },
+    "Valises de cash": {
+        "color_code": 5,
+        "description": "<b>Points de Victoire + 3</b>"
+    },
+    "Potion de surprise": {
+        "color_code": 2,
+        "description": "Gagnez autant de PV que vos PV de héros. <b>Piochez</b> un nouvel objet, puis <b>défaussez</b> un objet intact."
+    },
+    "Corne d'abordage": {
+        "color_code": 3,
+        "description": "Vous pouvez <b>voler un monstre</b> dans la pile de chaque joueur dans le Donjon. Perdez <b>2 PV</b>."
+    },
+    "Masque à gaz": {
+        "color_code": 3,
+        "description": "<b>PV + 4</b>\\nActivez pour <b>exécuter</b> et <b>défausser</b> un monstre (perdez les 4 PV)."
+    },
+    "Pied de biche": {
+        "color_code": 2,
+        "description": "<b>PV + 3</b>\\n<b>Exécutez</b> la <b>Mimique</b>, dans ce cas <b>piochez</b> un nouvel objet."
+    },
+    "Marmite gélatineuse": {
+        "color_code": 2,
+        "description": "<b>PV + 3</b>\\n<b>Exécutez</b> le <b>Limon glouton</b>, dans ce cas <b>piochez</b> un nouvel objet."
+    },
+    "Anneau volcanique": {
+        "color_code": 1,
+        "description": "<b>PV + 3</b>\\nSi vous avez un <b>Dragon</b> dans votre pile de monstres vaincus, <b>exécutez</b> les <b>Golems</b>."
+    },
+    "Araignée domestique": {
+        "color_code": 4,
+        "description": "<b>Volez 2 monstres</b> de sa pile au premier joueur qui fuit et au premier joueur qui meurt."
+    },
+    "Parchemin de ponçage": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> un monstre de puissance impaire, puis <b>défaussez</b> autant de cartes du Donjon que la puissance du monstre."
+    },
+    "Bâton des ombres": {
+        "color_code": 4,
+        "description": "<b>PV + 3</b>\\nVous pouvez <b>cacher votre pile</b> de monstres vaincus, sauf en cas d'interaction avec une autre règle."
+    },
+    "Dragoune": {
+        "color_code": 4,
+        "description": "<b>PV + 3</b>\\nSi vous avez <b>au moins 5</b> monstres dans votre pile de monstres vaincus, <b>exécutez</b> les <b>Dragons</b>."
+    },
+    "Casque à cornes": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> les deux premiers monstres qui devraient vous infliger des dommages. Puis, <b>brisez</b> cet objet."
+    },
+    "Bagouze du parrain": {
+        "color_code": 5,
+        "description": "<b>PV + 3</b>\\nSi vous avez exactement <b>4 objets</b> intacts au décompte final,\\n<b>Points de Victoire + 2</b>"
+    },
+    "Kit vaudou": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> un monstre, si vous avez <b>moins de 7 PV</b>."
+    },
+    "Esprit du Donjon": {
+        "color_code": 3,
+        "description": "Les autres joueurs doivent remettre <b>2 monstres</b> de leur pile de monstres vaincus dans le Donjon. Mélangez-le."
+    },
+    "Marteau de combat": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> les <b>Golems</b>."
+    },
+    "Taser manuel": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> un monstre. Si à la fin de votre tour, vous êtes toujours dans le Donjon, <b>défaussez-le</b>."
+    },
+    "Sceptre actif": {
+        "color_code": 3,
+        "description": "<b>PV + 2</b>\\nQuand vous brisez un objet, <b>gagnez 2 PV</b>."
+    },
+    "Épée magique aléatoire": {
+        "color_code": 2,
+        "description": "Avant d'entrer dans le Donjon, lancez un dé.\\n<b>1 - 2:</b> <b>Exécutez</b> les monstres de puissance 5\\n<b>3 - 4:</b> <b>Exécutez</b> les monstres de puissance 6\\n<b>5 - 6:</b> <b>Exécutez</b> les monstres de puissance 7"
+    },
+    "Barbecue du Ponceur": {
+        "color_code": 1,
+        "description": "<b>Défaussez</b> un monstre de votre pile de monstres vaincus, et gagnez autant de PV que sa puissance\\n(un X vaut 0)."
+    },
+    "Fausse couronne": {
+        "color_code": 2,
+        "description": "<b>PV + 3</b>\\nRéduisez les dommages de 1 contre les monstres de puissance paire."
+    },
+    "Cape vaudou": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre, et fixez vos PV au même nombre que sa puissance."
+    },
+    "Grimoire inconnu": {
+        "color_code": 4,
+        "description": "Au début de votre tour, vous pouvez lancer un dé. Sur un 6, <b>piochez un objet</b>."
+    },
+    "Arbalète trop grosse": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> un monstre dont la puissance est <b>supérieure</b> à vos PV."
+    },
+    "Chapeau stylé": {
+        "color_code": 2,
+        "description": "<b>PV + 2</b>\\nAu décompte final, en cas d'égalité entre plusieurs gagnants, <b>vous remportez la manche</b>."
+    },
+    "Bouclier Caméléon": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> les monstres de puissance <b>6 ou plus</b>, dans ce cas <b>perdez 2 PV</b>.\\n<b>Jet de fuite -1</b>"
+    },
+    "Bouclier de l'inventeur": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre, puis lancez un dé. Sur 4 ou plus, <b>piochez un objet</b>."
+    },
+    "Yo-yo protecteur": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre de puissance paire, puis lancez un dé. Sur <b>4 ou plus</b>, ne brisez pas cet objet."
+    },
+    "Chameau": {
+        "color_code": 1,
+        "description": "Si vous êtes le joueur dans le Donjon qui a le moins de PV,\\n<b>gagnez 6 PV</b>."
+    },
+    "Concentré de fun": {
+        "color_code": 1,
+        "description": "<b>Survivez</b> avec vos PV de héros.\\nSi la carte <b>Traquenard</b> est dans la défausse, remettez-la sur le Donjon."
+    },
+    "Fer à cheval": {
+        "color_code": 5,
+        "description": "Quand vous lancez un dé, vous pouvez le relancer une fois (conservez le second résultat)."
+    },
+    "Rose d'or": {
+        "color_code": 5,
+        "description": "Gagnez 3 PV.\\nSi cette carte est intacte à la fin de la partie, <b>Points de Victoire + 2</b>."
+    },
+    "Potion d'escampette": {
+        "color_code": 2,
+        "description": "Gagnez 3 PV.\\n<b>Jet de fuite + 4</b> jusqu'à la fin de votre tour."
+    },
+    "Lanterne chromatique": {
+        "color_code": 4,
+        "description": "<b>PV + 1</b>\\n<b>Exécutez</b> les monstres de <b>puissance</b> égale au nombre de <b>couleurs</b> différentes dans vos objets intacts et brisés."
+    },
+    "Epee mystique": {
+        "color_code": 2,
+        "description": "<b>Jet de fuite + 4</b>\\n<b>Exécutez</b> les monstres dont la puissance est égale à votre bonus de fuite."
+    },
+    "Potion de feu liquide": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre. Quand vous rencontrez un <b>Dragon</b>, <b>réparez</b> cet objet."
+    },
+    "Randotion": {
+        "color_code": 3,
+        "description": "Lancez 2 fois le dé, gagnez autant de PV. puis lancez le dé une troisième fois. Perdez autant de PV."
+    },
+    "Bouclier cassé": {
+        "color_code": 1,
+        "description": "Contre les monstres de puissance <b>6 ou plus</b>, lancez un dé. Réduisez d'autant les dommages."
+    },
+    "Ankh de réincarnation": {
+        "color_code": 4,
+        "description": "<b>Survivez</b> avec 1 PV. Quand un autre joueur meurt, <b>réparez</b> cet objet."
+    },
+    "Montre du Lapin blanc": {
+        "color_code": 5,
+        "description": "<b>PV + 4</b>\\nPassez votre premier tour."
+    },
+    "Calumet de la paix": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre et passez votre tour."
+    },
+    "Glaive d'argent": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> les <b>Vampires</b>.\\nSi vous avez déjà un Vampire dans votre pile de monstres vaincus, <b>gagnez 4 PV</b>."
+    },
+    "Gants de combat": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> un monstre de puissance <b>2 ou moins</b>, puis <b>piochez</b> un objet."
+    },
+    "Faucille communiste": {
+        "color_code": 5,
+        "description": "Calculez le total des <b>PV</b> des joueurs, partagez-le équitablement.\\nLes excédents sont perdus."
+    },
+    "Horloge maudite": {
+        "color_code": 3,
+        "description": "<b>PV + 3</b>\\nAu début de votre tour, vous pouvez perdre <b>1 PV</b> pour <b>passer</b> votre tour."
+    },
+    "Gants de Gaïa": {
+        "color_code": 2,
+        "description": "<b>Défaussez</b> jusqu'à deux objets déjà brisés, et <b>piochez</b> autant d'objets."
+    },
+    "Porte-Boules du Ponceur": {
+        "color_code": 1,
+        "description": "A la fin du tour, si vous avez vaincu au moins 5 monstres ce tour-ci, gagnez <b>5 PV</b>"
+    },
+    "Potion X": {
+        "color_code": 2,
+        "description": "Piochez un héros supplémentaire, gagnez ses PV de héros et son pouvoir."
+    },
+    "Chapelet de Vitalité": {
+        "color_code": 4,
+        "description": "<b>PV + 3</b>\\nAu début de votre tour,\\nlancez un dé.\\nSur un 6, gagnez <b>1 PV</b>."
+    },
+    "Chevalière Pirate": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> un monstre et gagnez <b>3 PV</b>.\\nQuand cet objet est <b>brisé</b>:\\n<b>-1 à tous vos jets de dé.</b>"
+    },
+    "Masque de l'Inquisiteur": {
+        "color_code": 5,
+        "description": "<b>PV + 2</b>\\nA la fin du tour, si vous avez exactement <b>2, 4 ou 8 PV<b>,\\n<b>gagnez 2 PV</b>."
+    },
+    "Tatouage du Ponceur": {
+        "color_code": 1,
+        "description": "<b>PV + 10</b>\\nVous ne pouvez <b>jamais</b> gagner de <b>PV</b>."
+    },
+    "Potage Improvisé": {
+        "color_code": 2,
+        "description": "Gagnez autant de <b>PV</b> qu'il y a de monstres dans votre pile, puis <b>défaussez</b> un monstre de votre pile."
+    },
+    "Boîte de Pandore": {
+        "color_code": 3,
+        "description": "Gagnez <b>3 PV</b>.\\nTous les joueurs\\n<b>piochent un objet</b>."
+    },
+    "La Cloche du Déjà-Vu": {
+        "color_code": 4,
+        "description": "Gagnez <b>2 PV</b>.\\nRemettez un monstre de la défausse ou de votre pile de monstres sur le dessus du Donjon."
+    },
+    "Forge Portative": {
+        "color_code": 5,
+        "description": "Quand un joueur\\n<b>brise</b> un objet,\\n<b>gagnez 1 PV</b>."
+    },
+    "Pare-Buffle du Ponceur": {
+        "color_code": 1,
+        "description": "Réduisez les dommages de 4 contre les monstres de puissance <b>6 ou plus</b>."
+    },
+    "Cape d'invisibilité": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> un monstre de puissance 6 ou plus.\\nSi la carte suivante est aussi un monstre de puissance 6 ou plus, <b>exécutez-le</b>."
+    },
+    "Slip de la Résurgence": {
+        "color_code": 3,
+        "description": "<b>PV + 1</b>\\nAu début de la partie, gagnez autant de PV que le nombre de vos objets sans \"<b>PV +</b>\"."
+    },
+    "Seringue du Docteur Fou": {
+        "color_code": 4,
+        "description": "Gagnez <b>10 PV</b>.\\nQuand cet objet est <b>brisé</b>, quand vous <b>piochez</b> une carte, <b>perdez 1 PV</b>."
+    },
+    "Lame de l'Harmonie": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> un monstre si vous avez <b>exactement 1</b> monstre du meme type dans votre pile de monstres vaincus."
+    },
+    "Aspis d'Héraclès": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre. Si il est de puissance 7 ou plus, <b>gagnez 3 PV</b>."
+    },
+    "Lanterne Absorbante": {
+        "color_code": 2,
+        "description": "<b>Défaussez</b> sans la jouer la carte du dessus du Donjon.\\nSi c'est un monstre, ajoutez sa <b>puissance</b> à vos <b>PV</b>.\\nSinon, ne brisez pas cet objet."
+    },
+    "Talisman Incertain": {
+        "color_code": 3,
+        "description": "<b>PV + 2</b>\\nUne fois par monstre, vous pouvez lancer le dé. Si vous obtenez un 6, <b>exécutez-le</b>."
+    },
+    "Arc du Néant": {
+        "color_code": 4,
+        "description": "<b>PV + 7</b>\\nA chaque tour, la première fois que vous <b>exécutez</b> un monstre, <b>perdez 1 PV</b>."
+    },
+    "Exterminator": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les <b>Dragons</b>\\net les <b>Rats</b>.\\n<b>Jet de fuite -2</b>"
+    },
+    "Maillet d'Argile": {
+        "color_code": 1,
+        "description": "<b>PV + 2</b>\\n<b><b>Exécutez</b> et <b>défaussez</b> les <b>Golems</b>."
+    },
+    "Concoction instable": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> un monstre.\\nSi c'est votre 3ème tour, fixez vos <b>PV</b> au même nombre que sa <b>puissance</b>.\\nA la fin de votre 3ème tour,\\nbrisez cet objet."
+    },
+    "Banane expérimentale": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre, puis remettez au hasard une carte de votre de pile de monstres sur le dessus du Donjon."
+    },
+    "Dé du Tricheur": {
+        "color_code": 3,
+        "description": "<b>PV + 3</b>\\n<b>+1</b> à tous vos jets de dés, sauf si vous faites 5."
+    },
+    "Coffre-Fuite": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les <b>Rats</b>.\\n<b>Jet de fuite + 2</b>\\nVous ne pouvez pas perdre de carte de votre pile de monstres vaincus."
+    },
+    "Epaulette du Ponceur": {
+        "color_code": 1,
+        "description": "<b>PV + 4</b>\\nRéduisez les\\ndommages de 1\\n<b>Jet de fuite -2</b>"
+    },
+    "Kit de Soin": {
+        "color_code": 2,
+        "description": "Après avoir subi des dommages contre un monstre, <b>gagnez 5 PV</b>."
+    },
+    "Compas du Capitaine": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre de puissance 7 ou moins, puis regardez secrètement la carte du dessus du Donjon."
+    },
+    "Pelle du Fossoyeur": {
+        "color_code": 4,
+        "description": "Choisissez <b>4 monstres</b> dans la <b>défausse</b> et ajoutez-les à votre pile de monstres."
+    },
+    "Pâté d'Ange": {
+        "color_code": 5,
+        "description": "Gagnez 7 PV.\\nLes autres joueurs peuvent gagner <b>4 PV</b>."
+    },
+    "Fromage Puant": {
+        "color_code": 1,
+        "description": "Gagnez autant de <b>PV</b> que la <b>puissance</b> du dernier monstre vaincu de votre pile (un X vaut 0)."
+    },
+    "Potion au Thé Vert": {
+        "color_code": 2,
+        "description": "Utilisation au début de votre tour. Gagnez <b>4 PV</b> et <b>passez</b> votre tour."
+    },
+    "Urne Ensorcelée": {
+        "color_code": 3,
+        "description": "Quand vous <b>éxecutez</b> un monstre, gagnez <b>1 PV</b>."
+    },
+    "Patins à Glace": {
+        "color_code": 4,
+        "description": "<b>PV + 3</b>\\n<b>Jet de fuite + 3</b>\\nSi vous obtenez un <b>jet de fuite</b> de 7 ou plus,\\n<b>perdez 1 PV</b>."
+    },
+    "Anneau des Squelettes": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les <b>Squelettes</b> puis gagnez 1 PV.\\nRéduisez les dommages de 4 contre les <b>Démons</b>."
+    },
+    "v4b": {
+        "color_code": 0,
+        "description": ""
+    },
+    "Cocktail Molotov": {
+        "color_code": 1,
+        "description": "<b>Défaussez</b> sans les jouer 3 cartes du dessus du Donjon.\\nAjoutez les <b>monstres</b> à votre pile de monstres vaincus."
+    },
+    "Coquille Salvatrice": {
+        "color_code": 2,
+        "description": "<b>Survivez</b> avec <b>3 PV</b>"
+    },
+    "Main du Créateur": {
+        "color_code": 3,
+        "description": "<b>Survivez</b> avec <b>2 PV</b>.\\nDéfaussez le thème de Donjon de votre choix. Il prend fin immédiatement."
+    },
+    "Botte de Pandore": {
+        "color_code": 4,
+        "description": "Tous les joueurs\\ngagnent <b>5 PV</b>.\\nLes autres joueurs brisent un objet."
+    },
+    "Œil du Maître": {
+        "color_code": 5,
+        "description": "<b>PV + 3</b>\\nVous pouvez défausser les évènements sans les appliquer, et passer votre tour après un évènement."
+    },
+    "Griffes de l'Arracheur": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> les <b>Orcs</b>\\net gagnez 3 PV."
+    },
+    "Plan presque parfait": {
+        "color_code": 2,
+        "description": "<b>PV + 3</b>\\nSi la carte suivant un <b>événement</b> est un monstre, <b>éxecutez-le</b>."
+    },
+    "Scotch du Silencieux": {
+        "color_code": 3,
+        "description": "<b>PV + 3</b>\\nLes monstres de <b>puissance X</b> que vous affrontez sont toujours <b>puissance 0</b>"
+    },
+    "Oiseau de Mauvais Augure": {
+        "color_code": 4,
+        "description": "<b>PV + 3</b>\\nA la fin de votre tour, regardez la première carte du Donjon, puis reposez-la au choix sur le <b>dessus</b> ou en <b>dessous</b> du Donjon."
+    },
+    "Sabre mécanique": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les <b>Gobelins</b> et les <b>Golems</b>.\\n<b>Jet de fuite -1</b>"
+    },
+    "Couronne en Mousse": {
+        "color_code": 4,
+        "description": "Réduisez les dommages de 2. Cet objet se <b>brise</b> quand vous l'utilisez avec 5 monstres ou plus dans votre pile."
+    },
+    "Torche en Mousse": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> les monstres de puissance <b>3 ou moins.</b>\\nCet objet se <b>brise</b> quand vous l'utilisez avec 5 monstres ou plus dans votre pile."
+    },
+    "Champ de Force en Mousse": {
+        "color_code": 3,
+        "description": "Une fois par monstre, vous pouvez lancer le dé. Si vous obtenez un 5 ou plus, <b>exécutez-le</b>. Cet objet se <b>brise</b> quand vous l'utilisez avec 5 monstres ou plus dans votre pile."
+    },
+    "Katana en Mousse": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> les monstres de puissance <b>7 ou plus.</b>\\nCet objet se <b>brise</b> quand vous l'utilisez avec 5 monstres ou plus dans votre pile."
+    },
+    "Graal en Mousse": {
+        "color_code": 5,
+        "description": "<b>Exécutez</b> les monstres de puissance <b>0, 2, 4 et 6</b>.\\nCet objet se <b>brise</b> quand vous l'utilisez avec 5 monstres ou plus dans votre pile."
+    },
+    "Boulet de Canon": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> un monstre de puissance 6 ou plus."
+    },
+    "Potion ou Poison": {
+        "color_code": 2,
+        "description": "Gagnez <b>6 PV</b> puis lancez un dé. Si vous faites un 1, perdez <b>7 PV</b>."
+    },
+    "Potion de Jouvence": {
+        "color_code": 3,
+        "description": "Votre héros passe (ou reste) niveau 1. Gagnez deux fois vos PV de héros."
+    },
+    "Champignon Vénéneux": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> un monstre et perdez <b>1 PV</b>."
+    },
+    "Parchemin d'XP": {
+        "color_code": 5,
+        "description": "Votre héros passe (ou reste) niveau 2. Gagnez autant de PV que vos PV de héros."
+    },
+    "v5": {
+        "color_code": 0,
+        "description": ""
+    },
+    "Queue du Charognard": {
+        "color_code": 1,
+        "description": "<b>PV + 2</b>\\n<b>Exécutez</b> les monstres dont la <b>puissance</b> est égale au <b>nombre de cartes</b> dans votre pile de monstres vaincus"
+    },
+    "Oeil du Changeforme": {
+        "color_code": 2,
+        "description": "Contre un monstre de puissance 6 ou plus, <b>piochez</b> une carte. Si c'est un monstre, vous pouvez <b>défausser</b> le premier pour <b>combattre</b> le second. Sinon <b>défaussez-la</b> sans la jouer."
+    },
+    "Midas de Bronze": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre de puissance 4 ou moins, et ajoutez sa puissance à vos PV."
+    },
+    "Faux de la Mort": {
+        "color_code": 4,
+        "description": "<b>PV + 2</b>\\n<b>Exécutez</b> les monstres dont la <b>puissance</b> est égale\\nà vos <b>PV</b>"
+    },
+    "Parfum de Scandale": {
+        "color_code": 5,
+        "description": "<b>+1 Point de Victoire</b> par Médaille possédée par vos adversaires.\\nSi vous remportez la manche, si un adversaire a une Médaille, au lieu d'en gagner une, <b>volez-lui</b>."
+    },
+    "Casque Berserk": {
+        "color_code": 1,
+        "description": "<b>PV + 7\\nPerdez 1 PV</b> à chaque fois que vous subissez des dommages contre un monstre de puissance <b>2 ou moins</b>"
+    },
+    "Couteaux de lancer": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre. Puis, <b>défaussez 3 cartes</b> de votre choix du Donjon et mélangez-le."
+    },
+    "Pierre de Pressentiment": {
+        "color_code": 3,
+        "description": "Utilisation avant de piocher. Gagnez 2 PV. Si vous piochez un monstre, vous <b>l'exécutez</b>. Sinon, <b>réparez</b> cet objet."
+    },
+    "Alliance Sanguine": {
+        "color_code": 4,
+        "description": "<b>PV + 2</b>\\nSi vous avez <b>2 PV ou moins</b> réduisez les dommages de <b>3</b>"
+    },
+    "Toupie du Chaos": {
+        "color_code": 5,
+        "description": "<b>PV + 4</b>\\nVous pouvez <b>mélanger</b> le Donjon une fois par tour."
+    },
+    "Cerveau auxiliaire": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> les monstres dont vos PV sont <b>divisibles</b> par leur puissance."
+    },
+    "Implant cérébral": {
+        "color_code": 3,
+        "description": "<b>PV + 2</b>\\nSi vous avez un <b>nombre premier</b> de PV, vous pouvez <b>perdre 2 PV</b> pour <b>exécuter</b> un monstre"
+    },
+    "fournee janvier 2025": {
+        "color_code": 0,
+        "description": ""
+    },
+    "Tentacule du Kraken": {
+        "color_code": 4,
+        "description": "Contre un <b>monstre pair</b>: gagnez autant de PV que sa <b>puissance</b>, puis remettez-le dans le Donjon et <b>mélangez</b>."
+    },
+    "Hamac reposant": {
+        "color_code": 2,
+        "description": "<b>PV + 2</b>\\nAu début de chaque tour vous pouvez lancer un dé.\\nSur 4 ou plus,\\n<b>passez votre tour</b>."
+    },
+    "Sac de couchette": {
+        "color_code": 3,
+        "description": "Utilisation à la fin de votre tour. <b>Passez</b> les deux tours suivants sans les jouer, puis <b>piochez un objet</b>."
+    },
+    "Harpe Cinglante": {
+        "color_code": 1,
+        "description": "Quand vous avez 4 PV ou moins, vous pouvez <b>perdre 1 PV</b> pour <b>exécuter</b> un monstre <b>impair</b>, ou  <b>2 PV</b> pour <b>exécuter</b> un monstre <b>pair</b>."
+    },
+    "Corbeille d'or": {
+        "color_code": 5,
+        "description": "<b>PV + 1</b>\\n<b>+1 Point de Victoire</b> par objet brisé dans votre inventaire."
+    },
+    "Osselets de Résurrection": {
+        "color_code": 1,
+        "description": "Quand vous affrontez un monstre, si vous avez <b>3 PV ou plus<b/>, vous pouvez <b>survivre</b> avec <b>1 PV</b>.\\nPassez alors votre tour."
+    },
+    "Lunettes du Bricoleur": {
+        "color_code": 3,
+        "description": "<b>PV + 2</b>\\nQuand vous <b>brisez</b> un objet, lancez un dé. Sur un 6, <b>réparez-le</b> immédiatement."
+    },
+    "Dé Maudit": {
+        "color_code": 4,
+        "description": "<b>PV + 2</b>\\nUne fois par monstre, vous pouvez lancer un dé. Si vous obtenez le nombre égal à sa puissance, <b>exécutez-le</b>."
+    },
+    "Attrape-Rêves": {
+        "color_code": 5,
+        "description": "<b>PV + 2</b>\\n<b>Exécutez</b> tous les monstres qui n'ont pas de <b>type</b>."
+    },
+    "Tirelire": {
+        "color_code": 5,
+        "description": "Vous pouvez stocker jusqu'à 7 monstres vaincus <b>ici</b>. Activez cet objet pour les ajouter à votre pile, gagnez <b>1 PV par monstre</b>."
+    },
+    "Fruit du Destin": {
+        "color_code": 2,
+        "description": "Gagnez 1 PV\\npar <b>monstre</b> défaussé\\n<b>ou</b>\\npar <b>évènement</b> défaussé\\nau choix."
+    },
+    "Bouclier Magique": {
+        "color_code": 4,
+        "description": "<b>PV + 3</b>\\nSi vous avez <b>au moins 7 monstres</b> dans votre pile, réduisez les dommages de 1."
+    },
+    "Viande crue": {
+        "color_code": 1,
+        "description": "Gagnez <b>3 PV</b>\\n<b>ou</b>\\nsi vous avez un <b>Dragon</b> dans votre pile, gagnez <b>8 PV</b>."
+    },
+    "Couteau entre les dents": {
+        "color_code": 2,
+        "description": "<b>Exécutez</b> les <b>Orcs</b> et les <b>Vampires</b>."
+    },
+    "Coursier volant": {
+        "color_code": 5,
+        "description": "<b>PV + 2</b>\\nA la fin de votre tour, vous pouvez <b>défausser</b> un objet intact pour piocher un nouvel objet."
+    },
+    "Maillet du Roi Liche": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un <b>Golem</b>, une <b>Liche</b> ou un <b>Démon</b>, puis gagnez <b>3 PV<b/>."
+    },
+    "Pain Maudit": {
+        "color_code": 2,
+        "description": "<b>Gagnez 4 PV</b>\\nTous les <b>Démons</b> et <b>Dragons</b> défaussés ou vaincus par tous les joueurs retournent dans le Donjon. Mélangez-le."
+    },
+    "Sainte Lance": {
+        "color_code": 1,
+        "description": "<b>Exécutez</b> les monstres de puissance <b>6, 8 et 10</b>."
+    },
+    "Siège de Troie": {
+        "color_code": 4,
+        "description": "Pour le prochain tour de chaque autre joueur, tous les monstres vaincus seront <b>défaussés</b>, et vous gagnez <b>1 PV</b> pour chaque monstre défaussé."
+    },
+    "Codex Diabolus": {
+        "color_code": 4,
+        "description": "<b>Exécutez</b> les <b>Démons</b>.\\nIls infligent <b>2 dommages</b> supplémentaires aux autres joueurs."
+    },
+    "Sac de Constantinople": {
+        "color_code": 3,
+        "description": "Volez un <b>Dragon</b> dans\\nla pile de monstres vaincus\\nde chaque joueur dans le Donjon."
+    },
+    "Grelot du Bouffon": {
+        "color_code": 2,
+        "description": "<b>PV + 1</b>\\nQuand un joueur pioche un évènement, <b>gagnez 1 PV</b>."
+    },
+    "Set de Cœurs": {
+        "color_code": 1,
+        "description": "Fixez vos PV à <b>7</b>."
+    },
+    "Miroir de Yata": {
+        "color_code": 3,
+        "description": "<b>Exécutez</b> un monstre. Puis, montrez à tous les joueurs les 3 prochaines cartes</b> du Donjon et passez votre tour."
+    },
+    "Pierre du Naga": {
+        "color_code": 5,
+        "description": "<b>PV + 2</b>\\nQuand un monstre de puissance 7 ou plus est vaincu par n'importe quel joueur, <b>gagnez 1 PV</b>."
+    },
+    "Cape de Plumes": {
+        "color_code": 5,
+        "description": "Réduisez les dommages d'un monstre de <b>8</b>"
+    },
+    "Sceptre du Maharal": {
+        "color_code": 5,
+        "description": "Perdez 1 PV pour <b>exécuter</b> un <b>Golem</b>, puis vous pouvez le remettre sur le Donjon."
+    },
+    "Masque du Saboteur": {
+        "color_code": 4,
+        "description": "Quand un autre joueur utilise un objet actif, il doit lancer un dé. Sur un 1, son objet se <b>brise sans effet.</b>"
+    },
+    "Trou Noir Portatif": {
+        "color_code": 5,
+        "description": "<b>PV + 5</b>\\nQuand vous <b>brisez</b> un objet, <b>défaussez-le</b> immédiatement."
+    }
+}
