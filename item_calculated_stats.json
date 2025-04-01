@@ -1,0 +1,1185 @@
+{
+    "Glaive d'argent": {
+        "win_rate (%)": 23.12,
+        "death_rate (%)": 29.11,
+        "fled_rate (%)": 49.8,
+        "cleared_rate (%)": 21.1,
+        "pick_draft_ratio (%)": 76.36
+    },
+    "Seringue du docteur fou": {
+        "win_rate (%)": 26.01,
+        "death_rate (%)": 30.87,
+        "fled_rate (%)": 59.26,
+        "cleared_rate (%)": 9.87,
+        "pick_draft_ratio (%)": 82.0
+    },
+    "Dragoune": {
+        "win_rate (%)": 28.41,
+        "death_rate (%)": 30.68,
+        "fled_rate (%)": 56.31,
+        "cleared_rate (%)": 13.02,
+        "pick_draft_ratio (%)": 88.37
+    },
+    "Anneau du Feu": {
+        "win_rate (%)": 27.81,
+        "death_rate (%)": 27.45,
+        "fled_rate (%)": 60.55,
+        "cleared_rate (%)": 12.0,
+        "pick_draft_ratio (%)": 95.35
+    },
+    "Potion d'adrénaline": {
+        "win_rate (%)": 26.07,
+        "death_rate (%)": 27.16,
+        "fled_rate (%)": 60.54,
+        "cleared_rate (%)": 12.3,
+        "pick_draft_ratio (%)": 85.94
+    },
+    "Coffre animé": {
+        "win_rate (%)": 32.21,
+        "death_rate (%)": 26.57,
+        "fled_rate (%)": 60.82,
+        "cleared_rate (%)": 12.61,
+        "pick_draft_ratio (%)": 85.71
+    },
+    "Epee mystique": {
+        "win_rate (%)": 26.45,
+        "death_rate (%)": 13.89,
+        "fled_rate (%)": 81.93,
+        "cleared_rate (%)": 4.19,
+        "pick_draft_ratio (%)": 72.41
+    },
+    "Masque à gaz": {
+        "win_rate (%)": 29.77,
+        "death_rate (%)": 30.07,
+        "fled_rate (%)": 51.89,
+        "cleared_rate (%)": 18.04,
+        "pick_draft_ratio (%)": 93.88
+    },
+    "Epaulette du Bourrin": {
+        "win_rate (%)": 36.48,
+        "death_rate (%)": 29.44,
+        "fled_rate (%)": 51.91,
+        "cleared_rate (%)": 18.66,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Anneau de Vie": {
+        "win_rate (%)": 27.74,
+        "death_rate (%)": 20.95,
+        "fled_rate (%)": 61.16,
+        "cleared_rate (%)": 17.89,
+        "pick_draft_ratio (%)": 94.44
+    },
+    "Fouet du fourbe": {
+        "win_rate (%)": 23.62,
+        "death_rate (%)": 27.87,
+        "fled_rate (%)": 66.54,
+        "cleared_rate (%)": 5.6,
+        "pick_draft_ratio (%)": 52.17
+    },
+    "ItemUseless": {
+        "win_rate (%)": 18.94,
+        "death_rate (%)": 29.06,
+        "fled_rate (%)": 64.85,
+        "cleared_rate (%)": 6.09,
+        "pick_draft_ratio (%)": 23.91
+    },
+    "Patte du RatLiche": {
+        "win_rate (%)": 22.23,
+        "death_rate (%)": 23.7,
+        "fled_rate (%)": 69.99,
+        "cleared_rate (%)": 6.31,
+        "pick_draft_ratio (%)": 78.85
+    },
+    "Barde": {
+        "win_rate (%)": 27.39,
+        "death_rate (%)": 23.28,
+        "fled_rate (%)": 63.66,
+        "cleared_rate (%)": 13.05,
+        "pick_draft_ratio (%)": 93.62
+    },
+    "Masque de la Peste": {
+        "win_rate (%)": 30.58,
+        "death_rate (%)": 25.62,
+        "fled_rate (%)": 64.32,
+        "cleared_rate (%)": 10.05,
+        "pick_draft_ratio (%)": 98.11
+    },
+    "Anneau des surmulots": {
+        "win_rate (%)": 26.34,
+        "death_rate (%)": 26.61,
+        "fled_rate (%)": 61.31,
+        "cleared_rate (%)": 12.08,
+        "pick_draft_ratio (%)": 86.49
+    },
+    "LanceDuDestin": {
+        "win_rate (%)": 25.39,
+        "death_rate (%)": 22.38,
+        "fled_rate (%)": 67.36,
+        "cleared_rate (%)": 10.25,
+        "pick_draft_ratio (%)": 66.1
+    },
+    "Délicieuse pizza": {
+        "win_rate (%)": 27.7,
+        "death_rate (%)": 24.45,
+        "fled_rate (%)": 65.52,
+        "cleared_rate (%)": 10.03,
+        "pick_draft_ratio (%)": 95.92
+    },
+    "Fleau des liches": {
+        "win_rate (%)": 28.2,
+        "death_rate (%)": 23.49,
+        "fled_rate (%)": 62.65,
+        "cleared_rate (%)": 13.85,
+        "pick_draft_ratio (%)": 90.0
+    },
+    "Corbeille d'or": {
+        "win_rate (%)": 26.44,
+        "death_rate (%)": 23.3,
+        "fled_rate (%)": 70.99,
+        "cleared_rate (%)": 5.72,
+        "pick_draft_ratio (%)": 82.0
+    },
+    "Sceptre actif": {
+        "win_rate (%)": 31.45,
+        "death_rate (%)": 25.8,
+        "fled_rate (%)": 62.27,
+        "cleared_rate (%)": 11.93,
+        "pick_draft_ratio (%)": 97.5
+    },
+    "Caisse enchantée": {
+        "win_rate (%)": 26.91,
+        "death_rate (%)": 25.7,
+        "fled_rate (%)": 62.32,
+        "cleared_rate (%)": 11.98,
+        "pick_draft_ratio (%)": 83.02
+    },
+    "Perceuse a Breche": {
+        "win_rate (%)": 21.68,
+        "death_rate (%)": 30.99,
+        "fled_rate (%)": 56.69,
+        "cleared_rate (%)": 12.31,
+        "pick_draft_ratio (%)": 85.25
+    },
+    "Couronne en Mousse": {
+        "win_rate (%)": 29.03,
+        "death_rate (%)": 29.06,
+        "fled_rate (%)": 59.39,
+        "cleared_rate (%)": 11.55,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Coquillage Magique": {
+        "win_rate (%)": 25.69,
+        "death_rate (%)": 25.73,
+        "fled_rate (%)": 65.76,
+        "cleared_rate (%)": 8.51,
+        "pick_draft_ratio (%)": 91.23
+    },
+    "Champignon Vénéneux": {
+        "win_rate (%)": 24.41,
+        "death_rate (%)": 24.86,
+        "fled_rate (%)": 65.86,
+        "cleared_rate (%)": 9.28,
+        "pick_draft_ratio (%)": 83.72
+    },
+    "Champ de force en mousse": {
+        "win_rate (%)": 27.58,
+        "death_rate (%)": 26.45,
+        "fled_rate (%)": 62.11,
+        "cleared_rate (%)": 11.44,
+        "pick_draft_ratio (%)": 97.44
+    },
+    "Crâne du Roi Liche": {
+        "win_rate (%)": 29.04,
+        "death_rate (%)": 30.1,
+        "fled_rate (%)": 62.79,
+        "cleared_rate (%)": 7.11,
+        "pick_draft_ratio (%)": 96.0
+    },
+    "Pierre d'âme": {
+        "win_rate (%)": 28.23,
+        "death_rate (%)": 25.63,
+        "fled_rate (%)": 66.63,
+        "cleared_rate (%)": 7.74,
+        "pick_draft_ratio (%)": 92.0
+    },
+    "Anneau Plussain": {
+        "win_rate (%)": 27.63,
+        "death_rate (%)": 25.52,
+        "fled_rate (%)": 69.65,
+        "cleared_rate (%)": 4.83,
+        "pick_draft_ratio (%)": 86.89
+    },
+    "Bouclier Golemique": {
+        "win_rate (%)": 27.02,
+        "death_rate (%)": 26.16,
+        "fled_rate (%)": 59.61,
+        "cleared_rate (%)": 14.23,
+        "pick_draft_ratio (%)": 98.28
+    },
+    "Fer a Cheval": {
+        "win_rate (%)": 23.67,
+        "death_rate (%)": 27.42,
+        "fled_rate (%)": 64.88,
+        "cleared_rate (%)": 7.7,
+        "pick_draft_ratio (%)": 46.3
+    },
+    "Gants de combat": {
+        "win_rate (%)": 29.83,
+        "death_rate (%)": 27.15,
+        "fled_rate (%)": 60.43,
+        "cleared_rate (%)": 12.42,
+        "pick_draft_ratio (%)": 93.62
+    },
+    "Boulet de Canon": {
+        "win_rate (%)": 29.34,
+        "death_rate (%)": 30.44,
+        "fled_rate (%)": 60.32,
+        "cleared_rate (%)": 9.24,
+        "pick_draft_ratio (%)": 87.18
+    },
+    "Potion draconique": {
+        "win_rate (%)": 31.5,
+        "death_rate (%)": 21.56,
+        "fled_rate (%)": 72.31,
+        "cleared_rate (%)": 6.13,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Calice du Roi Sorcier": {
+        "win_rate (%)": 25.86,
+        "death_rate (%)": 30.04,
+        "fled_rate (%)": 59.39,
+        "cleared_rate (%)": 10.57,
+        "pick_draft_ratio (%)": 87.5
+    },
+    "Platree de Berniques": {
+        "win_rate (%)": 28.19,
+        "death_rate (%)": 24.42,
+        "fled_rate (%)": 68.5,
+        "cleared_rate (%)": 7.08,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Griffes de l'Arracheur": {
+        "win_rate (%)": 30.08,
+        "death_rate (%)": 27.34,
+        "fled_rate (%)": 55.82,
+        "cleared_rate (%)": 16.84,
+        "pick_draft_ratio (%)": 95.74
+    },
+    "Katana": {
+        "win_rate (%)": 33.75,
+        "death_rate (%)": 17.7,
+        "fled_rate (%)": 62.22,
+        "cleared_rate (%)": 20.08,
+        "pick_draft_ratio (%)": 87.04
+    },
+    "Osselets de Résurrection": {
+        "win_rate (%)": 23.41,
+        "death_rate (%)": 23.43,
+        "fled_rate (%)": 69.07,
+        "cleared_rate (%)": 7.49,
+        "pick_draft_ratio (%)": 54.9
+    },
+    "Item 3PV 2": {
+        "win_rate (%)": 30.35,
+        "death_rate (%)": 30.82,
+        "fled_rate (%)": 57.71,
+        "cleared_rate (%)": 11.47,
+        "pick_draft_ratio (%)": 73.08
+    },
+    "Armure Ardente": {
+        "win_rate (%)": 30.26,
+        "death_rate (%)": 20.04,
+        "fled_rate (%)": 67.83,
+        "cleared_rate (%)": 12.13,
+        "pick_draft_ratio (%)": 97.96
+    },
+    "Item 3PV": {
+        "win_rate (%)": 27.76,
+        "death_rate (%)": 31.55,
+        "fled_rate (%)": 60.37,
+        "cleared_rate (%)": 8.08,
+        "pick_draft_ratio (%)": 72.92
+    },
+    "Enclume instable": {
+        "win_rate (%)": 28.36,
+        "death_rate (%)": 24.86,
+        "fled_rate (%)": 64.77,
+        "cleared_rate (%)": 10.37,
+        "pick_draft_ratio (%)": 91.67
+    },
+    "Getas du novice": {
+        "win_rate (%)": 25.68,
+        "death_rate (%)": 23.34,
+        "fled_rate (%)": 70.04,
+        "cleared_rate (%)": 6.63,
+        "pick_draft_ratio (%)": 74.0
+    },
+    "Viande Crue": {
+        "win_rate (%)": 24.48,
+        "death_rate (%)": 27.63,
+        "fled_rate (%)": 66.39,
+        "cleared_rate (%)": 5.98,
+        "pick_draft_ratio (%)": 73.08
+    },
+    "Corne d'abordage": {
+        "win_rate (%)": 35.6,
+        "death_rate (%)": 27.23,
+        "fled_rate (%)": 66.28,
+        "cleared_rate (%)": 6.49,
+        "pick_draft_ratio (%)": 86.84
+    },
+    "Épée magique aléatoire": {
+        "win_rate (%)": 25.41,
+        "death_rate (%)": 26.3,
+        "fled_rate (%)": 63.66,
+        "cleared_rate (%)": 10.03,
+        "pick_draft_ratio (%)": 68.97
+    },
+    "Potion de Mana": {
+        "win_rate (%)": 26.92,
+        "death_rate (%)": 21.54,
+        "fled_rate (%)": 71.3,
+        "cleared_rate (%)": 7.16,
+        "pick_draft_ratio (%)": 93.48
+    },
+    "Dé Maudit": {
+        "win_rate (%)": 27.42,
+        "death_rate (%)": 24.08,
+        "fled_rate (%)": 61.89,
+        "cleared_rate (%)": 14.02,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Chapeau stylé": {
+        "win_rate (%)": 28.15,
+        "death_rate (%)": 25.84,
+        "fled_rate (%)": 67.75,
+        "cleared_rate (%)": 6.41,
+        "pick_draft_ratio (%)": 90.7
+    },
+    "Pain maudit": {
+        "win_rate (%)": 26.1,
+        "death_rate (%)": 26.92,
+        "fled_rate (%)": 66.85,
+        "cleared_rate (%)": 6.24,
+        "pick_draft_ratio (%)": 87.88
+    },
+    "Grelot du Bouffon": {
+        "win_rate (%)": 32.2,
+        "death_rate (%)": 32.44,
+        "fled_rate (%)": 53.32,
+        "cleared_rate (%)": 14.24,
+        "pick_draft_ratio (%)": 91.11
+    },
+    "Parchemin de Téléportation": {
+        "win_rate (%)": 28.52,
+        "death_rate (%)": 12.17,
+        "fled_rate (%)": 82.93,
+        "cleared_rate (%)": 4.9,
+        "pick_draft_ratio (%)": 87.93
+    },
+    "Bouclier de l'inventeur": {
+        "win_rate (%)": 26.85,
+        "death_rate (%)": 30.57,
+        "fled_rate (%)": 57.9,
+        "cleared_rate (%)": 11.53,
+        "pick_draft_ratio (%)": 95.45
+    },
+    "Ankh de réincarnation": {
+        "win_rate (%)": 28.32,
+        "death_rate (%)": 21.02,
+        "fled_rate (%)": 71.46,
+        "cleared_rate (%)": 7.52,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Randotion": {
+        "win_rate (%)": 28.23,
+        "death_rate (%)": 26.69,
+        "fled_rate (%)": 61.0,
+        "cleared_rate (%)": 12.31,
+        "pick_draft_ratio (%)": 88.71
+    },
+    "Pendentif du Novice": {
+        "win_rate (%)": 28.46,
+        "death_rate (%)": 29.05,
+        "fled_rate (%)": 56.29,
+        "cleared_rate (%)": 14.66,
+        "pick_draft_ratio (%)": 87.5
+    },
+    "Feuille Eternelle": {
+        "win_rate (%)": 29.36,
+        "death_rate (%)": 25.59,
+        "fled_rate (%)": 59.02,
+        "cleared_rate (%)": 15.39,
+        "pick_draft_ratio (%)": 88.37
+    },
+    "Couteau Entre Les Dents": {
+        "win_rate (%)": 27.68,
+        "death_rate (%)": 25.73,
+        "fled_rate (%)": 61.8,
+        "cleared_rate (%)": 12.46,
+        "pick_draft_ratio (%)": 98.25
+    },
+    "Potion de feu liquide": {
+        "win_rate (%)": 25.6,
+        "death_rate (%)": 22.23,
+        "fled_rate (%)": 67.71,
+        "cleared_rate (%)": 10.06,
+        "pick_draft_ratio (%)": 76.67
+    },
+    "Dé du Tricheur": {
+        "win_rate (%)": 25.56,
+        "death_rate (%)": 25.05,
+        "fled_rate (%)": 66.92,
+        "cleared_rate (%)": 8.03,
+        "pick_draft_ratio (%)": 68.89
+    },
+    "Anneau volcanique": {
+        "win_rate (%)": 25.96,
+        "death_rate (%)": 23.7,
+        "fled_rate (%)": 66.94,
+        "cleared_rate (%)": 9.35,
+        "pick_draft_ratio (%)": 88.64
+    },
+    "Fromage Puant": {
+        "win_rate (%)": 28.49,
+        "death_rate (%)": 31.08,
+        "fled_rate (%)": 57.84,
+        "cleared_rate (%)": 11.08,
+        "pick_draft_ratio (%)": 96.55
+    },
+    "Canne à Chep": {
+        "win_rate (%)": 30.32,
+        "death_rate (%)": 28.25,
+        "fled_rate (%)": 61.32,
+        "cleared_rate (%)": 10.43,
+        "pick_draft_ratio (%)": 94.12
+    },
+    "Potion de Glace": {
+        "win_rate (%)": 29.02,
+        "death_rate (%)": 27.09,
+        "fled_rate (%)": 65.54,
+        "cleared_rate (%)": 7.37,
+        "pick_draft_ratio (%)": 94.34
+    },
+    "Chapeau du novice": {
+        "win_rate (%)": 27.25,
+        "death_rate (%)": 29.97,
+        "fled_rate (%)": 61.4,
+        "cleared_rate (%)": 8.64,
+        "pick_draft_ratio (%)": 73.08
+    },
+    "Couronne d'épines": {
+        "win_rate (%)": 36.62,
+        "death_rate (%)": 20.64,
+        "fled_rate (%)": 59.65,
+        "cleared_rate (%)": 19.71,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Talisman Incertain": {
+        "win_rate (%)": 32.18,
+        "death_rate (%)": 24.09,
+        "fled_rate (%)": 60.24,
+        "cleared_rate (%)": 15.67,
+        "pick_draft_ratio (%)": 98.21
+    },
+    "Potion féérique": {
+        "win_rate (%)": 28.6,
+        "death_rate (%)": 21.16,
+        "fled_rate (%)": 71.44,
+        "cleared_rate (%)": 7.4,
+        "pick_draft_ratio (%)": 98.28
+    },
+    "Couteau Suisse": {
+        "win_rate (%)": 29.29,
+        "death_rate (%)": 31.69,
+        "fled_rate (%)": 55.78,
+        "cleared_rate (%)": 12.53,
+        "pick_draft_ratio (%)": 86.67
+    },
+    "Marteau flamboyant": {
+        "win_rate (%)": 28.56,
+        "death_rate (%)": 22.6,
+        "fled_rate (%)": 65.4,
+        "cleared_rate (%)": 12.0,
+        "pick_draft_ratio (%)": 80.95
+    },
+    "Boîte à butin": {
+        "win_rate (%)": 27.31,
+        "death_rate (%)": 25.25,
+        "fled_rate (%)": 63.05,
+        "cleared_rate (%)": 11.71,
+        "pick_draft_ratio (%)": 92.45
+    },
+    "Main de Midas B": {
+        "win_rate (%)": 27.41,
+        "death_rate (%)": 30.25,
+        "fled_rate (%)": 56.04,
+        "cleared_rate (%)": 13.71,
+        "pick_draft_ratio (%)": 90.91
+    },
+    "Coquille Salvatrice": {
+        "win_rate (%)": 28.94,
+        "death_rate (%)": 18.11,
+        "fled_rate (%)": 76.19,
+        "cleared_rate (%)": 5.7,
+        "pick_draft_ratio (%)": 98.0
+    },
+    "Cocktail Molotov": {
+        "win_rate (%)": 29.95,
+        "death_rate (%)": 27.63,
+        "fled_rate (%)": 64.74,
+        "cleared_rate (%)": 7.63,
+        "pick_draft_ratio (%)": 96.0
+    },
+    "Tunique classe": {
+        "win_rate (%)": 25.78,
+        "death_rate (%)": 33.39,
+        "fled_rate (%)": 58.67,
+        "cleared_rate (%)": 7.94,
+        "pick_draft_ratio (%)": 90.57
+    },
+    "Treize à Seize": {
+        "win_rate (%)": 23.31,
+        "death_rate (%)": 23.81,
+        "fled_rate (%)": 64.73,
+        "cleared_rate (%)": 11.47,
+        "pick_draft_ratio (%)": 77.19
+    },
+    "Pelle du Fossoyeur": {
+        "win_rate (%)": 26.0,
+        "death_rate (%)": 34.26,
+        "fled_rate (%)": 59.61,
+        "cleared_rate (%)": 6.12,
+        "pick_draft_ratio (%)": 65.45
+    },
+    "Bottes de Vitesse": {
+        "win_rate (%)": 25.93,
+        "death_rate (%)": 11.74,
+        "fled_rate (%)": 83.28,
+        "cleared_rate (%)": 4.98,
+        "pick_draft_ratio (%)": 81.63
+    },
+    "Boomerang Mystique": {
+        "win_rate (%)": 26.85,
+        "death_rate (%)": 22.79,
+        "fled_rate (%)": 65.21,
+        "cleared_rate (%)": 11.99,
+        "pick_draft_ratio (%)": 79.59
+    },
+    "Peigne en or": {
+        "win_rate (%)": 28.41,
+        "death_rate (%)": 24.86,
+        "fled_rate (%)": 66.35,
+        "cleared_rate (%)": 8.78,
+        "pick_draft_ratio (%)": 89.8
+    },
+    "Set de Cœurs": {
+        "win_rate (%)": 27.23,
+        "death_rate (%)": 30.87,
+        "fled_rate (%)": 58.79,
+        "cleared_rate (%)": 10.34,
+        "pick_draft_ratio (%)": 72.73
+    },
+    "Lame Draconique": {
+        "win_rate (%)": 30.06,
+        "death_rate (%)": 23.01,
+        "fled_rate (%)": 62.68,
+        "cleared_rate (%)": 14.32,
+        "pick_draft_ratio (%)": 76.32
+    },
+    "Cape de Plumes": {
+        "win_rate (%)": 28.57,
+        "death_rate (%)": 27.07,
+        "fled_rate (%)": 59.36,
+        "cleared_rate (%)": 13.57,
+        "pick_draft_ratio (%)": 98.18
+    },
+    "Fruit du Destin": {
+        "win_rate (%)": 23.16,
+        "death_rate (%)": 25.71,
+        "fled_rate (%)": 63.72,
+        "cleared_rate (%)": 10.57,
+        "pick_draft_ratio (%)": 79.31
+    },
+    "Bouclier Magique": {
+        "win_rate (%)": 23.92,
+        "death_rate (%)": 30.75,
+        "fled_rate (%)": 62.47,
+        "cleared_rate (%)": 6.78,
+        "pick_draft_ratio (%)": 63.16
+    },
+    "Marteau d'Eternité": {
+        "win_rate (%)": 29.67,
+        "death_rate (%)": 92.5,
+        "fled_rate (%)": 0.22,
+        "cleared_rate (%)": 7.28,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Grimoire Inconnu": {
+        "win_rate (%)": 35.37,
+        "death_rate (%)": 32.12,
+        "fled_rate (%)": 40.06,
+        "cleared_rate (%)": 27.83,
+        "pick_draft_ratio (%)": 94.64
+    },
+    "Graal en Mousse": {
+        "win_rate (%)": 32.95,
+        "death_rate (%)": 24.66,
+        "fled_rate (%)": 65.79,
+        "cleared_rate (%)": 9.55,
+        "pick_draft_ratio (%)": 98.18
+    },
+    "Pistolet Pirate": {
+        "win_rate (%)": 24.96,
+        "death_rate (%)": 27.23,
+        "fled_rate (%)": 59.21,
+        "cleared_rate (%)": 13.56,
+        "pick_draft_ratio (%)": 69.77
+    },
+    "Marteau de combat": {
+        "win_rate (%)": 26.9,
+        "death_rate (%)": 27.4,
+        "fled_rate (%)": 63.69,
+        "cleared_rate (%)": 8.91,
+        "pick_draft_ratio (%)": 76.47
+    },
+    "Plan presque parfait": {
+        "win_rate (%)": 27.68,
+        "death_rate (%)": 25.41,
+        "fled_rate (%)": 66.52,
+        "cleared_rate (%)": 8.07,
+        "pick_draft_ratio (%)": 95.24
+    },
+    "Sabre mécanique": {
+        "win_rate (%)": 27.74,
+        "death_rate (%)": 29.22,
+        "fled_rate (%)": 62.34,
+        "cleared_rate (%)": 8.44,
+        "pick_draft_ratio (%)": 83.67
+    },
+    "Cœur de Dragon": {
+        "win_rate (%)": 31.44,
+        "death_rate (%)": 26.38,
+        "fled_rate (%)": 53.38,
+        "cleared_rate (%)": 20.24,
+        "pick_draft_ratio (%)": 98.18
+    },
+    "Gros boulet": {
+        "win_rate (%)": 35.0,
+        "death_rate (%)": 32.64,
+        "fled_rate (%)": 55.0,
+        "cleared_rate (%)": 12.35,
+        "pick_draft_ratio (%)": 95.83
+    },
+    "Kit vaudou": {
+        "win_rate (%)": 25.95,
+        "death_rate (%)": 30.09,
+        "fled_rate (%)": 61.82,
+        "cleared_rate (%)": 8.09,
+        "pick_draft_ratio (%)": 89.58
+    },
+    "Item 4PV": {
+        "win_rate (%)": 25.47,
+        "death_rate (%)": 27.3,
+        "fled_rate (%)": 65.47,
+        "cleared_rate (%)": 7.23,
+        "pick_draft_ratio (%)": 77.19
+    },
+    "Parchemin de ponçage": {
+        "win_rate (%)": 30.52,
+        "death_rate (%)": 25.3,
+        "fled_rate (%)": 57.44,
+        "cleared_rate (%)": 17.26,
+        "pick_draft_ratio (%)": 98.25
+    },
+    "Gâteau spatial": {
+        "win_rate (%)": 25.15,
+        "death_rate (%)": 18.98,
+        "fled_rate (%)": 73.83,
+        "cleared_rate (%)": 7.19,
+        "pick_draft_ratio (%)": 90.0
+    },
+    "Singe doré": {
+        "win_rate (%)": 28.93,
+        "death_rate (%)": 31.2,
+        "fled_rate (%)": 61.99,
+        "cleared_rate (%)": 6.8,
+        "pick_draft_ratio (%)": 84.44
+    },
+    "Fausse couronne": {
+        "win_rate (%)": 30.3,
+        "death_rate (%)": 26.16,
+        "fled_rate (%)": 62.73,
+        "cleared_rate (%)": 11.11,
+        "pick_draft_ratio (%)": 94.74
+    },
+    "Anneau Oceanique": {
+        "win_rate (%)": 30.34,
+        "death_rate (%)": 29.32,
+        "fled_rate (%)": 54.7,
+        "cleared_rate (%)": 15.98,
+        "pick_draft_ratio (%)": 66.67
+    },
+    "Pioche de diamant": {
+        "win_rate (%)": 30.36,
+        "death_rate (%)": 26.78,
+        "fled_rate (%)": 60.62,
+        "cleared_rate (%)": 12.6,
+        "pick_draft_ratio (%)": 98.48
+    },
+    "Cape vaudou": {
+        "win_rate (%)": 25.36,
+        "death_rate (%)": 19.84,
+        "fled_rate (%)": 69.24,
+        "cleared_rate (%)": 10.92,
+        "pick_draft_ratio (%)": 90.57
+    },
+    "Main de Midas": {
+        "win_rate (%)": 34.4,
+        "death_rate (%)": 24.88,
+        "fled_rate (%)": 57.97,
+        "cleared_rate (%)": 17.16,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Parchemin de Bahn": {
+        "win_rate (%)": 27.84,
+        "death_rate (%)": 22.85,
+        "fled_rate (%)": 65.31,
+        "cleared_rate (%)": 11.84,
+        "pick_draft_ratio (%)": 83.02
+    },
+    "Bouclier cassé": {
+        "win_rate (%)": 27.59,
+        "death_rate (%)": 21.98,
+        "fled_rate (%)": 69.86,
+        "cleared_rate (%)": 8.16,
+        "pick_draft_ratio (%)": 76.36
+    },
+    "Lunettes du Bricoleur": {
+        "win_rate (%)": 28.53,
+        "death_rate (%)": 26.46,
+        "fled_rate (%)": 66.48,
+        "cleared_rate (%)": 7.05,
+        "pick_draft_ratio (%)": 55.0
+    },
+    "Elixir de chance": {
+        "win_rate (%)": 32.31,
+        "death_rate (%)": 25.94,
+        "fled_rate (%)": 59.38,
+        "cleared_rate (%)": 14.68,
+        "pick_draft_ratio (%)": 89.47
+    },
+    "Gants de Gaïa": {
+        "win_rate (%)": 32.44,
+        "death_rate (%)": 31.44,
+        "fled_rate (%)": 58.2,
+        "cleared_rate (%)": 10.35,
+        "pick_draft_ratio (%)": 94.44
+    },
+    "Alliance Sanguine": {
+        "win_rate (%)": 24.95,
+        "death_rate (%)": 21.02,
+        "fled_rate (%)": 70.74,
+        "cleared_rate (%)": 8.25,
+        "pick_draft_ratio (%)": 40.0
+    },
+    "Marmite Gélatineuse": {
+        "win_rate (%)": 28.05,
+        "death_rate (%)": 22.44,
+        "fled_rate (%)": 66.16,
+        "cleared_rate (%)": 11.41,
+        "pick_draft_ratio (%)": 81.13
+    },
+    "Araignée domestique": {
+        "win_rate (%)": 26.1,
+        "death_rate (%)": 32.43,
+        "fled_rate (%)": 62.23,
+        "cleared_rate (%)": 5.33,
+        "pick_draft_ratio (%)": 80.39
+    },
+    "Item 5PV": {
+        "win_rate (%)": 31.32,
+        "death_rate (%)": 19.35,
+        "fled_rate (%)": 68.05,
+        "cleared_rate (%)": 12.6,
+        "pick_draft_ratio (%)": 83.02
+    },
+    "Armure du Roi Liche": {
+        "win_rate (%)": 31.36,
+        "death_rate (%)": 23.84,
+        "fled_rate (%)": 57.38,
+        "cleared_rate (%)": 18.77,
+        "pick_draft_ratio (%)": 89.8
+    },
+    "Valises de Cash": {
+        "win_rate (%)": 27.54,
+        "death_rate (%)": 30.66,
+        "fled_rate (%)": 65.17,
+        "cleared_rate (%)": 4.17,
+        "pick_draft_ratio (%)": 97.62
+    },
+    "Bouclier Dragon": {
+        "win_rate (%)": 30.82,
+        "death_rate (%)": 26.89,
+        "fled_rate (%)": 60.46,
+        "cleared_rate (%)": 12.65,
+        "pick_draft_ratio (%)": 98.0
+    },
+    "Boîte de Pandore": {
+        "win_rate (%)": 25.01,
+        "death_rate (%)": 23.38,
+        "fled_rate (%)": 55.53,
+        "cleared_rate (%)": 21.08,
+        "pick_draft_ratio (%)": 78.43
+    },
+    "Tronçonneuse enflammée": {
+        "win_rate (%)": 35.28,
+        "death_rate (%)": 16.95,
+        "fled_rate (%)": 72.38,
+        "cleared_rate (%)": 10.67,
+        "pick_draft_ratio (%)": 94.55
+    },
+    "Hache de Glace": {
+        "win_rate (%)": 28.54,
+        "death_rate (%)": 25.72,
+        "fled_rate (%)": 67.49,
+        "cleared_rate (%)": 6.78,
+        "pick_draft_ratio (%)": 93.75
+    },
+    "Armure d'honneur": {
+        "win_rate (%)": 28.59,
+        "death_rate (%)": 29.52,
+        "fled_rate (%)": 63.86,
+        "cleared_rate (%)": 6.61,
+        "pick_draft_ratio (%)": 95.83
+    },
+    "Casque Plus": {
+        "win_rate (%)": 27.06,
+        "death_rate (%)": 26.77,
+        "fled_rate (%)": 60.41,
+        "cleared_rate (%)": 12.82,
+        "pick_draft_ratio (%)": 72.22
+    },
+    "Torche Rouge": {
+        "win_rate (%)": 35.43,
+        "death_rate (%)": 23.38,
+        "fled_rate (%)": 64.09,
+        "cleared_rate (%)": 12.53,
+        "pick_draft_ratio (%)": 92.45
+    },
+    "Livre Sacré": {
+        "win_rate (%)": 22.14,
+        "death_rate (%)": 22.53,
+        "fled_rate (%)": 71.3,
+        "cleared_rate (%)": 6.17,
+        "pick_draft_ratio (%)": 79.07
+    },
+    "Patins à Glace": {
+        "win_rate (%)": 24.16,
+        "death_rate (%)": 24.15,
+        "fled_rate (%)": 69.01,
+        "cleared_rate (%)": 6.85,
+        "pick_draft_ratio (%)": 72.92
+    },
+    "Coiffe de sorcier": {
+        "win_rate (%)": 29.3,
+        "death_rate (%)": 31.39,
+        "fled_rate (%)": 62.94,
+        "cleared_rate (%)": 5.67,
+        "pick_draft_ratio (%)": 80.0
+    },
+    "Bouclier caméléon": {
+        "win_rate (%)": 31.16,
+        "death_rate (%)": 22.52,
+        "fled_rate (%)": 62.61,
+        "cleared_rate (%)": 14.87,
+        "pick_draft_ratio (%)": 96.23
+    },
+    "Armure Damnée": {
+        "win_rate (%)": 30.97,
+        "death_rate (%)": 28.81,
+        "fled_rate (%)": 58.68,
+        "cleared_rate (%)": 12.51,
+        "pick_draft_ratio (%)": 85.48
+    },
+    "Robe de mage": {
+        "win_rate (%)": 32.54,
+        "death_rate (%)": 23.25,
+        "fled_rate (%)": 57.26,
+        "cleared_rate (%)": 19.49,
+        "pick_draft_ratio (%)": 95.24
+    },
+    "Lame de l'Harmonie": {
+        "win_rate (%)": 29.5,
+        "death_rate (%)": 24.58,
+        "fled_rate (%)": 61.32,
+        "cleared_rate (%)": 14.1,
+        "pick_draft_ratio (%)": 85.42
+    },
+    "Exterminator": {
+        "win_rate (%)": 28.91,
+        "death_rate (%)": 38.12,
+        "fled_rate (%)": 46.3,
+        "cleared_rate (%)": 15.58,
+        "pick_draft_ratio (%)": 72.92
+    },
+    "Lampe magique": {
+        "win_rate (%)": 28.59,
+        "death_rate (%)": 26.81,
+        "fled_rate (%)": 66.84,
+        "cleared_rate (%)": 6.35,
+        "pick_draft_ratio (%)": 88.89
+    },
+    "Attrape-Rêves": {
+        "win_rate (%)": 25.74,
+        "death_rate (%)": 23.97,
+        "fled_rate (%)": 70.1,
+        "cleared_rate (%)": 5.93,
+        "pick_draft_ratio (%)": 47.92
+    },
+    "Pare-Buffle du Ponceur": {
+        "win_rate (%)": 31.2,
+        "death_rate (%)": 20.82,
+        "fled_rate (%)": 68.43,
+        "cleared_rate (%)": 10.75,
+        "pick_draft_ratio (%)": 83.33
+    },
+    "Harpe": {
+        "win_rate (%)": 25.35,
+        "death_rate (%)": 23.71,
+        "fled_rate (%)": 66.84,
+        "cleared_rate (%)": 9.44,
+        "pick_draft_ratio (%)": 52.17
+    },
+    "Chapelet de Vitalité": {
+        "win_rate (%)": 26.64,
+        "death_rate (%)": 25.5,
+        "fled_rate (%)": 63.08,
+        "cleared_rate (%)": 11.42,
+        "pick_draft_ratio (%)": 83.33
+    },
+    "Pâté d'Ange": {
+        "win_rate (%)": 28.02,
+        "death_rate (%)": 24.9,
+        "fled_rate (%)": 56.67,
+        "cleared_rate (%)": 18.43,
+        "pick_draft_ratio (%)": 79.07
+    },
+    "Marteau de Guerre": {
+        "win_rate (%)": 31.88,
+        "death_rate (%)": 27.73,
+        "fled_rate (%)": 57.07,
+        "cleared_rate (%)": 15.19,
+        "pick_draft_ratio (%)": 93.22
+    },
+    "Pierre du Naga": {
+        "win_rate (%)": 26.97,
+        "death_rate (%)": 25.35,
+        "fled_rate (%)": 63.89,
+        "cleared_rate (%)": 10.76,
+        "pick_draft_ratio (%)": 86.96
+    },
+    "Esprit du Donjon": {
+        "win_rate (%)": 19.95,
+        "death_rate (%)": 25.9,
+        "fled_rate (%)": 72.48,
+        "cleared_rate (%)": 1.63,
+        "pick_draft_ratio (%)": 56.52
+    },
+    "Queue Du Charognard": {
+        "win_rate (%)": 26.93,
+        "death_rate (%)": 21.91,
+        "fled_rate (%)": 72.51,
+        "cleared_rate (%)": 5.58,
+        "pick_draft_ratio (%)": 90.0
+    },
+    "Faux De La Mort": {
+        "win_rate (%)": 25.61,
+        "death_rate (%)": 25.71,
+        "fled_rate (%)": 65.54,
+        "cleared_rate (%)": 8.75,
+        "pick_draft_ratio (%)": 86.05
+    },
+    "Torche En Mousse": {
+        "win_rate (%)": 26.51,
+        "death_rate (%)": 24.54,
+        "fled_rate (%)": 64.81,
+        "cleared_rate (%)": 10.65,
+        "pick_draft_ratio (%)": 91.8
+    },
+    "Yo-yo protecteur": {
+        "win_rate (%)": 29.73,
+        "death_rate (%)": 29.83,
+        "fled_rate (%)": 58.44,
+        "cleared_rate (%)": 11.73,
+        "pick_draft_ratio (%)": 86.36
+    },
+    "Item 6PV": {
+        "win_rate (%)": 29.67,
+        "death_rate (%)": 24.78,
+        "fled_rate (%)": 63.56,
+        "cleared_rate (%)": 11.66,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Masque de l'Inquisiteur": {
+        "win_rate (%)": 27.0,
+        "death_rate (%)": 29.2,
+        "fled_rate (%)": 58.33,
+        "cleared_rate (%)": 12.47,
+        "pick_draft_ratio (%)": 85.45
+    },
+    "Scaphandre": {
+        "win_rate (%)": 36.28,
+        "death_rate (%)": 31.31,
+        "fled_rate (%)": 47.07,
+        "cleared_rate (%)": 21.62,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Anneau des Squelettes": {
+        "win_rate (%)": 28.58,
+        "death_rate (%)": 21.44,
+        "fled_rate (%)": 61.68,
+        "cleared_rate (%)": 16.88,
+        "pick_draft_ratio (%)": 72.88
+    },
+    "Anneau Magique": {
+        "win_rate (%)": 28.18,
+        "death_rate (%)": 22.42,
+        "fled_rate (%)": 61.92,
+        "cleared_rate (%)": 15.66,
+        "pick_draft_ratio (%)": 88.0
+    },
+    "Coffre du Roi Sorcier": {
+        "win_rate (%)": 23.71,
+        "death_rate (%)": 28.66,
+        "fled_rate (%)": 63.42,
+        "cleared_rate (%)": 7.92,
+        "pick_draft_ratio (%)": 70.69
+    },
+    "CasqueBerserk": {
+        "win_rate (%)": 28.51,
+        "death_rate (%)": 27.84,
+        "fled_rate (%)": 66.33,
+        "cleared_rate (%)": 5.83,
+        "pick_draft_ratio (%)": 94.23
+    },
+    "PotionOuPoison": {
+        "win_rate (%)": 29.0,
+        "death_rate (%)": 24.96,
+        "fled_rate (%)": 65.47,
+        "cleared_rate (%)": 9.57,
+        "pick_draft_ratio (%)": 94.55
+    },
+    "Torche Bleue": {
+        "win_rate (%)": 25.88,
+        "death_rate (%)": 25.52,
+        "fled_rate (%)": 63.99,
+        "cleared_rate (%)": 10.48,
+        "pick_draft_ratio (%)": 74.55
+    },
+    "Pied de Biche": {
+        "win_rate (%)": 24.85,
+        "death_rate (%)": 25.03,
+        "fled_rate (%)": 63.36,
+        "cleared_rate (%)": 11.6,
+        "pick_draft_ratio (%)": 90.48
+    },
+    "Arc enflammé": {
+        "win_rate (%)": 28.26,
+        "death_rate (%)": 32.23,
+        "fled_rate (%)": 60.86,
+        "cleared_rate (%)": 6.91,
+        "pick_draft_ratio (%)": 84.78
+    },
+    "Chameau": {
+        "win_rate (%)": 28.44,
+        "death_rate (%)": 30.88,
+        "fled_rate (%)": 56.67,
+        "cleared_rate (%)": 12.46,
+        "pick_draft_ratio (%)": 96.55
+    },
+    "Cœur de Golem": {
+        "win_rate (%)": 33.88,
+        "death_rate (%)": 22.09,
+        "fled_rate (%)": 61.91,
+        "cleared_rate (%)": 15.99,
+        "pick_draft_ratio (%)": 89.83
+    },
+    "Kebab revigorant": {
+        "win_rate (%)": 33.28,
+        "death_rate (%)": 30.48,
+        "fled_rate (%)": 58.23,
+        "cleared_rate (%)": 11.29,
+        "pick_draft_ratio (%)": 100.0
+    },
+    "Tentacule du Kraken": {
+        "win_rate (%)": 24.53,
+        "death_rate (%)": 30.32,
+        "fled_rate (%)": 54.94,
+        "cleared_rate (%)": 14.74,
+        "pick_draft_ratio (%)": 94.34
+    },
+    "Maillet D'Argile": {
+        "win_rate (%)": 28.51,
+        "death_rate (%)": 27.22,
+        "fled_rate (%)": 57.07,
+        "cleared_rate (%)": 15.71,
+        "pick_draft_ratio (%)": 84.78
+    },
+    "Codex Diabolus": {
+        "win_rate (%)": 30.68,
+        "death_rate (%)": 32.93,
+        "fled_rate (%)": 52.42,
+        "cleared_rate (%)": 14.65,
+        "pick_draft_ratio (%)": 85.42
+    },
+    "Concentré de fun": {
+        "win_rate (%)": 30.59,
+        "death_rate (%)": 18.41,
+        "fled_rate (%)": 77.83,
+        "cleared_rate (%)": 3.76,
+        "pick_draft_ratio (%)": 98.21
+    },
+    "Bouillon d'âmes": {
+        "win_rate (%)": 25.74,
+        "death_rate (%)": 24.45,
+        "fled_rate (%)": 70.29,
+        "cleared_rate (%)": 5.27,
+        "pick_draft_ratio (%)": 59.26
+    },
+    "Arbalète trop grosse": {
+        "win_rate (%)": 26.11,
+        "death_rate (%)": 21.21,
+        "fled_rate (%)": 72.52,
+        "cleared_rate (%)": 6.27,
+        "pick_draft_ratio (%)": 86.67
+    },
+    "Katana en Mousse": {
+        "win_rate (%)": 31.75,
+        "death_rate (%)": 22.44,
+        "fled_rate (%)": 67.46,
+        "cleared_rate (%)": 10.1,
+        "pick_draft_ratio (%)": 96.43
+    },
+    "Masque Dragon": {
+        "win_rate (%)": 29.52,
+        "death_rate (%)": 23.01,
+        "fled_rate (%)": 62.47,
+        "cleared_rate (%)": 14.51,
+        "pick_draft_ratio (%)": 79.63
+    },
+    "Aspis d'Héraclès": {
+        "win_rate (%)": 32.58,
+        "death_rate (%)": 27.87,
+        "fled_rate (%)": 59.16,
+        "cleared_rate (%)": 12.97,
+        "pick_draft_ratio (%)": 90.2
+    },
+    "Maillet Du Roi Liche": {
+        "win_rate (%)": 32.62,
+        "death_rate (%)": 25.93,
+        "fled_rate (%)": 60.17,
+        "cleared_rate (%)": 13.9,
+        "pick_draft_ratio (%)": 100.0
+    }
+}

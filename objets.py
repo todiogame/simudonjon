@@ -718,7 +718,7 @@ class MarmiteGelatineuse(Objet):
 
 class GrimoireInconnu(Objet):
     def __init__(self):
-        super().__init__("Grimoire Inconnu", True)
+        super().__init__("Grimoire Inconnu", False)
     
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
@@ -2060,7 +2060,7 @@ class Exterminator(Objet):
 
 class CodexDiabolus(Objet):
     def __init__(self):
-        super().__init__("Codex Diabolus", False, 0, -2)
+        super().__init__("Codex Diabolus", False, 0, 0)
     def rules(self, joueur, carte, Jeu, log_details):
         return ("Démon" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
