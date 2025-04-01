@@ -14,7 +14,7 @@ from heros import persos_disponibles
 # Configuration Centralisée des Itérations
 # ==============================================
 NB_DRAFT_SIMULATIONS = 1000
-NB_GAMES_PER_DRAFT_FOR_STATS = 1000
+NB_GAMES_PER_DRAFT_FOR_STATS = 10000
 ITERATIONS_PER_CHOICE_EVALUATION = 100
 ITERATIONS_INITIAL_RANDOM_WINRATE = 100
 ITERATIONS_FINAL_WINRATE_CHECK = 1000
@@ -104,14 +104,41 @@ def calculWRfinal(objets_disponibles, noms_joueurs, objets_joueurs, log, iter=IT
 
 
 def jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs_listes, log):
-    # (Code inchangé - retourne bien vainqueur, joueurs_finaux)
     joueurs = []
-    for nom, objets_liste in zip(noms_joueurs, objets_joueurs_listes):
+    nb_joueurs = len(noms_joueurs)
+
+    # --- Assignation des Personnages ---
+    if len(persos_disponibles) < nb_joueurs:
+        print(f"ERREUR dans jouerLaGame: Pas assez de personnages ({len(persos_disponibles)}) pour {nb_joueurs} joueurs.")
+        # Que faire ici? Retourner None ? Lever une exception?
+        # Pour l'instant, retournons None pour indiquer un échec
+        return None, []
+    # Assigner une instance unique et aléatoire à chaque joueur
+    personnages_assigner = random.sample(persos_disponibles, nb_joueurs)
+    # --- Fin Assignation Personnages ---
+
+    # Créer les joueurs avec leur personnage et leurs objets
+    for i, (nom, objets_liste) in enumerate(zip(noms_joueurs, objets_joueurs_listes)):
+        # Récupérer l'instance Perso assignée
+        perso_instance = personnages_assigner[i]
+        # Préparer et réparer les objets pour ce joueur
         objets_pour_joueur = list(objets_liste)
         for o in objets_pour_joueur: o.repare()
-        joueurs.append(Joueur(nom, random.randint(2, 4), objets_pour_joueur))
+
+        # --- Création du Joueur avec le personnage ---
+        # Appelle Joueur(nom, perso_instance, objets)
+        joueur_cree = Joueur(nom, perso_instance, objets_pour_joueur)
+        joueurs.append(joueur_cree)
+        # --- Fin Création Joueur ---
+
+    # Préparer les objets non utilisés pour l'ordonnanceur
     objets_disponibles_simu = list(objets_disponibles); [o.repare() for o in objets_disponibles_simu]
+
+    # Lancer la simulation de partie
+    # Le seuil de fuite est fixé à 6 ici (cohérent avec calculWinrate)
     vainqueur, joueurs_finaux = ordonnanceur(joueurs, DonjonDeck(), 6, objets_disponibles_simu, log)
+
+    # Retourner le résultat de la partie
     return vainqueur, joueurs_finaux
 
 
