@@ -139,8 +139,21 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     log_details.append(f"Gagnez {2 * golem_count} PV grâce à {carte.titre} (2 PV pour chaque Golem). PV restant: {joueur.pv_total}")
                 else:
                     log_details.append(f"{carte.titre} ne fait rien.")
+                    
+            if carte.effet == "FORTUNE_WHEEL":
+                jet_wheel = joueur.rollDice(Jeu, log_details, 2)
+                joueur.pv_total += jet_wheel
+                log_details.append(f"{joueur.nom} a gagné {jet_wheel} PV grâce à {carte.titre}. PV: {joueur.pv_total}")
+                if jet_wheel == 1:
+                    objets_intacts = [objet for objet in joueur.objets if objet.intact]
+                    if objets_intacts:
+                        objet_casse_wheel = random.choice(objets_intacts)
+                        log_details.append(f"{carte.titre} brise {objet_casse_wheel.nom}.")
+                        objet_casse_wheel.destroy(joueur, Jeu, log_details)
+                        if objet_casse_wheel.pv_bonus:
+                            joueur.pv_total -= objet_casse_wheel.pv_bonus
+                            log_details.append(f"L'objet casse {objet_casse_wheel.nom} donnait {objet_casse_wheel.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
             
-
             if carte.effet == "SOULSTORM":
                 for autre_joueur in joueurs:
                     if autre_joueur.dans_le_dj:
@@ -311,12 +324,12 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 if carte.effet == "LIMON":
                     objets_intacts = [objet for objet in joueur.objets if objet.intact]
                     if objets_intacts:
-                        objet_avalé = random.choice(objets_intacts)
-                        log_details.append(f"Le limon Glouton avale {objet_avalé.nom}.")
-                        objet_avalé.destroy(joueur, Jeu, log_details)
-                        if objet_avalé.pv_bonus:
-                            joueur.pv_total -= objet_avalé.pv_bonus
-                            log_details.append(f"L'objet avale {objet_avalé.nom} donnait {objet_avalé.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
+                        objet_avale = random.choice(objets_intacts)
+                        log_details.append(f"Le limon Glouton avale {objet_avale.nom}.")
+                        objet_avale.destroy(joueur, Jeu, log_details)
+                        if objet_avale.pv_bonus:
+                            joueur.pv_total -= objet_avale.pv_bonus
+                            log_details.append(f"L'objet avale {objet_avale.nom} donnait {objet_avale.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
             
                 log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
                 

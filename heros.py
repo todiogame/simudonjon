@@ -321,9 +321,9 @@ __all__=[
     "Ninja",
     "Princesse",
     "MercenaireOrc",
-    "ChevalierDragon", # Ajouté
-    "PersoUseless2PV",
-    "PersoUseless3PV",
+    "ChevalierDragon",
+    # "PersoUseless2PV",
+    # "PersoUseless3PV",
     "Tricheur",
     "DocteurDePeste",
     "RoiSorcier",
