@@ -59,6 +59,26 @@ class Joueur:
         if hasattr(self, 'perso_obj'):
             self.perso_obj.en_score(self, log_details)
 
+    def getScoreActuel(self):
+        current_score = len(self.pile_monstres_vaincus)
+        if any(getattr(monstre, 'effet', None) and "GOLD" in monstre.effet for monstre in self.pile_monstres_vaincus):
+            current_score += 1
+
+        dummy_log_details = []
+        original_score_final = self.score_final
+        self.score_final = current_score
+
+        if hasattr(self, 'perso_obj'):
+             self.perso_obj.en_score(self, dummy_log_details)
+        for objet in self.objets:
+            if getattr(objet, 'intact', False):
+                objet.en_score(self, dummy_log_details)
+
+        score_calcule_par_effets = self.score_final
+        self.score_final = original_score_final
+
+        return score_calcule_par_effets
+
     def trier_objets_par_priorite(self):
         self.objets = sorted(self.objets, key=lambda obj: obj.priorite, reverse=True)
 
@@ -85,69 +105,64 @@ class Joueur:
         self.monstres_ajoutes_ce_tour += 1
         
 
-    # Modifier la méthode deciderDeFuir
+
     def deciderDeFuir(self, Jeu, log_details):
+        # --- NOUVELLE Condition : Interdiction de fuir au Tour 1 ---
+        # On vérifie l'attribut 'tour' du joueur lui-même
+        if self.tour == 1:
+            # Pas besoin de vérifier les autres conditions si c'est le tour 1
+            # log_details.append(f"--> {self.nom} NE TENTE PAS LA FUITE (Tour 1).")
+            return False # On ne fuit jamais au premier tour
+        # --- Fin Nouvelle Condition ---
+
+        # Si on est au tour 2 ou plus, on applique la logique précédente :
+
         # Condition 1: PV faibles et peu d'options actives restantes
-        # Note: sum(True/False) fonctionne comme un compte. <= 1 signifie 0 ou 1 objet actif/intact.
         pv_faible_et_peu_options = (self.pv_total <= self.pv_min_fuite
                                  and sum(getattr(objet, 'actif', False) and getattr(objet, 'intact', False)
                                          for objet in self.objets) <= 1)
-
-        if pv_faible_et_peu_options:
-             log_details.append(f"--> {self.nom} Condition Fuite 1 (PV Faible/Opt): VRAI (PV {self.pv_total} <= Seuil {self.pv_min_fuite})")
-        # else: # Log optionnel si faux
-        #      log_details.append(f"--> {self.nom} Condition Fuite 1 (PV Faible/Opt): FAUX")
-
+        # if pv_faible_et_peu_options:
+            #  log_details.append(f"--> {self.nom} Condition Fuite 1 (PV Faible/Opt): VRAI (PV {self.pv_total} <= Seuil {self.pv_min_fuite})")
 
         # Condition 2: Est-on le dernier joueur encore vivant ?
-        # Compte combien de joueurs (y compris soi-même) sont vivants
         joueurs_vivants_compte = sum(1 for j in Jeu.joueurs if j.vivant)
-        # Si le compte est 1 ou moins ET qu'on est soi-même vivant, on est le dernier
         dernier_joueur_vivant = (joueurs_vivants_compte <= 1 and self.vivant)
+        # if dernier_joueur_vivant:
+            #  log_details.append(f"--> {self.nom} Condition Fuite 2 (Dernier Vivant): VRAI")
 
+        # Si on est le dernier vivant (et tour > 1), on tente de fuir.
         if dernier_joueur_vivant:
-             log_details.append(f"--> {self.nom} Condition Fuite 2 (Dernier Vivant): VRAI")
-        # else: # Log optionnel si faux
-        #      log_details.append(f"--> {self.nom} Condition Fuite 2 (Dernier Vivant): FAUX")
+            log_details.append(f"==> {self.nom} DECIDE DE TENTER LA FUITE (car dernier joueur vivant).")
+            return True
 
-        # Raison de base pour envisager la fuite
-        raison_envisager_fuite = pv_faible_et_peu_options or dernier_joueur_vivant
+        # Si on n'est PAS le dernier vivant (et tour > 1), on évalue la fuite pour PV faibles
+        if pv_faible_et_peu_options:
+            # Vérifier s'il faut continuer à cause d'un fuyard
+            force_a_continuer = False
+            max_monstres_fuyard = -1
+            fuyard_existe = False
+            for autre_joueur in Jeu.joueurs:
+                autre_joueur.getScoreActuel()
+                if autre_joueur is not self and autre_joueur.fuite_reussie:
+                    fuyard_existe = True
+                    max_monstres_fuyard = max(max_monstres_fuyard, autre_joueur.score_final)
 
-        # --- NOUVELLE CONDITION : Forcé de continuer si un fuyard a plus de monstres ---
-        force_a_continuer = False
-        max_monstres_fuyard = -1 # Initialise à -1 pour savoir si un fuyard existe
-        fuyard_detecte = False
+            if fuyard_existe:
+                mes_monstres = self.getScoreActuel()
+                if max_monstres_fuyard > mes_monstres:
+                    force_a_continuer = True
+                    # log_details.append(f"--> {self.nom} Condition Fuite 3 (Blocage Fuyard): VRAI (Un fuyard a {max_monstres_fuyard} MV vs soi {mes_monstres} MV)")
 
-        for autre_joueur in Jeu.joueurs:
-            # Vérifier si c'est un autre joueur et s'il a réussi sa fuite
-            if autre_joueur is not self and autre_joueur.fuite_reussie:
-                fuyard_detecte = True
-                # Mettre à jour le maximum de monstres parmi les fuyards
-                nb_monstres_autre = len(autre_joueur.pile_monstres_vaincus)
-                max_monstres_fuyard = max(max_monstres_fuyard, nb_monstres_autre)
-
-        # Si au moins un autre joueur a fui, comparer son score au nôtre
-        if fuyard_detecte:
-            mes_monstres = len(self.pile_monstres_vaincus)
-            if max_monstres_fuyard > mes_monstres:
-                force_a_continuer = True
-                log_details.append(f"--> {self.nom} Condition Fuite 3 (Blocage): VRAI - Forcé de continuer (Fuyard max a {max_monstres_fuyard} MV vs soi {mes_monstres} MV)")
-            # else: # Log optionnel
-            #     log_details.append(f"--> {self.nom} Condition Fuite 3 (Blocage): FAUX - Aucun fuyard avec plus de {mes_monstres} MV.")
-        # else: # Log optionnel
-        #      log_details.append(f"--> {self.nom} Condition Fuite 3 (Blocage): Non applicable (aucun autre fuyard).")
-        # --- FIN NOUVELLE CONDITION ---
-
-        # Décision finale : on fuit SI on a une raison de base ET on n'est PAS forcé de continuer
-        decision_finale = raison_envisager_fuite and not force_a_continuer
-
-        # Log final de la décision
-        if decision_finale:
-             log_details.append(f"==> {self.nom} DECIDE DE TENTER LA FUITE.")
+            # Décision basée sur PV faibles ET non-blocage
+            if not force_a_continuer:
+                log_details.append(f"==> {self.nom} DECIDE DE TENTER LA FUITE (PV faible/opt et pas de blocage fuyard).")
+                return True
+            else:
+                # log_details.append(f"==> {self.nom} NE TENTE PAS LA FUITE (PV faible/opt mais bloqué par fuyard).")
+                return False
         else:
-             if raison_envisager_fuite and force_a_continuer:
-                  log_details.append(f"==> {self.nom} NE TENTE PAS LA FUITE (raison de base présente mais bloqué par score fuyard).")
-             elif not raison_envisager_fuite:
-                  log_details.append(f"==> {self.nom} NE TENTE PAS LA FUITE (pas de raison de base).")
-
-        return decision_finale
+            # Ni dernier vivant (vérifié avant), ni PV faibles (vérifié ici)
+            # log_details.append(f"==> {self.nom} NE TENTE PAS LA FUITE (PV ok et pas dernier vivant).")
+            return False
+        
+        
