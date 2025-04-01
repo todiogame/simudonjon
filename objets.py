@@ -718,7 +718,7 @@ class MarmiteGelatineuse(Objet):
 
 class GrimoireInconnu(Objet):
     def __init__(self):
-        super().__init__("Grimoire Inconnu", True)
+        super().__init__("Grimoire Inconnu", False)
     
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
@@ -759,7 +759,7 @@ class GantsDeGaia(Objet):
 
 class ChampDeForceEnMousse(Objet):
     def __init__(self):
-        super().__init__("Champ de force en mousse", True)
+        super().__init__("Champ de force en mousse", False)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -897,8 +897,6 @@ class AnneauDeVie(Objet):
 class BottesDeVitesse(Objet):
     def __init__(self):
         super().__init__("Bottes de Vitesse", False, 2, 7)
-#todo vous rentrez en premier
-
 
 class Randotion(Objet):
     def __init__(self):
@@ -1287,7 +1285,7 @@ class PlatreeDeBerniques(Objet):
 
 class AnneauOceanique(Objet):
     def __init__(self):
-        super().__init__("Anneau Oceanique")
+        super().__init__("Anneau Oceanique", False)
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance >= 8 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -1306,7 +1304,7 @@ class BoomerangMystique(Objet):
 
 class CoiffeDeSorcier(Objet):
     def __init__(self):
-        super().__init__("Coiffe de sorcier")
+        super().__init__("Coiffe de sorcier",  False)
     def rules(self, joueur, carte, Jeu, log_details):
         return ("Gobelin" in carte.types or "Vampire" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -1836,6 +1834,9 @@ class ViandeCrue(Objet):
     def __init__(self):
         super().__init__("Viande Crue", True)
    
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= carte.dommages or any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus)
+
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus):    
             self.gagnePV(8, joueur, log_details)
@@ -2060,7 +2061,7 @@ class Exterminator(Objet):
 
 class CodexDiabolus(Objet):
     def __init__(self):
-        super().__init__("Codex Diabolus", False, 0, -2)
+        super().__init__("Codex Diabolus", False, 0, 0)
     def rules(self, joueur, carte, Jeu, log_details):
         return ("Démon" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -2160,9 +2161,16 @@ class ConcentreDeFun(Objet):
             except ValueError:
                 # Should not happen if found, but good practice
                 log_details.append(f"Erreur: Impossible de retirer Traquenard de la défausse.")
-
-
         self.destroy(joueur, Jeu, log_details) # Destroy after use
+
+class ForgePortative(Objet):
+    def __init__(self):
+        super().__init__("Forge Portative", False)
+
+    def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if self.intact:
+            if objet in joueur.objets and not objet.intact:
+                self.gagnePV(1, joueur_proprietaire, log_details)
 
 # Liste des objets
 objets_disponibles = [ 
@@ -2337,6 +2345,7 @@ objets_disponibles = [
     AspisHeracles(),
     BouillonDAmes(),
     ConcentreDeFun(),
+    ForgePortative(),
 ]
 
 
@@ -2513,5 +2522,6 @@ __all__ = [
             "GrelotDuBouffon",
             "AspisHeracles",
             "BouillonDAmes",
-            "ConcentreDeFun"
+            "ConcentreDeFun",
+            "ForgePortative",
         ]

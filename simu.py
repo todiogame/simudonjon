@@ -463,7 +463,7 @@ def loguer_x_parties(x=1):
     # Liste des objets spécifiques pour le joueur de test
     # IMPORTANT: Assure-toi que ces classes existent bien dans objets.py
     noms_objets_test = [
-        "Concentré de fun",
+        "Forge Portative",
         "Codex Diabolus",
         "Cape de Plumes",
         "Corne d'abordage",
