@@ -8,11 +8,12 @@ from monstres import DonjonDeck
 import json
 import pandas as pd
 import os
+from heros import persos_disponibles
 
 # ==============================================
 # Configuration Centralisée des Itérations
 # ==============================================
-NB_DRAFT_SIMULATIONS = 100
+NB_DRAFT_SIMULATIONS = 1000
 NB_GAMES_PER_DRAFT_FOR_STATS = 1000
 ITERATIONS_PER_CHOICE_EVALUATION = 100
 ITERATIONS_INITIAL_RANDOM_WINRATE = 100
@@ -143,42 +144,90 @@ def choisirObjet(i, objets_joueurs, mains_joueurs, log):
 
 
 def calculWinrate(combinaison, objets_autres_joueurs, iterations=ITERATIONS_PER_CHOICE_EVALUATION):
-    # (Code inchangé)
-    seuil_pv_essai_fuite = 6
+    seuil_pv_essai_fuite = 6 # Utiliser un seuil cohérent
     victoires = 0
+
+    if iterations <= 0: return 0 # Éviter division par zéro
+
     for _ in range(iterations):
-        nb_joueurs = len(objets_autres_joueurs) +1
+        # Déterminer le nombre de joueurs pour cette simulation
+        nb_joueurs = len(objets_autres_joueurs) + 1
         noms_joueurs = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
+        # Choisir aléatoirement quel joueur aura la 'combinaison' testée
         joueur_surveille = random.choice(noms_joueurs)
+
+        # --- Assignation des Personnages ---
+        if len(persos_disponibles) < nb_joueurs:
+            # Gérer l'erreur si pas assez de personnages définis
+            print(f"ERREUR dans calculWinrate: Pas assez de personnages ({len(persos_disponibles)}) pour {nb_joueurs} joueurs.")
+            # Retourner 0 ou une valeur par défaut ? Retournons 0 pour indiquer un échec potentiel.
+            return 0 # Ou raise Exception("Pas assez de personnages")
+        # Assigner une instance unique et aléatoire à chaque slot de joueur
+        personnages_assigner_instances = random.sample(persos_disponibles, nb_joueurs)
+        # Créer un mapping nom -> instance perso pour faciliter la récupération
+        perso_map = {noms_joueurs[k]: personnages_assigner_instances[k] for k in range(nb_joueurs)}
+        # --- Fin Assignation Personnages ---
+
+        # Préparation des objets disponibles pour compléter les builds
         objets_pool_global = list(objets_disponibles); [o.repare() for o in objets_pool_global]
         objets_assignes_noms = set(o.nom for o in combinaison)
         for autre_build in objets_autres_joueurs: objets_assignes_noms.update(o.nom for o in autre_build)
         objets_disponibles_pour_complement = [o for o in objets_pool_global if o.nom not in objets_assignes_noms]
+
         joueurs = []
         idx_autres = 0
+        # Création des joueurs
         for nom in noms_joueurs:
+            # Récupérer l'instance Perso assignée
+            perso_instance = perso_map[nom]
+
+            # Déterminer les objets de base du joueur
             objets_base = []
-            if nom == joueur_surveille: objets_base = list(combinaison)
+            if nom == joueur_surveille:
+                objets_base = list(combinaison)
             else:
+                # Prendre le build connu des autres joueurs s'il existe
                 if idx_autres < len(objets_autres_joueurs):
-                    objets_base = list(objets_autres_joueurs[idx_autres]); idx_autres += 1
+                    objets_base = list(objets_autres_joueurs[idx_autres])
+                    idx_autres += 1
+                # Si on manque d'info sur les autres (draft incomplet?), objets_base reste vide ici
+
+            # Réparer les objets de base (au cas où ils seraient passés non réparés)
             for o_base in objets_base: o_base.repare()
+
+            # Compléter le build à 6 objets
             nb_a_completer = max(0, 6 - len(objets_base))
             objets_complement = []
             if nb_a_completer > 0 and objets_disponibles_pour_complement:
                  nb_possible = min(nb_a_completer, len(objets_disponibles_pour_complement))
                  objets_complement = random.sample(objets_disponibles_pour_complement, nb_possible)
+                 # Retirer les objets utilisés du pool pour éviter duplicats entre joueurs
                  objets_disponibles_pour_complement = [o for o in objets_disponibles_pour_complement if o not in objets_complement]
+
             objets_finaux_joueur = objets_base + objets_complement
-            if len(objets_finaux_joueur)>6: objets_finaux_joueur=objets_finaux_joueur[:6]
-            joueurs.append(Joueur(nom, random.randint(2, 4), objets_finaux_joueur))
+            # S'assurer qu'on n'a pas plus de 6 objets (ne devrait pas arriver)
+            if len(objets_finaux_joueur) > 6: objets_finaux_joueur = objets_finaux_joueur[:6]
+
+            # --- Création du Joueur avec le personnage ---
+            # Appelle Joueur(nom, perso_instance, objets)
+            joueur_cree = Joueur(nom, perso_instance, objets_finaux_joueur)
+            joueurs.append(joueur_cree)
+            # --- Fin Création Joueur ---
+
+        # Les objets restants sont passés à l'ordonnanceur
         objets_restants_pour_ordonnanceur = objets_disponibles_pour_complement
+
+        # Exécution de la simulation de partie
+        # Note: S'assurer que DonjonDeck() crée un nouveau deck frais
         vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), seuil_pv_essai_fuite, objets_restants_pour_ordonnanceur, False)
-        if vainqueur and vainqueur.nom == joueur_surveille: victoires += 1
-    winrate = victoires / iterations if iterations > 0 else 0
+
+        # Compter la victoire
+        if vainqueur and vainqueur.nom == joueur_surveille:
+            victoires += 1
+
+    # Calcul final du winrate
+    winrate = victoires / iterations # iterations > 0 vérifié au début
     return winrate
-
-
 def calculItemWinrateRandobuild(iter=ITERATIONS_INITIAL_RANDOM_WINRATE ):
     # (Code inchangé)
     resultats_builds = []
