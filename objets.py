@@ -28,7 +28,7 @@ class Objet:
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         pass
-    def rencontre_effet(self, joueur, carte, Jeu, log_details):
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         pass
     def rencontre_event_effet(self, joueur_proprietaire, joueur_actif, carte, Jeu, log_details):
         pass
@@ -73,9 +73,9 @@ class Objet:
         # attention, check si les items sont intacts
         self.fuite_definitive_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
 
-    def en_rencontre(self, joueur, carte, Jeu, log_details):
+    def en_rencontre(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
-        self.rencontre_effet(joueur, carte, Jeu, log_details)
+        self.rencontre_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
 
     def en_fuite(self, joueur, Jeu, log_details):
         # attention, check si les items sont intacts
@@ -346,8 +346,8 @@ class BouclierDragon(Objet):
         jet2 = joueur.rollDice(Jeu, log_details)
         self.reduc_damage(jet1+jet2, joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
-    def rencontre_effet(self, joueur, carte, Jeu, log_details):
-        if ("Dragon" in carte.types):
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if ("Dragon" in carte.types) and joueur_proprietaire==joueur:
             self.repare()
 
 class PotionDeMana(Objet):
@@ -390,8 +390,8 @@ class GrosBoulet(Objet):
 class PotionFeerique(Objet):
     def __init__(self):
         super().__init__("Potion féérique", True)
-    def rencontre_effet(self, joueur, carte, Jeu, log_details):
-        if not self.intact and ("Fée" == carte.titre):
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if not self.intact and ("Fée" == carte.titre) and joueur_proprietaire==joueur:
             self.repare()
     def survie_effet(self, joueur, carte, Jeu, log_details):
         self.survit(1, joueur, carte, log_details)
@@ -405,7 +405,9 @@ class PotionDeGlace(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         log_details.append(f"{joueur.nom} utilise {self.nom} pour réduire à 0 {carte.titre} !")
         carte.puissance = 0
-        carte.dommages = 0
+        carte.dommages = carte.dommages - carte.puissance 
+        if carte.dommages < 0:
+            carte.dommages = 0
         self.destroy(joueur, Jeu, log_details)
 
 class PotionDraconique(Objet):
@@ -1074,12 +1076,12 @@ class SeringueDuDocteurFou(Objet):
         self.gagnePV(10, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
     
-    def rencontre_effet(self, joueur, carte, Jeu, log_details):
-        if not self.intact:
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if not self.intact and joueur_proprietaire==joueur:
             self.perdPV(1, joueur, log_details)
             
     def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if not self.intact:
+        if not self.intact and joueur_proprietaire==joueur:
             self.perdPV(1, joueur, log_details)
             
 class CorneDAbordage(Objet):
@@ -1363,8 +1365,8 @@ class PotionDeFeuLiquide(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
         self.destroy(joueur, Jeu, log_details)
-    def rencontre_effet(self, joueur, carte, Jeu, log_details):
-        if not self.intact and "Dragon" in carte.types:
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if not self.intact and "Dragon" in carte.types and joueur_proprietaire==joueur:
             self.repare()
             
 class CasquePlus(Objet):
@@ -1938,7 +1940,6 @@ class GrelotDuBouffon(Objet):
     
     def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         self.gagnePV(1, joueur_proprietaire, log_details)
-        log_details.append(f"{joueur_proprietaire.nom} gagne 1 PV grâce à {self.nom} car un événement a été pioché.")
 
 class FruitDuDestin(Objet):
     def __init__(self):
@@ -2060,9 +2061,14 @@ class CodexDiabolus(Objet):
     def __init__(self):
         super().__init__("Codex Diabolus", False, 0, -2)
     def rules(self, joueur, carte, Jeu, log_details):
-        return ("Vampire" in carte.types or "Démon" in carte.types) and not Jeu.traquenard_actif
+        return ("Démon" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if "Démon" in carte.types and joueur_proprietaire.dans_le_dj and joueur_proprietaire.vivant and joueur_proprietaire != joueur:
+            dommages_suppl = 2
+            carte.dommages+=dommages_suppl
+            log_details.append(f"{carte.titre} est booste de {dommages_suppl} dommages (total {carte.dommages}) par {joueur_proprietaire.nom} ({self.nom})")
 
 class LanceDuDestin(Objet):
     def __init__(self):

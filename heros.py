@@ -25,7 +25,7 @@ class Perso:
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         pass
-    def rencontre_effet(self, joueur, carte, Jeu, log_details):
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         pass
     def rencontre_event_effet(self, joueur_proprietaire, joueur_actif, carte, Jeu, log_details):
         pass
@@ -66,8 +66,8 @@ class Perso:
     def en_fuite_definitive(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         self.fuite_definitive_effet(joueur_proprietaire, joueur, objet, Jeu, log_details)
 
-    def en_rencontre(self, joueur, carte, Jeu, log_details):
-        self.rencontre_effet(joueur, carte, Jeu, log_details)
+    def en_rencontre(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        self.rencontre_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
 
     def en_fuite(self, joueur, Jeu, log_details):
         pass
@@ -252,19 +252,24 @@ class InventeurGenial(Perso):
 
 
 
-    class Flutiste(Perso):
-        def __init__(self):
-            # pv_bonus=3 for base HP
-            super().__init__(nom="Flutiste", pv_bonus=3, modificateur_de=0)
+class Flutiste(Perso):
+    def __init__(self):
+        # pv_bonus=3 for base HP
+        super().__init__(nom="Flutiste", pv_bonus=3, modificateur_de=0)
 
-        def combat_effet(self, joueur, carte, Jeu, log_details):
-            # Ability 1: Execute Goblins + Gain PV
-            is_gobelin = "Gobelin" in getattr(carte, 'types', [])
-
-            if is_gobelin and not Jeu.traquenard_actif and not carte.executed:
-                log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité contre {carte.titre}.")
-                self.execute(joueur, carte, log_details) 
-                self.gagnePV(1, joueur, log_details)
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if "Gobelin" in carte.types and joueur_proprietaire.dans_le_dj and joueur_proprietaire.vivant:
+            dommages_suppl = 1
+            carte.dommages+=dommages_suppl
+            log_details.append(f"{carte.titre} est booste de {dommages_suppl} dommages par {joueur_proprietaire.nom} ({self.nom})")
+            
+    def rules(self, joueur, carte, Jeu, log_details):
+        return ("Gobelin" in carte.types) and not Jeu.traquenard_actif
+        
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details) 
+        self.gagnePV(1, joueur, log_details)
+        
 
 persos_disponibles=[
     Ninja(),
@@ -277,6 +282,7 @@ persos_disponibles=[
     DocteurDePeste(),
     RoiSorcier(),
     InventeurGenial(),
+    Flutiste(),
 ]
 
 __all__=[
@@ -290,4 +296,5 @@ __all__=[
     "DocteurDePeste",
     "RoiSorcier",
     "InventeurGenial",
+    "Flutiste",
 ]

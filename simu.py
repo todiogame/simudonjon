@@ -97,13 +97,14 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
 
-        log_details.append(f"tour {joueur.tour}. A pioché {carte.titre}.")
+        log_details.append(f"tour {joueur.tour}. {joueur.nom} ({joueur.perso_obj.nom}) a pioché {carte.titre}.")
         if isinstance(carte, CarteEvent):
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
             for joueur_proprietaire in Jeu.joueurs:
                 for objet in joueur_proprietaire.objets:
                     objet.en_rencontre_event(joueur_proprietaire, joueur, carte, Jeu, log_details)
+            
             if carte.effet == "HEAL":
                 joueur.pv_total += 3
                 log_details.append(f"{joueur.nom} gagne 3 PV grâce à {carte.titre}. PV restant: {joueur.pv_total}")
@@ -255,8 +256,12 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             # todo changer en_rencontre pour trigger sur tous les joueurs (maj les  objets)
             # pour ajouter codex et flutiste
             #use items en_rencontre
-            for objet in joueur.objets:
-                objet.en_rencontre(joueur, carte, Jeu, log_details)
+            for joueur_proprietaire in Jeu.joueurs:
+                joueur_proprietaire.perso_obj.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
+
+                for objet in joueur_proprietaire.objets:
+                    objet.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                
 
             if joueur.jet_fuite_lance: 
                 if joueur.jet_fuite >= carte.puissance:
@@ -450,17 +455,17 @@ def loguer_x_parties(x=1):
     nb_items_par_joueur = 5 # Nombre d'items pour les joueurs non-test
     nb_joueurs_total = 4    # On garde 4 joueurs pour ce mode log
     nom_joueur_test = "Sagarex"
-    perso_test = Princesse() # Personnage spécifique pour Sagarex
+    perso_test = Flutiste() # Personnage spécifique pour Sagarex
     noms_joueurs_base = ["Sagarex", "Francis", "Mastho", "Mr.Adam", "Diouze", "Nicoco"]
 
     # Liste des objets spécifiques pour le joueur de test
     # IMPORTANT: Assure-toi que ces classes existent bien dans objets.py
     noms_objets_test = [
         "Concentré de fun",
-        "Bouillon d'âmes",
+        "Codex Diabolus",
         "Cape de Plumes",
-        "Aspis d'Héraclès",
-        "Pelle du Fossoyeur"
+        "Corne d'abordage",
+        "Lame Draconique"
     ]
 
     for i in range(x):
