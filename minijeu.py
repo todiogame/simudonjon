@@ -1,103 +1,109 @@
+# Fichier: minijeu.py
+# -*- coding: utf-8 -*-
 import random
 import os
 import sys
+import json
 
-# --- Bibliothèque externe pour menus ---
-try:
-    import questionary
-except ImportError:
-    print("ERREUR: La bibliothèque 'questionary' est nécessaire.")
-    print("Veuillez l'installer avec : pip install questionary")
-    sys.exit(1)
-
-# --- Imports depuis ton projet (Corrigés) ---
+# --- Imports depuis ton projet (Noms Corrigés) ---
 try:
     from objets import objets_disponibles
-    from heros import persos_disponibles       # Corrigé
-    from draft import calculWinrate           # Assumer défini dans draft.py
-    from joueurs import Joueur                 # Corrigé
+    from heros import persos_disponibles
+    from draft import calculWinrate
+    from joueurs import Joueur
 except ImportError as e:
     print(f"Erreur d'importation des modules du projet: {e}")
     print("Vérifiez les noms et l'accessibilité des fichiers :")
-    print("objets.py, heros.py, joueurs.py, simu.py, monstres.py, draft.py") # Noms mis à jour
+    print("objets.py, heros.py, joueurs.py, simu.py, monstres.py, draft.py")
     sys.exit(1)
 
-# --- Configuration ---
+# --- Chargement et Préparation des Descriptions ---
+item_visuals_data = {}
+try:
+    script_dir_vis = os.path.dirname(os.path.abspath(__file__)) # Utiliser chemin absolu
+    visuals_path = os.path.join(script_dir_vis, 'item_visuals.json')
+    with open(visuals_path, 'r', encoding='utf-8') as f:
+        raw_visuals = json.load(f)
+    item_visuals_data = {name.lower(): data for name, data in raw_visuals.items()}
+    print("Descriptions des objets chargées.")
+except FileNotFoundError:
+    print("WARN: Fichier item_visuals.json non trouvé.")
+except json.JSONDecodeError:
+    print("WARN: Erreur de lecture de item_visuals.json.")
+except Exception as e:
+    print(f"WARN: Erreur chargement item_visuals.json: {e}")
+
+# --- Configuration & Constantes ANSI ---
 ITERATIONS_MINIJEU = 500
 OPPONENT_NAMES = ["Sagarex", "Francis", "Mastho", "Mr.Adam", "Diouze", "Nicoco"]
+COLOR_MAP = {1: "\033[91m", 2: "\033[92m", 3: "\033[94m", 4: "\033[95m", 5: "\033[93m"}
+ANSI_RESET = "\033[0m"
+ANSI_BOLD = "\033[1m"
 
-# --- Fonction Helper pour affichage simple (emoji + nom) ---
-def format_item_list_with_emoji(item_list):
-    """Formate une liste d'objets en chaîne [emoji] Nom, [emoji] Nom."""
-    if not item_list:
-        return "Aucun"
-    formatted_items = []
+# --- Fonctions Helper ---
+def clean_description(desc_html, use_ansi_bold=True, newline_replace=" | "):
+    """Nettoie la description : remplace <b> par ANSI, remplace \\n."""
+    if not desc_html: return ""
+    desc = desc_html.replace("<b>", ANSI_BOLD if use_ansi_bold else "").replace("</b>", ANSI_RESET if use_ansi_bold else "")
+    desc = desc.replace("\\n", newline_replace)
+    return desc
+
+def get_item_display_info(item_obj, use_ansi_bold_desc=True, newline_replace_desc=" | "):
+    """Récupère prefixe, nom formaté (couleur), description formatée (gras)."""
+    prefix = "⚡ " if getattr(item_obj, 'actif', False) else "  "
+    visual_data = item_visuals_data.get(item_obj.nom.lower(), {})
+    color_code = visual_data.get('color_code')
+    ansi_color = COLOR_MAP.get(color_code, "")
+    color_reset = ANSI_RESET if ansi_color else ""
+    item_name_fmt = f"{ansi_color}{item_obj.nom}{color_reset}"
+    description_html = visual_data.get('description')
+    description_fmt = clean_description(description_html, use_ansi_bold_desc, newline_replace_desc)
+    return prefix, item_name_fmt, description_fmt
+
+def format_opponent_item_list(item_list):
+    """Formate liste objets opposants ([emoji][nom coloré])."""
+    if not item_list: return "Aucun"
+    formatted = []
     for item in item_list:
-        prefix = "⚡ " if getattr(item, 'actif', False) else ""
-        formatted_items.append(f"{prefix}{item.nom}")
-    return ', '.join(formatted_items)
+        prefix, name_fmt, _ = get_item_display_info(item) # Desc non utilisée
+        # Enlève l'espace si pas d'emoji pour compacter un peu
+        formatted.append(f"{prefix.strip() if not prefix.strip() else prefix}{name_fmt}")
+    return ', '.join(formatted)
 
 # --- Génération du Scénario (Logique 7 items) ---
 def generer_scenario():
-    """Crée un scénario de draft aléatoire avec 7 objets au total et min 2 choix."""
+    """Crée un scénario de draft aléatoire (7 items total, 2-6 choix)."""
     if not persos_disponibles or not objets_disponibles: return None
     perso_joueur = random.choice(persos_disponibles)
-
-    objets_pool = list(objets_disponibles)
-    random.shuffle(objets_pool)
-    total_items_round = 7 # Toujours 7 items dans le "round" (déjà pris + main)
-
-    if len(objets_pool) < total_items_round:
-        print(f"WARN: Pas assez d'objets ({len(objets_pool)}) pour simuler un round de 7.")
-        return None
-
-    # Choisir taille main (entre 2 et 6 inclus => 1 à 5 objets déjà pris)
+    objets_pool = list(objets_disponibles); random.shuffle(objets_pool)
+    total_items_round = 7
+    if len(objets_pool) < total_items_round: return None
     nb_objets_main = random.randint(2, 6)
     nb_objets_deja_pris = total_items_round - nb_objets_main
-
     objets_actuels = objets_pool[:nb_objets_deja_pris]
     main_actuelle = objets_pool[nb_objets_deja_pris:total_items_round]
     objets_restants = objets_pool[total_items_round:]
-
-    # Générer objets pour 3 adversaires (au même stade)
-    objets_des_opposants = []
-    nb_opposants = 3
-    # Vérifier si assez d'objets restants pour les adversaires
-    items_needed_for_opponents = nb_opposants * nb_objets_deja_pris
-    if len(objets_restants) < items_needed_for_opponents:
-        print(f"WARN: Pas assez d'objets restants ({len(objets_restants)}) pour simuler les {nb_opposants} adversaires avec {nb_objets_deja_pris} objets chacun.")
-        # Optionnel: on pourrait adapter ou retourner None
-        # Pour l'instant, on continue avec ce qu'on a, certains auront moins/pas d'objets
-        pass # La boucle ci-dessous gérera ça
-
+    objets_des_opposants = []; nb_opposants = 3
+    items_needed = nb_opposants * nb_objets_deja_pris
+    # if len(objets_restants) < items_needed: print("WARN: Pas assez objets restants pour opposants")
     for _ in range(nb_opposants):
-        if len(objets_restants) >= nb_objets_deja_pris:
-            objets_opp = objets_restants[:nb_objets_deja_pris]
-            objets_des_opposants.append(objets_opp)
-            objets_restants = objets_restants[nb_objets_deja_pris:]
-        else:
-            # Donner le reste si pas assez
-            objets_des_opposants.append(objets_restants)
-            objets_restants = []
-
-    # Réparer tous les objets utilisés dans le scénario
+        take_count = min(nb_objets_deja_pris, len(objets_restants))
+        objets_opp = objets_restants[:take_count]
+        objets_des_opposants.append(objets_opp)
+        objets_restants = objets_restants[take_count:]
     for o_list in [objets_actuels, main_actuelle] + objets_des_opposants:
         for o in o_list:
              if hasattr(o, 'repare'): o.repare()
-
     return perso_joueur, objets_actuels, main_actuelle, objets_des_opposants
 
-# --- Calcul du Meilleur Choix (inchangé) ---
+# --- Calcul du Meilleur Choix ---
 def trouver_meilleur_choix(perso_joueur, objets_actuels, main_actuelle):
-    meilleur_objet = None
-    meilleur_winrate = -1.0
-    winrates_calcules = {}
-    nb_opposants = 3
-    persos_autres = []
+    """Utilise calculWinrate pour trouver le meilleur objet et stocke tous les WR."""
+    meilleur_objet = None; meilleur_winrate = -1.0; winrates_calcules = {}
+    nb_opposants = 3; persos_autres = []; objets_autres_joueurs = [[] for _ in range(nb_opposants)]
     pool_opposants = [p for p in persos_disponibles if p.nom != perso_joueur.nom]
     if len(pool_opposants) >= nb_opposants: persos_autres = random.sample(pool_opposants, nb_opposants)
     else: persos_autres = random.sample(persos_disponibles, nb_opposants)
-    objets_autres_joueurs = [[] for _ in range(nb_opposants)]
     objets_actuels_repares = list(objets_actuels); [o.repare() for o in objets_actuels_repares if hasattr(o,'repare')]
     print(f"\nCalcul du meilleur choix ({ITERATIONS_MINIJEU} itérations par objet)...")
     for objet_test in main_actuelle:
@@ -110,9 +116,9 @@ def trouver_meilleur_choix(perso_joueur, objets_actuels, main_actuelle):
             if winrate > meilleur_winrate:
                 meilleur_winrate = winrate; meilleur_objet = objet_test
         except Exception as e:
-            print(f"ERREUR pendant calculWinrate pour {objet_test.nom}: {e}")
+            print(f"\nERREUR pendant calculWinrate pour {objet_test.nom}: {e}")
             winrates_calcules[objet_test.nom] = -1
-    if meilleur_objet is None and main_actuelle:
+    if meilleur_objet is None and main_actuelle: # Fallback
         meilleur_objet = main_actuelle[0]
         meilleur_winrate = winrates_calcules.get(meilleur_objet.nom, -1.0)
     return meilleur_objet, meilleur_winrate, winrates_calcules
@@ -120,11 +126,9 @@ def trouver_meilleur_choix(perso_joueur, objets_actuels, main_actuelle):
 # --- Boucle Principale du Jeu ---
 if __name__ == "__main__":
     print("--- Mini-Jeu d'entraînement au Draft ---")
-    print("Utilisez les flèches HAUT/BAS pour naviguer, ENTRÉE pour choisir.")
-    if 'questionary' not in sys.modules: print("(Nécessite: pip install questionary)")
-    script_dir = os.path.dirname(__file__)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     if script_dir:
-        try: os.chdir(script_dir)
+        try: os.chdir(script_dir); print(f"Répertoire de travail: {os.getcwd()}")
         except Exception as e: print(f"WARN: Chgt répertoire: {e}")
     available_opponent_names = list(OPPONENT_NAMES)
 
@@ -141,62 +145,66 @@ if __name__ == "__main__":
         meilleur_objet_calcule, meilleur_wr_calcule, winrates_calcules = resultat_calcul
 
         # --- Affichage Scénario ---
-        # 1. Opposants (avant le joueur)
+        # 1. Opposants
         noms_opposants = random.sample(available_opponent_names, len(objets_des_opposants))
         print("\nObjets des adversaires :")
         for i, opp_objets in enumerate(objets_des_opposants):
-            print(f"  {noms_opposants[i]}: {format_item_list_with_emoji(opp_objets)}")
+            print(f"  {noms_opposants[i]:<10}: {format_opponent_item_list(opp_objets)}")
 
-        # 2. Joueur (en gras)
+        # 2. Joueur (gras ANSI, description multiligne AVEC gras ANSI)
         pv_total_joueur = perso_joueur.pv_bonus + sum(getattr(o, 'pv_bonus', 0) for o in objets_actuels)
-        # Utilisation de ** pour le gras (markdown)
-        print(f"\n\033[1mVotre personnage : {perso_joueur.nom} ({perso_joueur.pv_bonus} PV base, {pv_total_joueur} PV actuels \033[0m")
-        print(f"\n\033[1mObjets déjà choisis : {format_item_list_with_emoji(objets_actuels)}\033[0m")
+        print(f"\n{ANSI_BOLD}Votre personnage : {perso_joueur.nom} ({perso_joueur.pv_bonus} PV base, {pv_total_joueur} PV actuels, Fuite: {perso_joueur.modificateur_de:+d}){ANSI_RESET}")
+        print(f"{ANSI_BOLD}Objets déjà choisis :{ANSI_RESET}")
+        if objets_actuels:
+            for obj in objets_actuels:
+                prefix, name_fmt, description_fmt = get_item_display_info(obj, use_ansi_bold_desc=True, newline_replace_desc=f"\n      {ANSI_RESET}└─ ") # Desc avec reset avant indent
+                print(f"  {ANSI_BOLD}{prefix}{name_fmt}{ANSI_RESET}")
+                if description_fmt: print(f"    {ANSI_RESET}└─ {description_fmt}")
+        else: print("  Aucun")
 
+        # 3. Choix possibles pour le joueur (liste numérotée)
+        print("\nChoisissez le MEILLEUR objet parmi :")
+        if not main_actuelle: print("Erreur: Aucune option à choisir."); continue
+        for i, obj in enumerate(main_actuelle):
+            prefix, name_fmt, description_fmt = get_item_display_info(obj, use_ansi_bold_desc=True, newline_replace_desc=f"\n      {ANSI_RESET}└─ ") # Desc avec reset avant indent
+            # Affichage Numéro, Nom (gras+couleur), puis Desc (gras+couleur+indent)
+            print(f"\n{i+1}: {ANSI_BOLD}{prefix}{name_fmt}{ANSI_RESET}")
+            if description_fmt: print(f"    {ANSI_RESET}└─ {description_fmt}")
 
-        # 3. Choix possibles pour le joueur
-        q_choices = []
-        max_len_name = max(len(obj.nom) for obj in main_actuelle) if main_actuelle else 20
-        for obj in main_actuelle:
-            prefix = "⚡ " if getattr(obj, 'actif', False) else "  "
-            pv = getattr(obj, 'pv_bonus', 0)
-            mod = getattr(obj, 'modificateur_de', 0)
-            stat_parts = []
-            if pv != 0: stat_parts.append(f"PV:{pv:+d}")
-            # Utilisation de "Fuite"
-            if mod != 0: stat_parts.append(f"Fuite:{mod:+d}")
-            stats_str = ""
-            if stat_parts: stats_str = f" ({', '.join(stat_parts)})"
-            display_name = f"{prefix}{obj.nom}"
-            # Titre formaté pour questionary
-            q_choices.append(questionary.Choice(title=f"{display_name:<{max_len_name+3}}{stats_str}", value=obj))
-
-        if not q_choices: print("Erreur: Aucune option à choisir."); continue
-
-        choix_joueur_instance = questionary.select(
-            "\nChoisissez le MEILLEUR objet parmi :", # Message avant la liste
-            choices=q_choices,
-            use_shortcuts=False
-        ).ask()
-
-        if choix_joueur_instance is None: print("\nSélection annulée."); break
+        # 4. Obtenir Choix Joueur (via input numéro)
+        choix_joueur_instance = None
+        while choix_joueur_instance is None:
+            try:
+                choix_str = input(f"\nVotre choix (1-{len(main_actuelle)}) ? ")
+                choix_idx = int(choix_str) - 1
+                if 0 <= choix_idx < len(main_actuelle):
+                    choix_joueur_instance = main_actuelle[choix_idx]
+                else: print("Choix invalide.")
+            except ValueError: print("Entrez un numéro valide.")
+            except EOFError: print("\nEntrée interrompue."); sys.exit(0) # Gérer Ctrl+D
+            except KeyboardInterrupt: print("\nArrêt demandé."); sys.exit(0) # Gérer Ctrl+C
 
         # --- Comparer et Donner Feedback ---
-        print(f"\nVotre choix : {choix_joueur_instance.nom}")
+        _, choix_joueur_name_fmt, _ = get_item_display_info(choix_joueur_instance)
+        _, meilleur_objet_name_fmt, _ = get_item_display_info(meilleur_objet_calcule)
+        print(f"\nVotre choix : {choix_joueur_name_fmt}")
         is_correct = (choix_joueur_instance.nom == meilleur_objet_calcule.nom)
         if is_correct:
-            print(">>> \033[92mCORRECT !\033[0m <<<")
+            print(f">>> \033[92mCORRECT !\033[0m <<<")
             print(f"    (WR simulé: {meilleur_wr_calcule * 100:.3f}%)")
         else:
             print(f">>> \033[91mINCORRECT.\033[0m <<<")
             wr_choix_joueur = winrates_calcules.get(choix_joueur_instance.nom, -1)
-            print(f"    Votre choix ({choix_joueur_instance.nom}) -> WR simulé: {wr_choix_joueur * 100:.3f}%")
-            print(f"    Meilleur choix calculé : {meilleur_objet_calcule.nom} -> WR simulé: {meilleur_wr_calcule * 100:.3f}%")
+            wr_joueur_str = f"{wr_choix_joueur * 100:.3f}%" if wr_choix_joueur != -1 else "N/A"
+            wr_calcule_str = f"{meilleur_wr_calcule * 100:.3f}%" if meilleur_wr_calcule != -1 else "N/A"
+            print(f"    Votre choix ({choix_joueur_name_fmt}) -> WR simulé: {wr_joueur_str}")
+            print(f"    Meilleur choix calculé : ({meilleur_objet_name_fmt}) -> WR simulé: {wr_calcule_str}")
 
         # --- Continuer ? ---
         try:
-            continuer = questionary.confirm("Autre question ?", default=True).ask()
-            if continuer is None or not continuer : break
-        except KeyboardInterrupt: break
+            continuer_str = input("\nAutre question (o/n) ? ").lower()
+            if continuer_str != 'o': break
+        except EOFError: break
+        except KeyboardInterrupt: print("\nArrêt demandé."); break
 
     print("\nMerci d'avoir joué !")
