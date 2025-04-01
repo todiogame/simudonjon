@@ -221,7 +221,7 @@ class DocteurDePeste(Perso):
             
 class RoiSorcier(Perso):
     def __init__(self):
-        super().__init__("Roi Sorcier", False)
+        super().__init__("Roi Sorcier", 3)
         
     def subit_dommages_effet(self,joueur_proprietaire, joueur, carte, Jeu, log_details):
         if carte.dommages >= 4 and joueur.nom != joueur_proprietaire.nom:
@@ -279,7 +279,7 @@ class Flutiste(Perso):
     
 class SavantFou(Perso):
     def __init__(self):
-        super().__init__("Savant Fou", False)
+        super().__init__("Savant Fou", 2)
         
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         log_details.append(f"{joueur.nom} tente le pouvoir du Savant Fou {joueur_proprietaire.nom}")
@@ -299,15 +299,15 @@ class Avatar(Perso):
         # Vérifier si capacité dispo et conditions remplies
         if not self.capacite_utilisee and not Jeu.traquenard_actif and not carte.executed and carte.dommages > (joueur.pv_total / 2) :
             self.executeEtDefausse(joueur, carte, Jeu, log_details)
-   
+            self.capacite_utilisee = True
 
 persos_disponibles=[
     Ninja(),
     Princesse(),
     MercenaireOrc(),
     ChevalierDragon(),
-    PersoUseless2PV(),
-    PersoUseless3PV(),
+    # PersoUseless2PV(),
+    # PersoUseless3PV(),
     Tricheur(),
     DocteurDePeste(),
     RoiSorcier(),
