@@ -477,7 +477,7 @@ def loguer_x_parties(x=1):
         "Forge Portative",
         "Codex Diabolus",
         "Potion feerique",
-        "Corne d'abordage",
+        "Sac de Constantinople",
         "Lame Draconique"
     ]
 

@@ -1708,18 +1708,13 @@ class PelleDuFossoyeur(Objet):
 
     # Helper method containing the core logic
     def _activer_pelle(self, joueur, Jeu, log_details):
-        # Identify monsters in discard
         monstres_defausse = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
-
-        # Activation Log
         log_details.append(f"{joueur.nom} utilise {self.nom}")
 
-        # Prioritized Selection (exactly 4)
         golem_or_dispo = []
         dragons_dispo = []
         autres_dispo = []
         for monstre in monstres_defausse:
-            # ... (sorting logic as before) ...
             if getattr(monstre, 'effet', None) == "GOLD":
                 golem_or_dispo.append(monstre)
             elif "Dragon" in getattr(monstre, 'types', []):
@@ -1738,8 +1733,6 @@ class PelleDuFossoyeur(Objet):
         random.shuffle(autres_dispo)
         while len(monstres_choisis) < MAX_CHOIX and autres_dispo:
             monstres_choisis.append(autres_dispo.pop())
-
-        # Log chosen monsters
         noms_choisis = [m.titre for m in monstres_choisis]
         log_details.append(f"--> Récupère {len(monstres_choisis)} monstres (priorité GolemOr>Dragon>Autre): {noms_choisis}")
 
@@ -1747,13 +1740,9 @@ class PelleDuFossoyeur(Objet):
         ids_choisis = {id(m) for m in monstres_choisis}
         Jeu.defausse = [c for c in Jeu.defausse if id(c) not in ids_choisis]
 
-        # Add to player's victory pile
         for monstre in monstres_choisis:
             joueur.ajouter_monstre_vaincu(monstre)
-
-        # Destroy the item
         self.destroy(joueur, Jeu, log_details)
-        return True # Indicate successful activation
 
     # Trigger 1: Fin de tour
     def fin_tour(self, joueur, Jeu, log_details):
@@ -2131,9 +2120,57 @@ class BouillonDAmes(Objet):
                 Jeu.donjon.rajoute_en_haut_de_la_pile(monstre)
         else:
             log_details.append(f"{joueur.nom} utilise {self.nom}, mais la défausse ne contient aucun monstre.")
+        self.destroy(joueur, Jeu, log_details)       
+         
+class SacDeConstantinople(Objet):
+    def __init__(self):
+        super().__init__("Sac de Constantinople", True)
 
-        self.destroy(joueur, Jeu, log_details)        
+    def _activer_sac(self, joueur, Jeu, log_details, contexte=""):
+        log_details.append(f"{joueur.nom} utilise {self.nom}{' en ' + contexte if contexte else ''}")
+        
+        # Voler un dragon chez chaque autre joueur
+        for autre_joueur in [j for j in Jeu.joueurs if j != joueur and j.dans_le_dj]:
+            dragons = [monstre for monstre in autre_joueur.pile_monstres_vaincus 
+                       if any("Dragon" in type_carte for type_carte in monstre.types)]
+            if dragons:
+                monstre_volee = random.choice(dragons)
+                autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
+                joueur.ajouter_monstre_vaincu(monstre_volee)
+                log_details.append(f"{joueur.nom} vole {monstre_volee.titre} (Dragon) de {autre_joueur.nom}{' en ' + contexte if contexte else ''}")
+        
+        # Récupérer tous les dragons de la défausse
+        monstres_defausse = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
+        dragons_defausse = [monstre for monstre in monstres_defausse if "Dragon" in getattr(monstre, 'types', [])]
+        for dragon in dragons_defausse:
+            Jeu.defausse.remove(dragon)
+            joueur.ajouter_monstre_vaincu(dragon)
+            log_details.append(f"{joueur.nom} récupère {dragon.titre} (Dragon) de la défausse")
+        
+        self.destroy(joueur, Jeu, log_details)
 
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact:
+            # Calculer le nombre total de dragons chez les autres joueurs
+            autres_joueurs = [j for j in Jeu.joueurs if j != joueur and j.dans_le_dj]
+            total_dragons = sum(
+                1 for j in autres_joueurs 
+                for monstre in j.pile_monstres_vaincus 
+                if any("Dragon" in type_carte for type_carte in monstre.types)
+            )
+            # Activation seulement s'il y a au moins 2 dragons chez les autres joueurs
+            if total_dragons >= 2:
+                self._activer_sac(joueur, Jeu, log_details)
+
+    def fuite_definitive_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur:
+            # Pour fuite, on peut déclencher indépendamment du nombre de dragons chez les autres joueurs
+            autres_joueurs = [j for j in Jeu.joueurs if j != joueur and j.dans_le_dj]
+            if any(any("Dragon" in type_carte for type_carte in monstre.types)
+                   for j in autres_joueurs 
+                   for monstre in j.pile_monstres_vaincus) or \
+               any("Dragon" in getattr(monstre, 'types', []) for monstre in Jeu.defausse if hasattr(monstre, 'types')):
+                self._activer_sac(joueur, Jeu, log_details, contexte="fuyant")
 
 class ConcentreDeFun(Objet):
     def __init__(self):
@@ -2345,6 +2382,7 @@ objets_disponibles = [
     BouillonDAmes(),
     ConcentreDeFun(),
     ForgePortative(),
+    SacDeConstantinople(),
 ]
 
 
@@ -2523,4 +2561,5 @@ __all__ = [
             "BouillonDAmes",
             "ConcentreDeFun",
             "ForgePortative",
+            "SacDeConstantinople",
         ]
