@@ -15,7 +15,7 @@ from heros import persos_disponibles # Liste globale des instances Perso
 # ==============================================
 # Configuration
 # ==============================================
-NB_DRAFT_SIMULATIONS = 1000            # Nombre total de drafts à simuler
+NB_DRAFT_SIMULATIONS = 10000            # Nombre total de drafts à simuler
 NB_GAMES_PER_DRAFT_FOR_STATS = 10000   # Nb parties jouées pour évaluer chaque draft
 ITERATIONS_PER_CHOICE_EVALUATION = 100 # Nb simulations dans calculWinrate (précision IA)
 ITERATIONS_INITIAL_RANDOM_WINRATE = 1000# Nb simulations pour pré-calcul WR objet
