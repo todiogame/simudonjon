@@ -218,7 +218,7 @@ class MarteauDeGuerre(Objet):
         
 class EpauletteDuBourrin(Objet):
     def __init__(self):
-        super().__init__("Epaulette du Bourrin", False, 4, -2)
+        super().__init__("Epaulette du Bourrin", False, 3, -2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.reduc_damage(1, joueur, carte, log_details)
 
@@ -389,9 +389,10 @@ class GrosBoulet(Objet):
 
 class PotionFeerique(Objet):
     def __init__(self):
-        super().__init__("Potion féérique", True)
-    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if not self.intact and ("Fée" == carte.titre) and joueur_proprietaire==joueur:
+        super().__init__("Potion feerique", True)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if ("Fée" == carte.titre) and not self.intact:
+            log_details.append(f"{self.nom} de {joueur_proprietaire.nom} se repare.")
             self.repare()
     def survie_effet(self, joueur, carte, Jeu, log_details):
         self.survit(1, joueur, carte, log_details)
@@ -480,10 +481,10 @@ class TronconneuseEnflammee(Objet):
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif
     def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= 3 and joueur.pv_total > 3
+        return carte.dommages >= 3 and joueur.pv_total > 3 + (carte.puissance % 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.perdPV(3, joueur, log_details)
+        self.perdPV(3 + (carte.puissance % 2), joueur, log_details) 
     
 class TuniqueClasse(Objet):
     def __init__(self):
@@ -535,8 +536,7 @@ class CoeurDeGolem(Objet):
         super().__init__("Cœur de Golem", False, 3)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if any("Golem" in monstre.types for monstre in joueur.pile_monstres_vaincus):    
-            nb_golems = sum("Golem" in monstre.types for monstre in joueur.pile_monstres_vaincus)
-            self.reduc_damage(nb_golems, joueur, carte, log_details)
+            self.reduc_damage(1, joueur, carte, log_details)
 
 class CouronneDEpines(Objet):
     def __init__(self):
@@ -546,7 +546,7 @@ class CouronneDEpines(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.reduc_damage(2, joueur, carte, log_details)
         if carte.dommages <= 0:
-            self.add_damage(1, joueur, carte, log_details)
+            self.add_damage(2, joueur, carte, log_details)
 #note la courronne peut etre reduite encore par un item reduc dommage utilise en suivant
 
 class MasqueAGaz(Objet):
@@ -563,7 +563,7 @@ class MasqueAGaz(Objet):
 
 class BouclierCameleon(Objet):
     def __init__(self):
-        super().__init__("Bouclier caméléon", False, 0, -1)
+        super().__init__("Bouclier caméléon", False, 0, -2)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif and carte.puissance >= 6 
     def worthit(self, joueur, carte, Jeu, log_details):
@@ -584,10 +584,9 @@ class YoYoProtecteur(Objet):
     
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.destroy(joueur, Jeu, log_details)
         jet_yoyo = joueur.rollDice(Jeu, log_details)
-        if jet_yoyo >= 4 and self in joueur.objets:
-            self.repare()
+        if jet_yoyo < 4 and self in joueur.objets:
+            self.destroy(joueur, Jeu, log_details)
         else:
             log_details.append(f"{joueur.nom} essaie de reparer {self.nom}... raté ({jet_yoyo})!")
 
@@ -985,9 +984,8 @@ class LameDraconique(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if "Dragon" in carte.types and not Jeu.traquenard_actif:
             self.execute(joueur, carte, log_details)
-        else:
-            nb_dragons = sum("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus)
-            self.reduc_damage(nb_dragons, joueur, carte, log_details)
+        elif any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus):    
+            self.reduc_damage(1, joueur, carte, log_details)
 
 class FouetDuFourbe(Objet):
     def __init__(self):
@@ -1220,7 +1218,7 @@ class TreizeASeize(Objet):
 
 class Scaphandre(Objet):
     def __init__(self):
-        super().__init__("Scaphandre", False, 0, -3)
+        super().__init__("Scaphandre", False, 0, -4)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.reduc_damage(2, joueur, carte, log_details)
 
@@ -1365,6 +1363,7 @@ class PotionDeFeuLiquide(Objet):
         self.destroy(joueur, Jeu, log_details)
     def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if not self.intact and "Dragon" in carte.types and joueur_proprietaire==joueur:
+            log_details.append(f"{self.nom} de {joueur_proprietaire.nom} se repare.")
             self.repare()
             
 class CasquePlus(Objet):
@@ -1559,7 +1558,7 @@ class PareBuffleDuPonceur(Objet):
     def __init__(self):
         super().__init__("Pare-Buffle du Ponceur", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance >= 6
+        return carte.puissance >= 7
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.reduc_damage(4, joueur, carte, log_details)
 
@@ -2072,9 +2071,9 @@ class CodexDiabolus(Objet):
             carte.dommages+=dommages_suppl
             log_details.append(f"{carte.titre} est booste de {dommages_suppl} dommages (total {carte.dommages}) par {joueur_proprietaire.nom} ({self.nom})")
 
-class LanceDuDestin(Objet):
+class SainteLance(Objet):
     def __init__(self):
-        super().__init__("LanceDuDestin", False, 0, 0)
+        super().__init__("Sainte Lance", False, 0, 0)
     def rules(self, joueur, carte, Jeu, log_details):
         return (carte.puissance == 6 or carte.puissance == 8 or carte.puissance == 10) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -2339,7 +2338,7 @@ objets_disponibles = [
     AraigneeDomestique(),
     Exterminator(),
     CodexDiabolus(),
-    LanceDuDestin(),
+    SainteLance(),
     TorcheEnMousse(),
     GrelotDuBouffon(),
     AspisHeracles(),
@@ -2517,7 +2516,7 @@ __all__ = [
             "AraigneeDomestique",
             "Exterminator",
             "CodexDiabolus",
-            "LanceDuDestin",
+            "SainteLance",
             "TorcheEnMousse",
             "GrelotDuBouffon",
             "AspisHeracles",

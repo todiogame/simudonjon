@@ -266,8 +266,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 carte.dommages += 4
                 log_details.append(f"Rencontré Seigneur Vampire, inflige 4 dommages supplémentaires grâce aux médailles, dommages {carte.dommages}.")
             
-            # todo changer en_rencontre pour trigger sur tous les joueurs (maj les  objets)
-            # pour ajouter codex et flutiste
             #use items en_rencontre
             for joueur_proprietaire in Jeu.joueurs:
                 joueur_proprietaire.perso_obj.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
@@ -478,7 +476,7 @@ def loguer_x_parties(x=1):
     noms_objets_test = [
         "Forge Portative",
         "Codex Diabolus",
-        "Cape de Plumes",
+        "Potion feerique",
         "Corne d'abordage",
         "Lame Draconique"
     ]
