@@ -542,7 +542,7 @@ class CouronneDEpines(Objet):
     def __init__(self):
         super().__init__("Couronne d'épines", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >1
+        return carte.dommages >2
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.reduc_damage(2, joueur, carte, log_details)
         if carte.dommages <= 0:
@@ -777,8 +777,8 @@ class BoiteDePandore(Objet):
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
             self.gagnePV(3, joueur, log_details)
-            for j in Jeu.joueurs:
-                self.piocheItem(j, Jeu, log_details)
+            for j_dans_le_dj in [j for j in Jeu.joueurs if j.dans_le_dj]:            
+                self.piocheItem(j_dans_le_dj, Jeu, log_details)
             self.destroy(joueur, Jeu, log_details)
 
 class TorcheBleue(Objet):
@@ -856,13 +856,13 @@ class EnclumeInstable(Objet):
     
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
-            objets_brisés_autres_joueurs = [obj for j in Jeu.joueurs if j != joueur for obj in j.objets if not obj.intact]
+            objets_brisés_autres_joueurs = [obj for j in Jeu.joueurs if (j != joueur and j.dans_le_dj) for obj in j.objets if not obj.intact]
             if objets_brisés_autres_joueurs:
                 objet_vole = random.choice(objets_brisés_autres_joueurs)
-                objet_vole.repare()
                 ancien_proprietaire = next(j for j in Jeu.joueurs if objet_vole in j.objets)
                 ancien_proprietaire.objets.remove(objet_vole)
                 joueur.ajouter_objet(objet_vole)
+                objet_vole.repare()
                 log_details.append(f"{joueur.nom} utilise {self.nom} pour voler et réparer {objet_vole.nom} de {ancien_proprietaire.nom}")
                 self.destroy(joueur, Jeu, log_details)
 
@@ -1870,11 +1870,11 @@ class PainMaudit(Objet):
                     Jeu.defausse.remove(card)
             
             # Chercher dans les piles de monstres vaincus
-            for j in Jeu.joueurs:
-                for card in j.pile_monstres_vaincus[:]:
+            for j_dans_le_dj in [j for j in Jeu.joueurs if j.dans_le_dj]:
+                for card in j_dans_le_dj.pile_monstres_vaincus[:]:
                     if hasattr(card, 'types') and ("Démon" in card.types or "Dragon" in card.types):
                         demons_dragons.append(card)
-                        j.pile_monstres_vaincus.remove(card)
+                        j_dans_le_dj.pile_monstres_vaincus.remove(card)
             
             # Remettre les monstres dans le donjon
             for monstre in demons_dragons:
@@ -1889,7 +1889,7 @@ class PainMaudit(Objet):
         
 class PierreDuNaga(Objet):
     def __init__(self):
-        super().__init__("Pierre du Naga", False, 2)  # False pour actif = non, et 2 pour le bonus de PV initial
+        super().__init__("Pierre du Naga", False, 1)  # False pour actif = non, et 2 pour le bonus de PV initial
     
 
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
@@ -1925,7 +1925,7 @@ class SetDeCoeurs(Objet):
 
 class GrelotDuBouffon(Objet):
     def __init__(self):
-        super().__init__("Grelot du Bouffon", False, 1)  
+        super().__init__("Grelot du Bouffon", False, 0)  
     
     def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if(joueur_proprietaire.dans_le_dj):
@@ -2208,6 +2208,18 @@ class ForgePortative(Objet):
             if objet in joueur.objets and not objet.intact:
                 self.gagnePV(1, joueur_proprietaire, log_details)
 
+class TrouNoirPortatif(Objet):
+    def __init__(self):
+        super().__init__("Trou Noir Portatif", False, 5)
+
+    def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur:
+            for obj in joueur.objets:
+                if obj.nom == objet.nom:
+                    log_details.append(f"{objet.nom} est defaussé par {self.nom} !")
+                    joueur.objets.remove(obj)
+                    break
+
 # Liste des objets
 objets_disponibles = [ 
     MainDeMidas(), 
@@ -2383,6 +2395,7 @@ objets_disponibles = [
     ConcentreDeFun(),
     ForgePortative(),
     SacDeConstantinople(),
+    TrouNoirPortatif(),
 ]
 
 
@@ -2562,4 +2575,5 @@ __all__ = [
             "ConcentreDeFun",
             "ForgePortative",
             "SacDeConstantinople",
+            "TrouNoirPortatif",
         ]

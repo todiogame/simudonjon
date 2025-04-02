@@ -98,6 +98,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
 
         log_details.append(f"tour {joueur.tour}. {joueur.nom} ({joueur.perso_obj.nom}) a pioché {carte.titre}.")
+        effet_carte = carte.effet
         if isinstance(carte, CarteEvent):
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
@@ -105,7 +106,14 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 for objet in joueur_proprietaire.objets:
                     objet.en_rencontre_event(joueur_proprietaire, joueur, carte, Jeu, log_details)
             
-            if carte.effet == "HEAL":
+            if effet_carte == "INCEPTION":
+                event_defausse = [c for c in Jeu.defausse if getattr(c, 'event', False)]
+                if(event_defausse):
+                    effet_carte = event_defausse[0].effet
+                    log_details.append(f"{carte.titre} copie la dernière carte événement dans la défausse: {event_defausse[0].titre}.")
+                else:
+                    log_details.append(f"Pas de carte événement dans la défausse.") 
+            if effet_carte == "HEAL":
                 joueur.pv_total += 3
                 log_details.append(f"{joueur.nom} gagne 3 PV grâce à {carte.titre}. PV restant: {joueur.pv_total}")
                 # Ajouter 2 PV aux autres joueurs
@@ -114,7 +122,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         autre_joueur.pv_total += 2
                         log_details.append(f"{autre_joueur.nom} gagne 2 PV grâce à {carte.titre}. PV restant: {autre_joueur.pv_total}")
 
-            if carte.effet == "REPAIR":
+            if effet_carte == "REPAIR":
                 objets_brisés = [objet for objet in joueur.objets if not objet.intact]
                 if objets_brisés:
                     objet_reparé = random.choice(objets_brisés)
@@ -123,16 +131,16 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     log_details.append(f"Réparé {objet_reparé.nom} grâce à {carte.titre}. PV total augmenté de {objet_reparé.pv_bonus}, PV restant: {joueur.pv_total}")
                 else: log_details.append(f"{carte.titre} n'a' rien a reparer.")
 
-            if carte.effet == "ALLY":
+            if effet_carte == "ALLY":
                 Jeu.execute_next_monster = True
                 log_details.append(f"L'effet {carte.titre} est actif. La prochaine carte monstre peut être exécutée.")
 
-            if carte.effet == "TRAP":
+            if effet_carte == "TRAP":
                 Jeu.traquenard_actif = True
                 Jeu.execute_next_monster = False
                 log_details.append(f"L'effet {carte.titre} est actif. La prochaine carte monstre Ne peut PAS être exécutée.")
 
-            if carte.effet == "INJECTION":
+            if effet_carte == "INJECTION":
                 golem_count = sum(1 for monstre in joueur.pile_monstres_vaincus if "Golem" in monstre.types)
                 if golem_count > 0:
                     joueur.pv_total += 2 * golem_count
@@ -140,7 +148,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 else:
                     log_details.append(f"{carte.titre} ne fait rien.")
                     
-            if carte.effet == "FORTUNE_WHEEL":
+            if effet_carte == "FORTUNE_WHEEL":
                 jet_wheel = joueur.rollDice(Jeu, log_details, 2)
                 joueur.pv_total += jet_wheel
                 log_details.append(f"{joueur.nom} a gagné {jet_wheel} PV grâce à {carte.titre}. PV: {joueur.pv_total}")
@@ -154,7 +162,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                             joueur.pv_total -= objet_casse_wheel.pv_bonus
                             log_details.append(f"L'objet casse {objet_casse_wheel.nom} donnait {objet_casse_wheel.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
             
-            if carte.effet == "SOULSTORM":
+            if effet_carte == "SOULSTORM":
                 for autre_joueur in joueurs:
                     if autre_joueur.dans_le_dj:
                         if autre_joueur.pile_monstres_vaincus:
@@ -166,7 +174,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 donjon.remelange()
                 log_details.append(f"Le donjon est remelangé.")
                 
-            if carte.effet == "DRAG":
+            if effet_carte == "DRAG":
                 dragons_trouves = False
                 for autre_joueur in joueurs:
                     if autre_joueur.dans_le_dj:
@@ -182,11 +190,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                                 Jeu.objets_dispo.remove(nouvel_objet)
                                 autre_joueur.ajouter_objet(nouvel_objet)
                                 log_details.append(f"{autre_joueur.nom} pioche un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
-                        break
+                            break
                 if not dragons_trouves:
                     log_details.append("Aucun joueur n'a de Dragons à défausser.")
 
-            if carte.effet == "SHOP":
+            if effet_carte == "SHOP":
                 objets_intacts = [objet for objet in joueur.objets if objet.intact]
                 if len(objets_intacts) < 4:
                     log_details.append(f"{joueur.nom} a moins de 4 objets intacts et utilise l'effet {carte.titre} pour piocher un objet.")
@@ -205,66 +213,67 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             joueur.rejoue = True
             
         if isinstance(carte, CarteMonstre):
-            if carte.effet:
-                if carte.effet == "MIROIR":
-                    log_details.append(f"Le Miroir Maléfique est pioche.")
+            if effet_carte:
+                if effet_carte == "MIROIR":
+                    log_details.append(f"Le {carte.titre} est pioche.")
                     if joueur.pile_monstres_vaincus:
                         carte_copiee = joueur.pile_monstres_vaincus[-1]
 
                         carte.puissance = carte_copiee.puissance
                         carte.types = carte_copiee.types
-                        # carte.effet = carte_copiee.effet
-                        log_details.append(f"Le Miroir Maléfique copie {carte_copiee.titre} avec une puissance de {carte.puissance}.")
+                        effet_carte = carte_copiee.effet
+                        log_details.append(f"Le {carte.titre} copie {carte_copiee.titre} avec une puissance de {carte.puissance}.")
                     else:
                         carte.puissance = 0
-                        log_details.append(f"Le Miroir Maléfique n'a pas de carte a copier, puissance zero.")
+                        carte.types = []
+                        log_details.append(f"Le {carte.titre} n'a pas de carte a copier, puissance zero.")
 
-                if carte.effet == "SLEEPING":
+                if effet_carte == "SLEEPING":
                     jet_dragon = joueur.rollDice(Jeu, log_details)
                     if jet_dragon <= 3:
                         carte.puissance = 9
                     else:
                         carte.puissance = 0
-                    log_details.append(f"Rencontré Dragon endormi, jet de {jet_dragon}, puissance déterminée à {carte.puissance}.")
+                    log_details.append(f"Rencontré {carte.titre}, jet de {jet_dragon}, puissance déterminée à {carte.puissance}.")
 
-                if carte.effet == "MIMIC":
+                if effet_carte == "MIMIC":
                     objets_intacts = [objet for objet in joueur.objets if objet.intact]
                     carte.puissance = len(objets_intacts)
-                    log_details.append(f"Rencontré Mimique, puissance déterminée à {carte.puissance} (égale au nombre d'objets possédés).")
+                    log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (égale au nombre d'objets possédés).")
 
-                if carte.effet == "MONKEY_TEAM":
+                if effet_carte == "MONKEY_TEAM":
                     nb_joueurs_dans_le_dj = 0
                     for j in Jeu.joueurs:
                         if j.dans_le_dj:
                             nb_joueurs_dans_le_dj += 1
                     carte.puissance = nb_joueurs_dans_le_dj * 2
-                    log_details.append(f"Rencontré Equipe de singes, puissance déterminée à {carte.puissance} (2x le nombre de joueurs dans le donjon).")
+                    log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (2x le nombre de joueurs dans le donjon).")
                     
-                if carte.effet == "REAPER":
+                if effet_carte == "REAPER":
                     carte.puissance = joueur.pv_total // 2
-                    log_details.append(f"Rencontré Faucheuse, puissance déterminée à {carte.puissance} (la moitie des PV (arrondi inferieur)).")
+                    log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (la moitie des PV (arrondi inferieur)).")
 
-                if carte.effet == "NOOB":
+                if effet_carte == "NOOB":
                     if joueur.medailles > 0:
                         carte.puissance = 2
-                        log_details.append(f"Rencontré L'empaleur d'imprudent, puissance réduite à 2 grâce aux médailles.")
+                        log_details.append(f"Rencontré {carte.titre}, puissance réduite à 2 grâce aux médailles.")
 
-                if carte.effet == "MEDAIL":
+                if effet_carte == "MEDAIL":
                     carte.puissance = joueur.medailles
-                    log_details.append(f"Rencontré Rongeur de médaille, puissance déterminée à {carte.puissance} (égale au nombre de médailles).")
+                    log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (égale au nombre de médailles).")
 
-                if carte.effet == "SCAVENGER":
+                if effet_carte == "SCAVENGER":
                     carte.puissance = len(joueur.pile_monstres_vaincus)
-                    log_details.append(f"Rencontré Rat charognard, puissance déterminée à {carte.puissance} (égale au nombre de monstres vaincus).")
+                    log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (égale au nombre de monstres vaincus).")
             
             carte.dommages = carte.puissance
 
-            if carte.effet and "ADD_2_DOM" in carte.effet:
+            if effet_carte and "ADD_2_DOM" in effet_carte:
                 carte.dommages += 2  # Ajouter 2 dommages supplémentaires pour Chevaucheur de rat
                 log_details.append(f"{carte.titre} inflige 2 dommages supplémentaires.")
-            if carte.effet == "LORD" and joueur.medailles > 0:
+            if effet_carte == "LORD" and joueur.medailles > 0:
                 carte.dommages += 4
-                log_details.append(f"Rencontré Seigneur Vampire, inflige 4 dommages supplémentaires grâce aux médailles, dommages {carte.dommages}.")
+                log_details.append(f"Rencontré {carte.titre}, inflige 4 dommages supplémentaires par médailles, dommages {carte.dommages}.")
             
             #use items en_rencontre
             for joueur_proprietaire in Jeu.joueurs:
@@ -300,7 +309,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
                 for objet in joueur.objets:
                     objet.en_combat(joueur, carte, Jeu, log_details)
-                    if carte.executed or (carte.dommages <= 0 and not carte.effet == "LIMON") or joueur.fuite_reussie:
+                    if carte.executed or (carte.dommages <= 0 and not effet_carte == "LIMON") or joueur.fuite_reussie:
                         break
                 if(not joueur.dans_le_dj):
                     donjon.rajoute_en_haut_de_la_pile(carte)
@@ -314,20 +323,20 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
                 #item survie ici
                 # Ne pas ajouter le Gobelin Fantôme à la pile des monstres vaincus
-                if carte.effet == "MAUDIT":  
+                if effet_carte == "MAUDIT":  
                     Jeu.defausse.append(carte)
                     log_details.append(f"Le {carte.titre} disparait.")
                 else:
                     if (joueur.vivant): joueur.ajouter_monstre_vaincu(carte)
-                if carte.effet == "LIMON":
+                if effet_carte == "LIMON":
                     objets_intacts = [objet for objet in joueur.objets if objet.intact]
                     if objets_intacts:
                         objet_avale = random.choice(objets_intacts)
-                        log_details.append(f"Le limon Glouton avale {objet_avale.nom}.")
+                        log_details.append(f"Le {carte.titre} avale {objet_avale.nom}.")
                         objet_avale.destroy(joueur, Jeu, log_details)
                         if objet_avale.pv_bonus:
                             joueur.pv_total -= objet_avale.pv_bonus
-                            log_details.append(f"L'objet avale {objet_avale.nom} donnait {objet_avale.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
+                            log_details.append(f"L'objet avalé {objet_avale.nom} donnait {objet_avale.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
             
                 log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
                 
@@ -336,12 +345,12 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     for objet in joueur_proprietaire.objets:
                         objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
                         
-                if carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
+                if effet_carte and "ARRA" in effet_carte and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
                     monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
                     donjon.rajoute_en_haut_de_la_pile(monstre_remis)
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
 
-                if carte.dommages >= 0 and carte.effet == "MEDAIL" and carte.dommages > 0:
+                if carte.dommages >= 0 and effet_carte == "MEDAIL" and carte.dommages > 0:
                         joueur.medailles -= 1
                         log_details.append(f"Perdu une médaille en affrontant Rongeur de médaille, médailles restantes: {joueur.medailles}")
             
@@ -474,11 +483,11 @@ def loguer_x_parties(x=1):
     # Liste des objets spécifiques pour le joueur de test
     # IMPORTANT: Assure-toi que ces classes existent bien dans objets.py
     noms_objets_test = [
-        "Forge Portative",
-        "Codex Diabolus",
-        "Potion feerique",
-        "Sac de Constantinople",
-        "Lame Draconique"
+        "Couronne d'épines",
+        # "Codex Diabolus",
+        # "Potion feerique",
+        # "Sac de Constantinople",
+        # "Trou Noir Portatif"
     ]
 
     for i in range(x):
@@ -534,6 +543,13 @@ def loguer_x_parties(x=1):
 
             if nom_joueur == nom_joueur_test:
                 objets_joueur = objets_test_instances[:] # Utiliser les objets de test
+                #assigner des objets pour completer la main
+                if len(objets_joueur) < nb_items_par_joueur:
+                    nb_a_ajouter = nb_items_par_joueur - len(objets_joueur)
+                    extra_objs = random.sample(objets_disponibles_partie, nb_a_ajouter)
+                    objets_joueur += extra_objs
+                    for obj in extra_objs:
+                        objets_disponibles_partie.remove(obj)
             else:
                 # Assigner des objets aléatoires aux autres
                 if len(objets_disponibles_partie) < nb_items_par_joueur:
