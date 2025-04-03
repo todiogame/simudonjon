@@ -386,7 +386,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     for objet in joueur_proprietaire.objets:
                         objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
                         
-                if effet_carte and "ARRA" in effet_carte and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
+                if effet_carte and "ARRA" in effet_carte and carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
+                    # fix hard du miroir il ne copie pas l'arracheur sinon ca boucle infinie...
                     monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
                     donjon.rajoute_en_haut_de_la_pile(monstre_remis)
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
