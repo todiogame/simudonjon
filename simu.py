@@ -20,6 +20,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         tour = 0
         execute_next_monster = False
         traquenard_actif = False
+        kraken_vu = False
         donjon
     Jeu.joueurs = joueurs
     Jeu.donjon = donjon
@@ -320,17 +321,21 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 log_details.append(f"L'effet Exécute le prochain monstre est utilisé sur {carte.titre}.")
             else:
                 if effet_carte == "KRAKEN":
-                    # Vérifier si le joueur a un objet intact avec puissance 10
-                    has_power_10 = False
-                    for objet in joueur.objets:
-                        if objet.intact and 10 in objet.puissance_tags:
-                            log_details.append(f"{joueur.nom} decide d'affronter {carte.titre} confiant avec ({objet.nom})")
-                            has_power_10 = True
-                            break
-                    if not has_power_10:
-                        log_details.append(f"{joueur.nom} decide de remettre le {carte.titre} car il n'a pas d'objet pour le gerer.")
-                        Jeu.defausse.append(carte) #todo remettre en dessous de la pile
-                        carte_ignoree = True
+                    if not Jeu.kraken_vu:
+                        Jeu.kraken_vu = True
+                        # Vérifier si le joueur a un objet intact avec puissance 10
+                        has_power_10 = False
+                        for objet in joueur.objets:
+                            if objet.intact and 10 in objet.puissance_tags:
+                                log_details.append(f"{joueur.nom} decide d'affronter {carte.titre} confiant avec ({objet.nom})")
+                                has_power_10 = True
+                                break
+                        if not has_power_10:
+                            log_details.append(f"{joueur.nom} decide de remettre le {carte.titre} car il n'a pas d'objet pour le gerer.")
+                            Jeu.donjon.rajoute_en_bas_de_la_pile(carte)
+                            carte_ignoree = True
+                    else:
+                        log_details.append(f"Le {carte.titre} est deja apparu, {joueur.nom} doit l'affronter !")
 
                 if effet_carte == "GUARDIAN_ANGEL":
                     # Vérifier si le joueur a un objet intact avec puissance 8

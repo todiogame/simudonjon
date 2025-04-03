@@ -199,7 +199,7 @@ class FleauDesLiches(Objet):
 
 class Katana(Objet):
     def __init__(self):
-        super().__init__("Katana", puissance_tags=[7, 8, 9, 10])
+        super().__init__("Katana", puissance_tags=[8])
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance >= 7 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -585,7 +585,7 @@ class BouclierCameleon(Objet):
 
 class YoYoProtecteur(Objet):
     def __init__(self):
-        super().__init__("Yo-yo protecteur", True, puissance_tags=[2, 4, 6, 8, 10])
+        super().__init__("Yo-yo protecteur", True, puissance_tags=[8])
     
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance % 2 == 0 and not Jeu.traquenard_actif
@@ -604,7 +604,7 @@ class YoYoProtecteur(Objet):
 
 class BouclierCasse(Objet):
     def __init__(self):
-        super().__init__("Bouclier cassé", False, puissance_tags=[6, 7, 8, 9, 10])
+        super().__init__("Bouclier cassé", False)
     
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance >= 6
@@ -1566,7 +1566,7 @@ class MasqueDeLInquisiteur(Objet):
 
 class PareBuffleDuPonceur(Objet):
     def __init__(self):
-        super().__init__("Pare-Buffle du Ponceur", False, puissance_tags=[7, 8, 9, 10])
+        super().__init__("Pare-Buffle du Ponceur", False)
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance >= 6
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -1631,7 +1631,7 @@ class CasqueBerserk(Objet):
 
 class TentaculeDuKraken(Objet):
     def __init__(self):
-        super().__init__("Tentacule du Kraken", True, puissance_tags=[2, 4, 6, 8, 10])
+        super().__init__("Tentacule du Kraken", True, puissance_tags=[ 8, 10])
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance % 2 == 0 
     def worthit(self, joueur, carte, Jeu, log_details):
@@ -1639,7 +1639,7 @@ class TentaculeDuKraken(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.gagnePV(carte.puissance, joueur, log_details)
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        #TODO Jeu.donjon.ajouter_monstre(carte)
+        Jeu.donjon.rajoute_en_haut_de_la_pile(carte)
         Jeu.donjon.remelange()
         log_details.append(f"{joueur.nom} remet {carte.titre} dans le Donjon grâce à {self.nom}.")
         self.destroy(joueur, Jeu, log_details)
@@ -2057,7 +2057,7 @@ class SainteLance(Objet):
         
 class AspisHeracles(Objet):
     def __init__(self):
-        super().__init__("Aspis d'Héraclès", True, puissance_tags=[7, 8, 9, 10])
+        super().__init__("Aspis d'Héraclès", True, puissance_tags=[8,])
 
     def rules(self, joueur, carte, Jeu, log_details):
         # On ne peut pas l'utiliser si Traquenard est actif

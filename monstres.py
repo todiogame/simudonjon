@@ -120,6 +120,11 @@ class DonjonDeck:
         self.ordre = np.insert(self.ordre, self.index, carte.index)
         self.nb_cartes += 1
 
+    def rajoute_en_bas_de_la_pile(self, carte):
+        # carte.executed = False
+        self.ordre = np.append(self.ordre, carte.index)  # Ajoute la carte à la fin
+        self.nb_cartes += 1
+        
     def ajouter_carte(self, carte):
         assert carte not in self.cartes # faut copy pour pas avoir la meme instance
         self.cartes.append(carte)
