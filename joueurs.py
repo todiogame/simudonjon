@@ -44,9 +44,13 @@ class Joueur:
         self.fuite_reussie = True
         self.dans_le_dj = False
 
-    def mort(self):
+    def mort(self, log_details):
         self.vivant = False
         self.dans_le_dj = False
+        if self.medailles > 0:
+            log_details.append(f"{self.nom} a perdu une medaille !")
+            self.medailles -= 1
+            
     
     def calculScoreFinal(self, log_details):
         log_details.append(f"Calcul du score de {self.nom} : {len(self.pile_monstres_vaincus)} monstres vaincus.")

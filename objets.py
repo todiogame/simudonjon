@@ -156,7 +156,7 @@ class Objet:
     def perdPV(self, value, joueur, log_details):
         joueur.pv_total -= value
         log_details.append(f"{joueur.nom} utilise {self.nom} et perd {value} PV. Total {joueur.pv_total} PV.")
-        if(joueur.pv_total <= 0): joueur.mort()
+        if(joueur.pv_total <= 0): joueur.mort(log_details)
 
     def survit(self, value, joueur, carte, log_details):
         joueur.pv_total = value
@@ -442,7 +442,7 @@ class ChapeauDuNovice(Objet):
         self.execute(joueur, carte, log_details)
         if joueur.medailles == 0:
             Jeu.execute_next_monster = True
-            log_details.append(f"Pas de médaille, la prochaine carte monstre peut être exécutée.")
+            log_details.append(f"Pas de medaille, la prochaine carte monstre peut être exécutée.")
 
 class MasqueDeLaPeste(Objet):
     def __init__(self):

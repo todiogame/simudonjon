@@ -259,7 +259,10 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         log_details.append(f"Rencontré {carte.titre}, puissance réduite à 2 grâce aux médailles.")
 
                 if effet_carte == "MEDAIL":
-                    carte.puissance = joueur.medailles
+                    nb_medailles = 0
+                    for j in Jeu.joueurs:
+                        nb_medailles += 1
+                    carte.puissance = nb_medailles
                     log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (égale au nombre de médailles).")
 
                 if effet_carte == "SCAVENGER":
@@ -272,8 +275,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 carte.dommages += 2  # Ajouter 2 dommages supplémentaires pour Chevaucheur de rat
                 log_details.append(f"{carte.titre} inflige 2 dommages supplémentaires.")
             if effet_carte == "LORD" and joueur.medailles > 0:
-                carte.dommages += 4
-                log_details.append(f"Rencontré {carte.titre}, inflige 4 dommages supplémentaires par médailles, dommages {carte.dommages}.")
+                carte.dommages += 4 * joueur.medailles
+                log_details.append(f"Rencontré {carte.titre}, inflige +4 dommages par médaille, total {carte.dommages}.")
+
             
             #use items en_rencontre
             for joueur_proprietaire in Jeu.joueurs:
@@ -350,9 +354,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     donjon.rajoute_en_haut_de_la_pile(monstre_remis)
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
 
-                if carte.dommages >= 0 and effet_carte == "MEDAIL" and carte.dommages > 0:
+                if effet_carte == "MEDAIL" and carte.dommages > 0 and joueur.medailles >= 0:
                         joueur.medailles -= 1
-                        log_details.append(f"Perdu une médaille en affrontant Rongeur de médaille, médailles restantes: {joueur.medailles}")
+                        log_details.append(f"Perdu une medaille en affrontant {carte.titre}, médailles restantes: {joueur.medailles}")
             
             if joueur.pv_total <= 0:
                 #use items survie
@@ -362,7 +366,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         break
             # vraiment mort        
             if joueur.pv_total <= 0:
-                joueur.mort()
+                joueur.mort(log_details)
                 log_details.append(f"OUPS!! Mort de {joueur.nom}, a court de PV.\n")
                 
                 for joueur_proprietaire in Jeu.joueurs:
@@ -567,7 +571,7 @@ def loguer_x_parties(x=1):
                  break
 
             # Créer l'instance Joueur
-            joueur_cree = Joueur(nom_joueur, perso_instance, objets_joueur)
+            joueur_cree = Joueur(nom_joueur, perso_instance, objets_joueur, int(random.random() < 0.3))
             joueurs.append(joueur_cree)
 
         # Vérifier si la création a échoué
@@ -578,7 +582,7 @@ def loguer_x_parties(x=1):
         # Logs initiaux
         for j in joueurs:
             # Le log détaillé est déjà dans Joueur.__init__
-            print(f"  -> {j.nom} ({j.personnage_nom}) commence avec {j.pv_total} PV.")
+            print(f"  -> {j.nom} ({j.personnage_nom}) commence avec {j.pv_total} PV."+ (f" Il a {j.medailles} medaille(s)." if j.medailles else ""))
             print(f"     Objets: {[o.nom for o in j.objets]}")
 
         print(f"Seuil de PV pour tenter la fuite : {seuil_pv_essai_fuite}\n")
