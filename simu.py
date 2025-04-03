@@ -99,6 +99,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         log_details.append(f"tour {joueur.tour}. {joueur.nom} ({joueur.perso_obj.nom}) a pioché {carte.titre}.")
         effet_carte = carte.effet
+        carte_ignoree = False
         if isinstance(carte, CarteEvent):
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
@@ -228,6 +229,15 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         carte.types = []
                         log_details.append(f"Le {carte.titre} n'a pas de carte a copier, puissance zero.")
 
+                if effet_carte == "SHAPESHIFTER":
+                    # on parcours les type_tags des objets intacts du joueur
+                    # le premier type qu'on trouve on le donne au monstre
+                    for objet in joueur.objets:
+                        if objet.intact and objet.types_tags:
+                            carte.types = objet.types_tags[0]
+                            log_details.append(f"Le {carte.titre} devient un {carte.types} (car {joueur.nom} a {objet.nom}.).")
+                            break
+                            
                 if effet_carte == "SLEEPING":
                     jet_dragon = joueur.rollDice(Jeu, log_details)
                     if jet_dragon <= 3:
@@ -309,18 +319,45 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 Jeu.execute_next_monster = False
                 log_details.append(f"L'effet Exécute le prochain monstre est utilisé sur {carte.titre}.")
             else:
-                #use items
-                joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
-                for objet in joueur.objets:
-                    objet.en_combat(joueur, carte, Jeu, log_details)
-                    if carte.executed or (carte.dommages <= 0 and not effet_carte == "LIMON") or joueur.fuite_reussie:
-                        break
-                if(not joueur.dans_le_dj):
-                    donjon.rajoute_en_haut_de_la_pile(carte)
-                    continue
-                joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
+                if effet_carte == "KRAKEN":
+                    # Vérifier si le joueur a un objet intact avec puissance 10
+                    has_power_10 = False
+                    for objet in joueur.objets:
+                        if objet.intact and 10 in objet.puissance_tags:
+                            log_details.append(f"{joueur.nom} decide d'affronter {carte.titre} confiant avec ({objet.nom})")
+                            has_power_10 = True
+                            break
+                    if not has_power_10:
+                        log_details.append(f"{joueur.nom} decide de remettre le {carte.titre} car il n'a pas d'objet pour le gerer.")
+                        Jeu.defausse.append(carte) #todo remettre en dessous de la pile
+                        carte_ignoree = True
+
+                if effet_carte == "GUARDIAN_ANGEL":
+                    # Vérifier si le joueur a un objet intact avec puissance 8
+                    has_power_8 = False
+                    for objet in joueur.objets:
+                        if objet.intact and 8 in objet.puissance_tags:
+                            log_details.append(f"{joueur.nom} decide d'affronter {carte.titre} confiant avec ({objet.nom})")
+                            has_power_8 = True
+                            break
+                    if not has_power_8:
+                        log_details.append(f"{joueur.nom} decide de defausser {carte.titre} car il n'a pas d'objet pour le gerer.")
+                        Jeu.defausse.append(carte)
+                        carte_ignoree = True
                 
-            if not carte.executed:
+                #use items
+                if not carte_ignoree:
+                    joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
+                    for objet in joueur.objets:
+                        objet.en_combat(joueur, carte, Jeu, log_details)
+                        if carte.executed or (carte.dommages <= 0 and not effet_carte == "LIMON") or joueur.fuite_reussie:
+                            break
+                    if(not joueur.dans_le_dj):
+                        donjon.rajoute_en_haut_de_la_pile(carte)
+                        continue
+                    joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
+                
+            if not carte_ignoree and not carte.executed:
                 Jeu.traquenard_actif = False
                 joueur.pv_total -= carte.dommages
                 
@@ -355,15 +392,24 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
 
                 if effet_carte == "MEDAIL" and carte.dommages > 0 and joueur.medailles >= 0:
-                        joueur.medailles -= 1
-                        log_details.append(f"Perdu une medaille en affrontant {carte.titre}, médailles restantes: {joueur.medailles}")
-            
+                    joueur.medailles -= 1
+                    log_details.append(f"Perdu une medaille en affrontant {carte.titre}, médailles restantes: {joueur.medailles}")
+
+            if effet_carte == "SHAPESHIFTER":
+                # il perd son type ici
+                carte.types = []
+
             if joueur.pv_total <= 0:
                 #use items survie
                 for objet in joueur.objets:
                     objet.en_survie(joueur, carte, Jeu, log_details)
                     if joueur.pv_total > 0:
                         break
+            # drop Egide
+            if not carte_ignoree and effet_carte == "GUARDIAN_ANGEL":
+                log_details.append(f"{joueur.nom} recoit l'Egide !")
+                joueur.ajouter_objet(Egide())
+
             # vraiment mort        
             if joueur.pv_total <= 0:
                 joueur.mort(log_details)

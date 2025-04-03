@@ -286,7 +286,6 @@ class SavantFou(Perso):
     
         if joueur.nom == joueur_proprietaire.nom:
             jet_savant = joueur.rollDice(Jeu, log_details, 5)
-            log_details.append(f"{joueur.nom} lance le pouvoir du Savant Fou sur {carte.titre}, jet de {jet_savant}")
             if jet_savant >= 5:
                 self.gagnePV(1, joueur_proprietaire, log_details)
 

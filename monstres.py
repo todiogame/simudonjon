@@ -1,7 +1,7 @@
 import numpy as np
 
 class CarteMonstre:
-    def __init__(self, titre, puissance, types=None, description="", effet=None):
+    def __init__(self, titre, puissance, types=None, description="", effet=None, is_X=False):
         self.titre = titre
         self.puissance = puissance
         self.types = types if types else [titre]
@@ -9,6 +9,7 @@ class CarteMonstre:
         self.effet = effet
         self.executed = False
         self.dommages = 0
+        self.is_X = is_X
 
 class CarteEvent:
     def __init__(self, titre, description, effet=None):
@@ -50,22 +51,22 @@ class DonjonDeck:
             CarteMonstre("Chevaucheur de rat", 1, ["Gobelin", "Rat"], "Inflige <b>2 dommages</b> supplémentaires.", "ADD_2_DOM"),
             CarteMonstre("Bon gros rat", 0, ["Rat"], "Inflige <b>2 dommages</b> supplémentaires.", "ADD_2_DOM"),
             CarteMonstre("L'Arracheur", 3, ["Orc"], "Si l'Arracheur vous inflige des dommages, remettez la carte du dessus de votre pile de monstres vaincus <b>sur le Donjon</b>.", "ARRA"),
-            CarteMonstre("Dragon endormi", 0, ["Dragon"], "Lancez un dé pour determiner sa puissance.\nSur <b>3 ou moins</b>, ce monstre est <b>puissance 9</b>.\nSur <b>4 ou plus</b>, ce monstre est <b>puissance 0</b>.", "SLEEPING"),
+            CarteMonstre("Dragon endormi", 0, ["Dragon"], "Lancez un dé pour determiner sa puissance.\nSur <b>3 ou moins</b>, ce monstre est <b>puissance 9</b>.\nSur <b>4 ou plus</b>, ce monstre est <b>puissance 0</b>.", "SLEEPING", is_X=True),
             CarteMonstre("Limon glouton", 0, [], "Si vous affrontez ce monstre, <b>brisez</b> un de vos objets intact.", "LIMON"),
-            CarteMonstre("Mimique", 0, [], "La <b>puissance</b> de ce monstre est égale au nombre d'objets que vous possédez quand vous la rencontrez.", "MIMIC"),
-            CarteMonstre("Miroir Malefique", 0, [], "Copie le monstre au sommet de votre pile de monstres vaincus.", "MIROIR"),
-            CarteMonstre("Rongeur de medaille", 0, ["Rat"], "La <b>puissance</b> de ce monstre est égale au <b>nombre de Médailles</b> dans la partie. Si il vous inflige des dommages, perdez une Médaille.", "MEDAIL"),
+            CarteMonstre("Mimique", 0, [], "La <b>puissance</b> de ce monstre est égale au nombre d'objets que vous possédez quand vous la rencontrez.", "MIMIC", is_X=True),
+            CarteMonstre("Miroir Malefique", 0, [], "Copie le monstre au sommet de votre pile de monstres vaincus.", "MIROIR", is_X=True),
+            CarteMonstre("Rongeur de medaille", 0, ["Rat"], "La <b>puissance</b> de ce monstre est égale au <b>nombre de Médailles</b> dans la partie. Si il vous inflige des dommages, perdez une Médaille.", "MEDAIL", is_X=True),
             CarteMonstre("Rat Liche", 6, ["Rat","Liche"]),
             CarteMonstre("Golem d'or", 5, ["Golem"], "Vaut <b>2 Points de Victoire</b>\nau lieu d'un.", "GOLD"),
             CarteMonstre("Empaleur d'imprudent", 7, ["Squelette", "Démon"], "Si vous avez une <b>Médaille</b>, ce monstre est de <b>puissance 2</b>.", "NOOB"),
-            CarteMonstre("Rat charognard", 0, ["Rat"], "La <b>puissance</b> de ce monstre est égale au nombre de monstres dans votre pile de monstres vaincus.", "SCAVENGER"),
+            CarteMonstre("Rat charognard", 0, ["Rat"], "La <b>puissance</b> de ce monstre est égale au nombre de monstres dans votre pile de monstres vaincus.", "SCAVENGER", is_X=True),
             CarteMonstre("Seigneur Vampire", 4, ["Vampire"], "Si vous avez une <b>Médaille</b>,\ninflige <b>4 dommages</b> supplémentaires.",  "LORD"),
             CarteMonstre("Gobelin Fantôme", 1, ["Gobelin"], "<b>Défaussez</b> ce monstre après l'avoir vaincu.", "MAUDIT"),
-            # CarteMonstre("Ange Guardien", 8, [], "Vous pouvez <b>défausser</b> l'Ange Gardien plutôt que le combattre.\nSi vous le battez, vous obtenez <b>l'Égide </b>.", "GUARDIAN_ANGEL"),
-            # CarteMonstre("Changeforme", 8, [], "Attribuez à ce monstre un <b>type</b> de votre choix.\nIl perd ce type une fois vaincu.", "SHAPESHIFTER"),
-            CarteMonstre("Equipe de singes", 0, [], "La <b>puissance</b> de ce monstre est égale à <b>deux fois</b> le nombre de joueurs dans le Donjon.", "MONKEY_TEAM"),
-            # CarteMonstre("Kraken", 10, [], "Si c'est <b>la première fois</b> que le Kraken apparait, vous pouvez le remettre <b>sous le Donjon.</b>", "KRAKEN"),
-            CarteMonstre("Faucheuse", 0, [], "La <b>puissance</b> de ce monstre est égale à la <b>moitié de vos Points de Vie</b> quand vous la rencontrez,\narrondis à l'inférieur.", "REAPER"),
+            CarteMonstre("Ange Gardien", 8, [], "Vous pouvez <b>défausser</b> l'Ange Gardien plutôt que le combattre.\nSi vous le battez, vous obtenez <b>l'Égide </b>.", "GUARDIAN_ANGEL"),
+            CarteMonstre("Changeforme", 8, [], "Attribuez à ce monstre un <b>type</b> de votre choix.\nIl perd ce type une fois vaincu.", "SHAPESHIFTER"),
+            CarteMonstre("Equipe de singes", 0, [], "La <b>puissance</b> de ce monstre est égale à <b>deux fois</b> le nombre de joueurs dans le Donjon.", "MONKEY_TEAM", is_X=True),
+            CarteMonstre("Kraken", 10, [], "Si c'est <b>la première fois</b> que le Kraken apparait, vous pouvez le remettre <b>sous le Donjon.</b>", "KRAKEN"),
+            CarteMonstre("Faucheuse", 0, [], "La <b>puissance</b> de ce monstre est égale à la <b>moitié de vos Points de Vie</b> quand vous la rencontrez,\narrondis à l'inférieur.", "REAPER", is_X=True),
             CarteEvent("Descente angélique", "Gagnez 3pv.", "HEAL"),
             CarteEvent("Bricoleur", "Vous pouvez <b>réparer</b> un de vos objets <b>brisé</b>.", "REPAIR"),
             CarteEvent("Allié", "Si la prochaine carte est un monstre, vous pouvez <b>l'exécuter</b>.", "ALLY"),
