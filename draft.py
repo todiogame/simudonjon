@@ -4,6 +4,7 @@ import os
 import json
 import pandas as pd
 from tqdm import tqdm
+import sys
 
 # --- Imports locaux (vérifier les noms de fichiers) ---
 from objets import objets_disponibles # Liste globale des instances d'objets
@@ -397,13 +398,63 @@ def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_ST
 
 # --- Lancement ---
 if __name__ == "__main__":
-     script_dir = os.path.dirname(__file__)
-     # Change le répertoire courant pour celui du script si possible (pour json)
-     if script_dir:
-         try:
-             os.chdir(script_dir)
-             print(f"Répertoire de travail: {os.getcwd()}")
-         except Exception as e:
-              print(f"WARN: Impossible de changer de répertoire: {e}")
+    script_dir = os.path.dirname(__file__)
+    # Change le répertoire courant pour celui du script si possible (pour json)
+    if script_dir:
+        try:
+            os.chdir(script_dir)
+            print(f"Répertoire de travail: {os.getcwd()}")
+        except Exception as e:
+            print(f"WARN: Impossible de changer de répertoire: {e}")
 
-     simudraftgames()
+    # Vérifier les arguments de la ligne de commande
+    if len(sys.argv) > 1 and sys.argv[1] == '1':
+        # --- MODE : Lancement d'UN SEUL draft avec logs ---
+        print("\nMode : Lancement d'un draft unique avec logs (Argument '1' détecté)...")
+
+        # 1. Choisir le nombre de joueurs pour ce test (3 ou 4)
+        nb_joueurs_test = 3
+        noms_test = ["JoueurTest1", "JoueurTest2", "JoueurTest3", "JoueurTest4"][:nb_joueurs_test]
+
+        # 2. Vérifier qu'il y a assez de personnages disponibles
+        if len(persos_disponibles) < nb_joueurs_test:
+            print(f"ERREUR: Pas assez de personnages disponibles ({len(persos_disponibles)}) pour {nb_joueurs_test} joueurs.")
+        else:
+            # 3. Assigner des personnages aléatoirement
+            persos_test = random.sample(persos_disponibles, nb_joueurs_test)
+            print(f"Joueurs et Personnages pour ce draft:")
+            for nom, perso in zip(noms_test, persos_test):
+                print(f"- {nom}: {perso.nom}")
+            print("-" * 30)
+
+            # 4. Appeler draftGame avec log=True
+            # Optionnel: Précalculer les WR initiaux si besoin pour le choix IA
+            # calculItemWinrateRandobuild(iter=500) # Iter plus faible pour un seul run
+            resultat_draft_test = draftGame(noms_test, persos_test, log=True)
+
+            # 5. Afficher le résultat du draft (optionnel)
+            if resultat_draft_test:
+                objets_dans_le_draft, objets_pris_joueurs, objets_disponibles_retour, _, objets_joueurs_finaux = resultat_draft_test
+                print("\n--- Résultat du Draft ---")
+                for i, nom in enumerate(noms_test):
+                    print(f"{nom} ({persos_test[i].nom}) a drafté : {[obj.nom for obj in objets_joueurs_finaux[i]]}")
+                # Estimation des objets non choisis
+                objets_draft_noms = {o.nom for o in objets_dans_le_draft}
+                objets_pris_noms = {o.nom for o in objets_pris_joueurs}
+                objets_poubelle_noms = objets_draft_noms - objets_pris_noms
+                print(f"\nObjets non choisis (poubelle draft): {list(objets_poubelle_noms)}")
+            else:
+                print("\nLe draft n'a pas pu être complété (peut-être pas assez d'objets ?).")
+
+    elif len(sys.argv) > 1:
+         # Si un argument est donné mais ce n'est pas '1'
+         print(f"Argument non reconnu : '{sys.argv[1]}'")
+         print("Usage :")
+         print(f"  python {sys.argv[0]}    : Lance la simulation complète.")
+         print(f"  python {sys.argv[0]} 1 : Lance un seul draft avec logs.")
+
+    else:
+        # --- MODE : Simulation Complète (Comportement par défaut) ---
+        print("\nMode : Lancement de la simulation complète (aucun argument ou argument non reconnu)...")
+        # L'appel original qui lance toutes les simulations
+        simudraftgames()
