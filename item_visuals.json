@@ -223,7 +223,7 @@
         "color_code": 3,
         "description": "Réduisez les dommages de 2.\\n<b>Jet de fuite -3</b>"
     },
-    "Tronçonneuse enflammée": {
+    "Tronconneuse enflammée": {
         "color_code": 1,
         "description": "Perdez 3 PV pour <b>exécuter</b> un monstre."
     },
@@ -515,7 +515,7 @@
         "color_code": 4,
         "description": "<b>Volez 2 monstres</b> de sa pile au premier joueur qui fuit et au premier joueur qui meurt."
     },
-    "Parchemin de ponçage": {
+    "Parchemin de poncage": {
         "color_code": 1,
         "description": "<b>Exécutez</b> un monstre de puissance impaire, puis <b>défaussez</b> autant de cartes du Donjon que la puissance du monstre."
     },

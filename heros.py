@@ -12,7 +12,8 @@ class Perso:
         self.effet = effet
         self.priorite = priorites_objets.get(nom, 49.5)  # Utilise la priorité du JSON ou 0 par défaut
         self.compteur = 0
-
+        self.capacite_utilisee = False
+        
     def rules(self, joueur, carte, Jeu, log_details):
         # rule condition to use the item
         return True
@@ -167,14 +168,14 @@ class Ninja(Perso):
 
 class Princesse(Perso):
     def __init__(self):
-        super().__init__("Princesse", 2)
+        super().__init__("Princesse", 1)
 
     def debut_tour(self, joueur, Jeu, log_details):
         # Se déclenche seulement au tour 1 du joueur
-        if self.compteur == 0:
+        if not self.capacite_utilisee :
             log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité pour piocher un objet")
             self.piocheItem(joueur, Jeu, log_details)
-            self.compteur+=1 # Marquer comme utilisé
+            self.capacite_utilisee = True
 
 
 class MercenaireOrc(Perso):
@@ -185,13 +186,11 @@ class MercenaireOrc(Perso):
         
 class ChevalierDragon(Perso):
     def __init__(self):
-        super().__init__(nom="Chevalier Dragon", pv_bonus=2)
-        self.capacite_utilisee = False # Pour s'assurer que c'est une fois par partie
+        super().__init__(nom="Chevalier Dragon", pv_bonus=3)
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        # Vérifier si capacité dispo et conditions remplies
-        if not self.capacite_utilisee and "Dragon" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
-            self.execute(joueur, carte, log_details)
+        if "Dragon" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
+            self.executeEtDefausse(joueur, carte, Jeu, log_details)
 
 class PersoUseless2PV(Perso):
     def __init__(self):
@@ -221,7 +220,7 @@ class DocteurDePeste(Perso):
             
 class RoiSorcier(Perso):
     def __init__(self):
-        super().__init__("Roi Sorcier", 3)
+        super().__init__("Roi Sorcier", 2)
         
     def subit_dommages_effet(self,joueur_proprietaire, joueur, carte, Jeu, log_details):
         if carte.dommages >= 4 and joueur.nom != joueur_proprietaire.nom:
@@ -262,7 +261,7 @@ class InventeurGenial(Perso):
 class Flutiste(Perso):
     def __init__(self):
         # pv_bonus=3 for base HP
-        super().__init__(nom="Flutiste", pv_bonus=3, modificateur_de=0)
+        super().__init__(nom="Flutiste", pv_bonus=2, modificateur_de=0)
 
     def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if "Gobelin" in carte.types and joueur_proprietaire.dans_le_dj:
@@ -305,8 +304,6 @@ persos_disponibles=[
     Princesse(),
     MercenaireOrc(),
     ChevalierDragon(),
-    # PersoUseless2PV(),
-    # PersoUseless3PV(),
     Tricheur(),
     DocteurDePeste(),
     RoiSorcier(),
@@ -314,6 +311,8 @@ persos_disponibles=[
     Flutiste(),
     SavantFou(),
     Avatar(),
+    # PersoUseless2PV(),
+    # PersoUseless3PV(),
 ]
 
 __all__=[
@@ -321,11 +320,11 @@ __all__=[
     "Princesse",
     "MercenaireOrc",
     "ChevalierDragon",
-    # "PersoUseless2PV",
-    # "PersoUseless3PV",
     "Tricheur",
     "DocteurDePeste",
     "RoiSorcier",
     "InventeurGenial",
     "Flutiste",
+    # "PersoUseless2PV",
+    # "PersoUseless3PV",
 ]

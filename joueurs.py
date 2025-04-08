@@ -21,10 +21,10 @@ class Joueur:
         self.pile_monstres_vaincus = []
         self.score_final = 0
         self.jet_fuite = 0
-        self.rejoue = False #actuellement en train de repiocher
+        self.rejoue = False # doit rejouer, reset en debut de tour
+        self.doit_passer = False # a trigger un effet qui le force a passer
         self.monstres_ajoutes_ce_tour = 0
         self.tiebreaker = False
-
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)
@@ -63,7 +63,7 @@ class Joueur:
         if hasattr(self, 'perso_obj'):
             self.perso_obj.en_score(self, log_details)
 
-    def getScoreActuel(self):
+    def getScoreActuel(self, log_details):
         current_score = len(self.pile_monstres_vaincus)
         if any(getattr(monstre, 'effet', None) and "GOLD" in monstre.effet for monstre in self.pile_monstres_vaincus):
             current_score += 1
@@ -80,7 +80,7 @@ class Joueur:
 
         score_calcule_par_effets = self.score_final
         self.score_final = original_score_final
-
+        # log_details.append(f"[debug] Score final de {self.nom} : {score_calcule_par_effets}, original_score_final {original_score_final}")
         return score_calcule_par_effets
 
     def trier_objets_par_priorite(self):
@@ -143,23 +143,25 @@ class Joueur:
         if pv_faible_et_peu_options:
             # Vérifier s'il faut continuer à cause d'un fuyard
             force_a_continuer = False
-            max_monstres_fuyard = -1
+            monstres_fuyard = -1
+            a_battre = -1
             fuyard_existe = False
             for autre_joueur in Jeu.joueurs:
-                autre_joueur.getScoreActuel()
                 if autre_joueur is not self and autre_joueur.fuite_reussie:
+                    monstres_fuyard = autre_joueur.getScoreActuel(log_details)
                     fuyard_existe = True
-                    max_monstres_fuyard = max(max_monstres_fuyard, autre_joueur.score_final)
+                    a_battre = max(monstres_fuyard, a_battre)
 
             if fuyard_existe:
-                mes_monstres = self.getScoreActuel()
-                if max_monstres_fuyard > mes_monstres:
+                mes_monstres = self.getScoreActuel(log_details)
+                if a_battre > mes_monstres:
                     force_a_continuer = True
-                    # log_details.append(f"--> {self.nom} Condition Fuite 3 (Blocage Fuyard): VRAI (Un fuyard a {max_monstres_fuyard} MV vs soi {mes_monstres} MV)")
-
+                    # log_details.append(f"--> {self.nom} Condition Fuite 3 (Blocage Fuyard): {force_a_continuer} (Un fuyard a {a_battre} MV vs soi {mes_monstres} MV)")
+                log_details.append(f"--> {self.nom} DECIDE DE TENTER LA FUITE (Un fuyard a {a_battre} MV, il a {mes_monstres} MV)")
+            else: log_details.append(f"--> {self.nom} DECIDE DE TENTER LA FUITE (Aucun score n'a encore ete posé)")
             # Décision basée sur PV faibles ET non-blocage
             if not force_a_continuer:
-                log_details.append(f"==> {self.nom} DECIDE DE TENTER LA FUITE (PV faible/opt et pas de blocage fuyard).")
+                # log_details.append(f"==> {self.nom} DECIDE DE TENTER LA FUITE (PV faible/opt et pas de blocage fuyard).")
                 return True
             else:
                 # log_details.append(f"==> {self.nom} NE TENTE PAS LA FUITE (PV faible/opt mais bloqué par fuyard).")
@@ -169,4 +171,28 @@ class Joueur:
             # log_details.append(f"==> {self.nom} NE TENTE PAS LA FUITE (PV ok et pas dernier vivant).")
             return False
         
+    def _gerer_pv_bonus(self, objet, log_details):
+        """Gère la perte des PV bonus lors de la destruction d'un objet"""
+        if objet.pv_bonus:
+            self.pv_total -= objet.pv_bonus
+            log_details.append(f"L'objet casse {objet.nom} donnait {objet.pv_bonus}PV ca fait ca de moins. PV restant {self.pv_total}PV")
+
+    def decideBriseObjet(self, jeu, log_details):
+        """Décide quel objet briser en évitant de se tuer si possible."""
+        # On ne garde que les objets intacts
+        objets_intacts = [objet for objet in reversed(self.objets) if objet.intact]
+        if not objets_intacts:
+            return None
+
+        # On cherche un objet qui ne nous tue pas
+        for objet in objets_intacts:
+            if objet.pv_bonus < self.pv_total:
+                objet.destroy(self, jeu, log_details)
+                self._gerer_pv_bonus(objet, log_details)
+                return objet
+
+        # Si aucun ne convient, on prend le premier (qui est le dernier de la liste originale)
+        objets_intacts[0].destroy(self, jeu, log_details)
+        self._gerer_pv_bonus(objets_intacts[0], log_details)
+        return objets_intacts[0]
         

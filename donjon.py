@@ -16,7 +16,7 @@ import sys
 from heros import persos_disponibles
 
 # Nombre de simulations souhaitées
-total_simulations = 200000
+total_simulations = 300000
 seuil_pv_essai_fuite=5
 
 def display_simu(r=0):

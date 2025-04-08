@@ -47,7 +47,7 @@ class DonjonDeck:
             CarteMonstre("Démon", 7, ["Démon"]),
             CarteMonstre("Dragon", 9, ["Dragon"]),
             CarteMonstre("Dragon", 9, ["Dragon"]),
-            CarteMonstre("Fée", 0, []),
+            CarteMonstre("Fée", 0, [], "Après avoir vaincu la Fée,\n<b>passez votre tour.</b>", "FAIRY"),
             CarteMonstre("Chevaucheur de rat", 1, ["Gobelin", "Rat"], "Inflige <b>2 dommages</b> supplémentaires.", "ADD_2_DOM"),
             CarteMonstre("Bon gros rat", 0, ["Rat"], "Inflige <b>2 dommages</b> supplémentaires.", "ADD_2_DOM"),
             CarteMonstre("L'Arracheur", 3, ["Orc"], "Si l'Arracheur vous inflige des dommages, remettez la carte du dessus de votre pile de monstres vaincus <b>sur le Donjon</b>.", "ARRA"),

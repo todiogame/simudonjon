@@ -17,11 +17,11 @@ from heros import persos_disponibles # Liste globale des instances Perso
 # Configuration
 # ==============================================
 NB_DRAFT_SIMULATIONS = 10000            # Nombre total de drafts à simuler
-NB_GAMES_PER_DRAFT_FOR_STATS = 10000   # Nb parties jouées pour évaluer chaque draft
-ITERATIONS_PER_CHOICE_EVALUATION = 100 # Nb simulations dans calculWinrate (précision IA)
+NB_GAMES_PER_DRAFT_FOR_STATS = 1000   # Nb parties jouées pour évaluer chaque draft
+ITERATIONS_PER_CHOICE_EVALUATION = 50 # Nb simulations dans calculWinrate (précision IA)
 ITERATIONS_INITIAL_RANDOM_WINRATE = 1000# Nb simulations pour pré-calcul WR objet
 SAVE_INTERVAL = 1                     # Sauvegarder les stats tous les X drafts
-STATS_FILENAME = "item_stats_progressive.json" # Fichier de sauvegarde
+STATS_FILENAME = f"item_stats_progressive_{random.randint(1000000, 9999999)}.json" # Fichier de sauvegarde avec ID aléatoire
 # ==============================================
 
 # --- Fonctions Helper pour Stats ---
@@ -45,10 +45,13 @@ def calculItemWinrateRandobuild(iter=ITERATIONS_INITIAL_RANDOM_WINRATE):
     """Calcule un winrate initial pour chaque objet basé sur des builds aléatoires."""
     resultats_builds = []
     objets_pool_global_copie = list(objets_disponibles)
+    heros_pool_global_copie = list(persos_disponibles)
     print(f"Calcul WR initial objets sur {iter} simulations...")
 
     for _ in tqdm(range(iter), desc="Winrate Objets Initiaux"):
         objets_disponibles_simu = list(objets_pool_global_copie); [o.repare() for o in objets_disponibles_simu]
+        persos_disponibles_simu = list(heros_pool_global_copie);
+        for p in persos_disponibles_simu: p.capacite_utilisee = False
         joueurs = []
         nb_joueurs = random.choice([3, 4])
         noms_joueurs = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
@@ -141,6 +144,7 @@ def calculWinrate(combinaison, objets_autres_joueurs, perso_joueur, persos_autre
 
             objets_finaux_joueur = (objets_base + objets_complement)[:6]
             joueur_cree = Joueur(nom, perso_instance, objets_finaux_joueur)
+            joueur_cree.perso_obj.capacite_utilisee = False
             joueurs.append(joueur_cree)
 
         objets_restants = objets_disponibles_pour_complement
@@ -195,6 +199,8 @@ def draftGame(noms_joueurs, personnages_assigner, log=False):
     """Simule le processus de draft pour un set de joueurs/personnages."""
     objets_disponibles_simu = list(objets_disponibles)
     for o in objets_disponibles_simu: o.repare()
+    persos_disponibles_simu = list(persos_disponibles)
+    for p in persos_disponibles_simu: p.capacite_utilisee = False
     nb_joueurs = len(noms_joueurs)
 
     mains_joueurs = []
@@ -258,6 +264,7 @@ def jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs_listes, personn
         joueurs.append(joueur_cree)
 
     objets_disponibles_simu = list(objets_disponibles); [o.repare() for o in objets_disponibles_simu]
+    for j in joueurs: j.perso_obj.capacite_utilisee = False
     vainqueur, joueurs_finaux = ordonnanceur(joueurs, DonjonDeck(), 6, objets_disponibles_simu, log)
     return vainqueur, joueurs_finaux
 
@@ -294,7 +301,8 @@ def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_ST
             noms = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
             if len(persos_disponibles) < nb_joueurs: continue
             persos = random.sample(persos_disponibles, nb_joueurs)
-
+            for p in persos: p.capacite_utilisee = False
+            
             resultat_draft = draftGame(noms, persos, False)
             if resultat_draft is None: continue
             objets_draft, objets_pris, objets_dispo_local, _, builds = resultat_draft

@@ -1,5 +1,6 @@
 import random
 import numpy as np
+
 from objets import *
 from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
@@ -74,6 +75,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 objet.debut_tour(joueur, Jeu, log_details)
         for j in joueurs:
             j.rejoue = False
+            j.doit_passer = False
             j.reset_monstres_ajoutes()  # Réinitialise le compteur de monstres ajoutés pour chaque joueur
         
         # Le joueur pioche une carte
@@ -155,14 +157,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 joueur.pv_total += jet_wheel
                 log_details.append(f"{joueur.nom} a gagné {jet_wheel} PV grâce à {carte.titre}. PV: {joueur.pv_total}")
                 if jet_wheel == 1:
-                    objets_intacts = [objet for objet in joueur.objets if objet.intact]
-                    if objets_intacts:
-                        objet_casse_wheel = random.choice(objets_intacts)
+                    objet_casse_wheel = joueur.decideBriseObjet(Jeu, log_details)
+                    if objet_casse_wheel:
                         log_details.append(f"{carte.titre} brise {objet_casse_wheel.nom}.")
-                        objet_casse_wheel.destroy(joueur, Jeu, log_details)
-                        if objet_casse_wheel.pv_bonus:
-                            joueur.pv_total -= objet_casse_wheel.pv_bonus
-                            log_details.append(f"L'objet casse {objet_casse_wheel.nom} donnait {objet_casse_wheel.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
             
             if effet_carte == "SOULSTORM":
                 for autre_joueur in joueurs:
@@ -272,7 +269,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 if effet_carte == "MEDAIL":
                     nb_medailles = 0
                     for j in Jeu.joueurs:
-                        nb_medailles += 1
+                        nb_medailles += j.medailles
                     carte.puissance = nb_medailles
                     log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (égale au nombre de médailles).")
 
@@ -375,14 +372,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 else:
                     if (joueur.vivant): joueur.ajouter_monstre_vaincu(carte)
                 if effet_carte == "LIMON":
-                    objets_intacts = [objet for objet in joueur.objets if objet.intact]
-                    if objets_intacts:
-                        objet_avale = random.choice(objets_intacts)
+                    objet_avale = joueur.decideBriseObjet(Jeu, log_details)
+                    if objet_avale:
                         log_details.append(f"Le {carte.titre} avale {objet_avale.nom}.")
-                        objet_avale.destroy(joueur, Jeu, log_details)
-                        if objet_avale.pv_bonus:
-                            joueur.pv_total -= objet_avale.pv_bonus
-                            log_details.append(f"L'objet avalé {objet_avale.nom} donnait {objet_avale.pv_bonus}PV ca fait ca de moins. PV restant {joueur.pv_total}PV")
             
                 log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
                 
@@ -397,9 +389,13 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     donjon.rajoute_en_haut_de_la_pile(monstre_remis)
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
 
-                if effet_carte == "MEDAIL" and carte.dommages > 0 and joueur.medailles >= 0:
+                if effet_carte == "MEDAIL" and carte.dommages > 0 and joueur.medailles > 0:
                     joueur.medailles -= 1
                     log_details.append(f"Perdu une medaille en affrontant {carte.titre}, médailles restantes: {joueur.medailles}")
+
+                if effet_carte == "FAIRY":
+                    joueur.doit_passer = True
+                    log_details.append(f"{joueur.nom} doit passer son tour apres avoir vaincu {carte.titre}")
 
             if effet_carte == "SHAPESHIFTER":
                 # il perd son type ici
@@ -432,13 +428,20 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 continue
             
             #use items en_vaincu
-            joueur.perso_obj.en_vaincu(joueur, joueur, carte, Jeu, log_details) #opti, que le savant fou
-            for joueur_proprietaire in Jeu.joueurs:
-                for objet in joueur_proprietaire.objets:
-                    objet.en_vaincu(joueur_proprietaire, joueur, carte, Jeu, log_details)
+            if not carte_ignoree:
+                joueur.perso_obj.en_vaincu(joueur, joueur, carte, Jeu, log_details) #opti, que le savant fou
+                for joueur_proprietaire in Jeu.joueurs:
+                    for objet in joueur_proprietaire.objets:
+                        objet.en_vaincu(joueur_proprietaire, joueur, carte, Jeu, log_details)
+            
+            if joueur.rejoue or joueur.doit_passer:
+                log_details.append(f"{joueur.nom} {'doit' if joueur.rejoue else 'ne doit pas'} rejouer et {'doit' if joueur.doit_passer else 'ne doit pas'} passer")
 
-            if joueur.dans_le_dj and not Jeu.execute_next_monster:
-                #sequence objets fin du tour
+            # si le joueur est toujours la, et que soit il doit passer, soit il ne doit pas rejouer et il ne peut pas executer le prochain monstre
+            #TODO: forcer la passe avec joueur.doit_passer, actuellement tlm passe sans se poser de question
+            #probleme avec le scaphandre qui spam passe
+            if joueur.dans_le_dj and (not joueur.rejoue and not Jeu.execute_next_monster):
+                # il passe : sequence objets fin du tour
                 for objet in joueur.objets:
                     objet.fin_tour(joueur, Jeu, log_details)
                 # Passer son tour, au joueur suivant
@@ -539,11 +542,17 @@ def loguer_x_parties(x=1):
     # Liste des objets spécifiques pour le joueur de test
     # IMPORTANT: Assure-toi que ces classes existent bien dans objets.py
     noms_objets_test = [
-        "Couronne d'épines",
-        # "Codex Diabolus",
+        # "Couronne d'épines",
+        # "Bouclier Magique",
         # "Potion feerique",
-        # "Sac de Constantinople",
-        # "Trou Noir Portatif"
+        # "Cocktail Molotov",
+        # "Trou Noir Portatif",
+        # "Calumet de la Paix",
+        # "Zulfikar",
+        # "Tronconneuse Enflammee",
+        "Scaphandre",
+        # "Anneau de glace",
+        "Bonne vieille guinze",
     ]
 
     for i in range(x):

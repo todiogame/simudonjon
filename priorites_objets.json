@@ -1,5 +1,6 @@
 {
-    "CasqueBerserk": -1,
+    "CasqueBerserk": -2,
+    "Scaphandre": -1,
     "Fer a Cheval": 0.0,
     "Couronne d'\u00e9pines": 0.0,
     "Platree de Berniques": 26.0451190493315,
@@ -54,6 +55,7 @@
     "Viande Crue": 45.91956424763141,
     "Item 5PV": 46.17323284570995,
     "Maillet D'Argile": 46.52497604435788,
+    "Zulfikar": 46.52497604435788,
     "Boulet de Canon": 46.67397380214893,
     "Singe dor\u00e9": 46.9894284022357,
     "Bo\u00eete de Pandore": 47.048903884213104,
@@ -105,7 +107,6 @@
     "Faux De La Mort": 55.52954306544109,
     "Coiffe de sorcier": 56.01130192237333,
     "Potion f\u00e9\u00e9rique": 56.155859879348824,
-    "Scaphandre": 56.95589665478805,
     "Talisman Incertain": 57.01217466755578,
     "Pistolet Pirate": 57.056756619586636,
     "Bo\u00eete \u00e0 butin": 57.46151144374277,
