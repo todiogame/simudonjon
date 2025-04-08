@@ -73,19 +73,32 @@ L'argument passé en ligne de commande détermine le mode d'exécution :
         python draft.py
         ```
 
+3.  **Lancer plusieurs simulations en parallèle :**
+    Pour accélérer la collecte de données, vous pouvez lancer plusieurs simulations simultanément dans différents terminaux, puis agréger les résultats :
+
+    * Dans plusieurs terminaux :
+        ```bash
+        python draft.py
+        ```
+    
+    * Utilisez `aggreg.py` pour combiner les résultats :
+    ```bash
+    python aggreg.py
+    ```
+    
+    Cela produira un rapport consolidé avec les statistiques agrégées de toutes les simulations.
 
 ## 📁 Structure du Projet
 
 * `donjon.py`: Point d'entrée pour les simulations de donjon standard. Gère les arguments `sys.argv` pour le nombre de parties ou le mode winrate.
 * `draft.py`: Point d'entrée pour les simulations incluant une phase de draft. Gère les arguments `sys.argv`.
 * `simu.py`: Point d'entrée alternatif offrant plus d'options via `argparse`. Peut-être utilisé pour des tests spécifiques ou par les autres scripts.
+* `aggreg.py`: Module d'agrégation des statistiques et résultats de simulation. Permet de consolider et analyser les données sur plusieurs parties.
 * `wr.py`: Contient la logique spécifique au calcul et à l'affichage formaté du winrate.
 * `heros.py`, `monstres.py`, `objets.py`, `joueurs.py`: Modules définissant les classes principales du jeu (Héros, Monstre, Objet, Joueur).
 * `prio.py`: Gère la logique de priorisation des objets.
 * `minijeu.py`: Semble contenir la logique pour des mini-jeux potentiels.
 * `*.json`: Fichiers contenant les données du jeu (statistiques des objets, priorités, visuels).
-    * `item_calculated_stats.json`
-    * `item_stats_progressive.json`
     * `item_visuals.json`
     * `priorites_objets.json`
 
@@ -94,5 +107,6 @@ L'argument passé en ligne de commande détermine le mode d'exécution :
 Les dépendances nécessaires sont listées dans `requirements.txt`:
 
 * `numpy`: Utilisé pour des calculs numériques.
-* `colorama`: Permet l'affichage en couleur dans le terminal.
-* `requests`: Peut être utilisé pour des fonctionnalités futures ou annexes (non essentiel pour la simulation principale).
+* `pandas`: Utilisé pour l'analyse et la manipulation des données.
+* `tqdm`: Utilisé pour afficher des barres de progression.
+
