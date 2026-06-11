@@ -121,8 +121,10 @@ class Objet:
     def destroy(self, joueur, Jeu, log_details):
         if self.intact:
             self.intact = False
+            sans_hook = SANS_HOOK_OBJET['en_activated']
             for joueur_proprietaire in Jeu.joueurs:
-                for objet in list(joueur_proprietaire.objets):  # copie: certains effets retirent des objets (Trou Noir Portatif)
+                # comprehension = copie filtree: certains effets retirent des objets (Trou Noir Portatif)
+                for objet in [o for o in joueur_proprietaire.objets if type(o) not in sans_hook]:
                     objet.en_activated(joueur_proprietaire, joueur, self, Jeu, log_details)
     
     def execute(self, joueur, carte, log_details):
@@ -163,7 +165,8 @@ class Objet:
 
     def survit(self, value, joueur, carte, log_details):
         joueur.pv_total = value
-        joueur.ajouter_monstre_vaincu(carte)
+        if carte not in joueur.pile_monstres_vaincus:  # deja vaincue (ex: executee plus tot dans le meme combat)
+            joueur.ajouter_monstre_vaincu(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour survivre avec {value} PV et vaincre {carte.titre}")
 
     def piocheItem(self, joueur, Jeu, log_details):
@@ -2296,8 +2299,49 @@ class BonneVieilleGuinze(Objet):
         if self.intact:
             self.perdPV(1, joueur, log_details)
 
+# --- Table de dispatch des hooks (optimisation) ------------------------------
+# Pour chaque hook, l'ensemble des CLASSES qui ne l'implementent PAS (ni le
+# wrapper en_X ni l'effet X_effet) : on saute l'appel no-op dans les boucles
+# chaudes de simu.py. Le filtrage se fait a l'iteration sur joueur.objets (en
+# live, jamais de liste figee), donc les objets pioches/voles/ajoutes en cours
+# de partie sont automatiquement pris en compte. Une classe inconnue de la
+# table (definie ailleurs/plus tard) n'est dans aucun ensemble "SANS_" et sera
+# donc toujours appelee : le defaut est sur.
+_HOOKS_OBJET = {
+    'en_rencontre': ('en_rencontre', 'rencontre_effet'),
+    'en_rencontre_event': ('en_rencontre_event', 'rencontre_event_effet'),
+    'en_vaincu': ('en_vaincu', 'vaincu_effet'),
+    'en_subit_dommages': ('en_subit_dommages', 'subit_dommages_effet'),
+    'en_activated': ('en_activated', 'activated_effet'),
+    'en_mort': ('en_mort', 'mort_effet'),
+    'en_fuite_definitive': ('en_fuite_definitive', 'fuite_definitive_effet'),
+    'en_survie': ('en_survie', 'survie_effet'),
+    'en_combat': ('combat_effet',),  # en_combat de base n'appelle que combat_effet
+    'en_roll': ('en_roll',),
+    'en_fuite': ('en_fuite',),
+    'debut_tour': ('debut_tour',),
+    'fin_tour': ('fin_tour',),
+}
+
+def _toutes_sous_classes(base):
+    classes = []
+    for cls in base.__subclasses__():
+        classes.append(cls)
+        classes.extend(_toutes_sous_classes(cls))
+    return classes
+
+def _table_sans_hook(base, hooks):
+    classes = _toutes_sous_classes(base)
+    return {
+        hook: frozenset(cls for cls in classes
+                        if all(getattr(cls, m) is getattr(base, m) for m in methodes))
+        for hook, methodes in hooks.items()
+    }
+
+SANS_HOOK_OBJET = _table_sans_hook(Objet, _HOOKS_OBJET)
+
 # Liste des objets
-objets_disponibles = [ 
+objets_disponibles = [
     MainDeMidas(), 
     MainDeMidasB(),
     HacheDeGlace(), 

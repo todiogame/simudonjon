@@ -1,4 +1,5 @@
 from objets import *
+from objets import SANS_HOOK_OBJET
 import random
 
 class Joueur:
@@ -23,6 +24,7 @@ class Joueur:
         self.jet_fuite = 0
         self.rejoue = False # doit rejouer, reset en debut de tour
         self.doit_passer = False # a trigger un effet qui le force a passer
+        self.passe_son_tour = False # saute completement son tour sans piocher (Lapin Blanc)
         self.monstres_ajoutes_ce_tour = 0
         self.tiebreaker = False
 
@@ -93,7 +95,10 @@ class Joueur:
         if hasattr(self, 'perso_obj'):
             jet = self.perso_obj.en_roll(self, jet, jet_voulu, reversed, rerolled, Jeu, log_details)
         
+        sans_roll = SANS_HOOK_OBJET['en_roll']
         for objet in self.objets:
+            if type(objet) in sans_roll:
+                continue
             nouveau_jet = objet.en_roll(self, jet, jet_voulu, reversed, rerolled, Jeu, log_details)
             if nouveau_jet and nouveau_jet != jet:
                 # log_details.append(f"{self.nom} jet de {jet} modifié en {nouveau_jet} ")

@@ -13,29 +13,34 @@ import itertools
 import json
 import shutil
 import sys
+import os
+import multiprocessing
 from heros import persos_disponibles
 
 # Nombre de simulations souhaitées
-total_simulations = 300000
+total_simulations = 3000000
 seuil_pv_essai_fuite=5
 
-def display_simu(r=0):
-        
-    # Lire le fichier JSON une fois au début
+def _simuler_batch(args):
+    """Worker (multiprocessing) : simule nb_sims parties et retourne des compteurs agrégés.
+
+    Chaque process a ses propres instances d'objets/persos (re-import du module),
+    donc aucun etat partage. Les compteurs sont fusionnes par le parent."""
+    nb_sims, seed = args
+    random.seed(seed)
+    np.random.seed(seed & 0xFFFFFFFF)
+
     with open('priorites_objets.json', 'r') as json_file:
         priorites_objets = json.load(json_file)
-        
-    # Initialisation des résultats
-    resultats_builds = []
-    resultats_personnages = []
-    highscore_max = 0
-    dj_ponces3j=0
-    dj_ponces4j=0
-    # Mesurer le temps de simulation
-    start_time = time.time()
 
-    # Simuler les builds aléatoires et stocker les résultats
-    for _ in tqdm(range(total_simulations), desc="Simulation des builds"):
+    stats_objets = {}      # nom -> [victoires, total]
+    stats_persos = {}      # nom -> [victoires, total]
+    duos_scores = {}       # (objet_a, objet_b) -> [victoires, total]
+    duos_perso_item = {}   # (perso, objet) -> [victoires, total]
+    ponces = {3: 0, 4: 0}
+    highscore = 0
+
+    for _ in range(nb_sims):
         # Créer une copie de la liste des objets disponibles pour cette simulation
         objets_disponibles_simu = list(objets_disponibles)
         # Reparer tous les objets et attribuer une priorité aléatoire
@@ -43,125 +48,125 @@ def display_simu(r=0):
             o.repare()
             o.priorite = min(100, max(0, priorites_objets.get(o.nom, 49.5) + random.uniform(-20, 20)))
 
-        persos_disponibles_simu = list(persos_disponibles)
-        for p in persos_disponibles_simu:
-            p.compteur = 0
-            p.capacite_utilisee = False  # reset des capacites une-fois-par-partie (Princesse, Inventeur, Avatar...)
-
-        # Initialisation des joueurs avec des perso aléatoires 
+        # Initialisation des joueurs avec des perso aléatoires
+        # (l'etat une-fois-par-partie des persos est reset par debut_partie dans l'ordonnanceur)
         joueurs = []
-        nb_joueurs = random.choice([3, 4]) # Ou 4 pour loguer_x_parties
-        player_base_names = ["Sagarex", "Francis", "Mastho", "Mr.Adam"]
-        player_names = player_base_names[:nb_joueurs]
-
-        # Assigner une instance unique et aléatoire de Perso
-        personnages_assigner = random.sample(persos_disponibles, nb_joueurs) 
+        nb_joueurs = random.choice([3, 4])
+        player_names = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
+        personnages_assigner = random.sample(persos_disponibles, nb_joueurs)
 
         for i, nom_base in enumerate(player_names):
             objets_joueur = random.sample(objets_disponibles_simu, 6)
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
-
-            # Récupérer l'instance Perso assignée
-            perso_instance = personnages_assigner[i]
-
-            # Créer le Joueur en passant l'instance Perso
-            joueur_cree = Joueur(nom_base, perso_instance, objets_joueur) # Le constructeur Joueur prend l'instance
-            joueurs.append(joueur_cree)
-
-        # Création de la copie des joueurs et des cartes
-        deck = DonjonDeck()
+            joueurs.append(Joueur(nom_base, personnages_assigner[i], objets_joueur))
 
         # Exécution de l'ordonnanceur sans afficher les logs
-        vainqueur, joueurs_finaux = ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_simu, False)
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), seuil_pv_essai_fuite, objets_disponibles_simu, False)
 
-        # Mise à jour du highscore max et du meilleur vainqueur
-        if vainqueur and vainqueur.score_final > highscore_max:
-            highscore_max = vainqueur.score_final
-        
-        for joueur in joueurs: # Utiliser la liste de cette partie
-            perso_nom = getattr(joueur, 'personnage_nom', 'Inconnu')
-            a_gagne = 1 if joueur == vainqueur else 0
-            resultats_personnages.append({
-                'Personnage': perso_nom,
-                'Victoire': a_gagne
-            })
-        
-        # Mise à jour des statistiques
+        if vainqueur and vainqueur.score_final > highscore:
+            highscore = vainqueur.score_final
+
         for joueur in joueurs:
-            for objet in joueur.objets_initiaux:
-                resultats_builds.append({
-                    'Objet': objet.nom,
-                    'Priorite': objet.priorite,
-                    'Build': ', '.join(o.nom for o in joueur.objets_initiaux),
-                    'Victoire': 1 if joueur == vainqueur else 0,
-                }),
-        if any(joueur.dans_le_dj for joueur in joueurs): 
-            if nb_joueurs == 3: dj_ponces3j+=1
-            if nb_joueurs == 4: dj_ponces4j+=1
-            
-            
+            victoire = 1 if joueur is vainqueur else 0
+            perso_nom = joueur.personnage_nom
+            s = stats_persos.setdefault(perso_nom, [0, 0]); s[0] += victoire; s[1] += 1
+            noms_objets = sorted(o.nom for o in joueur.objets_initiaux)
+            for nom in noms_objets:
+                s = stats_objets.setdefault(nom, [0, 0]); s[0] += victoire; s[1] += 1
+                s = duos_perso_item.setdefault((perso_nom, nom), [0, 0]); s[0] += victoire; s[1] += 1
+            for duo in itertools.combinations(noms_objets, 2):
+                s = duos_scores.setdefault(duo, [0, 0]); s[0] += victoire; s[1] += 1
+
+        if any(joueur.dans_le_dj for joueur in joueurs):
+            ponces[nb_joueurs] += 1
+
+    return stats_objets, stats_persos, duos_scores, duos_perso_item, ponces, highscore
+
+
+def _fusionner(dest, src):
+    """Additionne les compteurs [victoires, total] d'un batch dans le total."""
+    for cle, (v, t) in src.items():
+        d = dest.setdefault(cle, [0, 0])
+        d[0] += v
+        d[1] += t
+
+
+def display_simu(r=0, nb_process=None):
+    if nb_process is None:
+        nb_process = max(1, (os.cpu_count() or 2) - 1)
+
+    stats_objets = {}
+    stats_persos = {}
+    duos_scores = {}
+    duos_perso_item = {}
+    dj_ponces3j = 0
+    dj_ponces4j = 0
+    highscore_max = 0
+
+    start_time = time.time()
+
+    # decoupage en batches (plusieurs par process pour une progression reguliere)
+    nb_batches = nb_process * 8 if nb_process > 1 else 1
+    base, reste = divmod(total_simulations, nb_batches)
+    travaux = [(base + (1 if i < reste else 0), random.randrange(2**31))
+               for i in range(nb_batches)]
+    travaux = [t for t in travaux if t[0] > 0]
+
+    def consommer(resultats_batches):
+        nonlocal dj_ponces3j, dj_ponces4j, highscore_max
+        for so, sp, ds, dpi, ponces, hs in resultats_batches:
+            _fusionner(stats_objets, so)
+            _fusionner(stats_persos, sp)
+            _fusionner(duos_scores, ds)
+            _fusionner(duos_perso_item, dpi)
+            dj_ponces3j += ponces[3]
+            dj_ponces4j += ponces[4]
+            highscore_max = max(highscore_max, hs)
+
+    if nb_process > 1:
+        with multiprocessing.Pool(nb_process) as pool:
+            consommer(tqdm(pool.imap_unordered(_simuler_batch, travaux),
+                           total=len(travaux), desc=f"Simulation des builds ({nb_process} process)"))
+    else:
+        consommer(_simuler_batch(t) for t in tqdm(travaux, desc="Simulation des builds"))
 
     # Mesurer le temps de simulation
     end_time = time.time()
     total_time = end_time - start_time
 
-    # Convertir les résultats en DataFrame
-    df_resultats = pd.DataFrame(resultats_builds)
+    # Statistiques par objet (depuis les compteurs fusionnes)
+    df_stats_objets = pd.DataFrame(
+        [{'Objet': nom, 'Victoires': v, 'Total': t, 'Winrate': (v / t) * 100}
+         for nom, (v, t) in stats_objets.items()]
+    ).sort_values(by='Winrate', ascending=False)
     pd.set_option('display.max_rows', 200)
 
-    # Calculer le nombre total de victoires et de défaites pour chaque objet
-    df_stats_objets = df_resultats.groupby('Objet')['Victoire'].agg(['sum', 'count']).reset_index()
-    df_stats_objets.columns = ['Objet', 'Victoires', 'Total']
-
-    # Calculer le winrate pour chaque objet
-    df_stats_objets['Winrate'] = (df_stats_objets['Victoires'] / df_stats_objets['Total']) * 100
-    df_stats_objets = df_stats_objets.sort_values(by='Winrate', ascending=False)
- 
     # Afficher les résultats
     print("\nStatistiques par objet:")
     print(df_stats_objets)
     print(f"\nTemps total des simulations : {total_time:.2f} secondes")
     print(f"Pourcentage de donjons ponces a 3j : {dj_ponces3j / total_simulations* 100:.2f}%")
     print(f"Pourcentage de donjons ponces a 4j : {dj_ponces4j / total_simulations* 100:.2f}%")
-    
-        # --- AJOUT : Traitement Résultats Personnages ---
-    if resultats_personnages:
-        df_resultats_persos = pd.DataFrame(resultats_personnages)
-        # Compter combien de fois chaque perso a joué et gagné
-        df_stats_persos = df_resultats_persos.groupby('Personnage')['Victoire'].agg(
-            Victoires='sum',
-            Total_Parties='count' # 'count' compte toutes les lignes pour ce perso
-        ).reset_index()
 
-        # Calculer Winrate
-        df_stats_persos['Winrate (%)'] = (df_stats_persos['Victoires'] * 100 / df_stats_persos['Total_Parties']).round(2)
-        # Trier par Winrate
-        df_stats_persos = df_stats_persos.sort_values(by='Winrate (%)', ascending=False)
+    # --- Statistiques par Personnage ---
+    if stats_persos:
+        df_stats_persos = pd.DataFrame(
+            [{'Personnage': nom, 'Victoires': v, 'Total_Parties': t, 'Winrate (%)': round(v * 100 / t, 2)}
+             for nom, (v, t) in stats_persos.items()]
+        ).sort_values(by='Winrate (%)', ascending=False)
 
         print("\nStatistiques par Personnage:")
         print(df_stats_persos.to_string(index=False)) # Affichage sans index
     else:
         print("\nPas de données collectées pour les statistiques par personnage.")
-    # --- FIN AJOUT ---
-    # Calculer les meilleurs et les pires duos d'objets
-    duos_scores = {}
-
-    for index, row in df_resultats.iterrows():
-        build_objets = row['Build'].split(', ')
-        for duo in itertools.combinations(sorted(build_objets), 2):
-            if duo not in duos_scores:
-                duos_scores[duo] = {'victoires': 0, 'total': 0}
-            duos_scores[duo]['victoires'] += row['Victoire']
-            duos_scores[duo]['total'] += 1
-
+    # Calculer les meilleurs et les pires duos d'objets (compteurs remplis pendant la simulation)
     duos_stats = []
-    for duo, scores in duos_scores.items():
-        winrate_duo = (scores['victoires'] / scores['total']) * 100
+    for duo, (victoires, total) in duos_scores.items():
         duos_stats.append({
             'Duo': ' & '.join(duo),
-            'Winrate': winrate_duo,
-            'Total': scores['total']
+            'Winrate': (victoires / total) * 100,
+            'Total': total
         })
 
     df_duos_scores = pd.DataFrame(duos_stats)
@@ -189,8 +194,40 @@ def display_simu(r=0):
             break
     flop_10_duos = pd.DataFrame(unique_duos)
 
+    print("\nMeilleurs duos d'objets:")
     print(top_10_duos)
+    print("\nPires duos d'objets:")
     print(flop_10_duos)
+
+    # Calculer les meilleurs et les pires duos Personnage & Objet (compteurs fusionnes)
+    df_duos_perso_item = pd.DataFrame(
+        [{'Personnage': p, 'Objet': o, 'Victoires': v, 'Total': t}
+         for (p, o), (v, t) in duos_perso_item.items()]
+    )
+    # filtrer les combinaisons trop rares pour etre significatives
+    df_duos_perso_item = df_duos_perso_item[df_duos_perso_item['Total'] >= 20]
+    df_duos_perso_item['Winrate'] = (df_duos_perso_item['Victoires'] / df_duos_perso_item['Total']) * 100
+    df_duos_perso_item.sort_values(by='Winrate', ascending=False, inplace=True)
+
+    def duos_perso_item_uniques(df_iter):
+        # selection gloutonne : chaque personnage et chaque objet n'apparait qu'une fois
+        lignes, persos_vus, objets_vus = [], set(), set()
+        for _, row in df_iter.iterrows():
+            if row['Personnage'] not in persos_vus and row['Objet'] not in objets_vus:
+                lignes.append(row)
+                persos_vus.add(row['Personnage'])
+                objets_vus.add(row['Objet'])
+            if len(lignes) == 10:
+                break
+        return pd.DataFrame(lignes, columns=['Personnage', 'Objet', 'Winrate', 'Total'])
+
+    top_10_duos_perso = duos_perso_item_uniques(df_duos_perso_item)
+    flop_10_duos_perso = duos_perso_item_uniques(df_duos_perso_item.iloc[::-1])
+
+    print("\nMeilleurs duos Personnage & Objet:")
+    print(top_10_duos_perso.to_string(index=False))
+    print("\nPires duos Personnage & Objet:")
+    print(flop_10_duos_perso.to_string(index=False))
     
     #  # Calculer la priorité médiane et moyenne parmi les jeux joués
     # priorite_stats = df_resultats.groupby('Objet')['Priorite'].agg(['median', 'mean']).reset_index()

@@ -1,0 +1,1847 @@
+{
+    "drafts_completed": 10000,
+    "item_stats": {
+        "Forge Portative": {
+            "draft": 1343,
+            "pick": 1325,
+            "win": 390823,
+            "played": 1325000,
+            "death": 475624,
+            "fled": 690857,
+            "cleared": 158519
+        },
+        "Parchemin de Téléportation": {
+            "draft": 1343,
+            "pick": 940,
+            "win": 258488,
+            "played": 940000,
+            "death": 127722,
+            "fled": 778506,
+            "cleared": 33772
+        },
+        "Anneau des Squelettes": {
+            "draft": 1405,
+            "pick": 975,
+            "win": 267277,
+            "played": 975000,
+            "death": 327804,
+            "fled": 558183,
+            "cleared": 89013
+        },
+        "Item 6PV": {
+            "draft": 1402,
+            "pick": 1374,
+            "win": 399081,
+            "played": 1374000,
+            "death": 469338,
+            "fled": 789883,
+            "cleared": 114779
+        },
+        "Masque de l'Inquisiteur": {
+            "draft": 1360,
+            "pick": 1133,
+            "win": 310778,
+            "played": 1133000,
+            "death": 418052,
+            "fled": 599721,
+            "cleared": 115227
+        },
+        "Enclume instable": {
+            "draft": 1376,
+            "pick": 1262,
+            "win": 343645,
+            "played": 1262000,
+            "death": 458272,
+            "fled": 690062,
+            "cleared": 113666
+        },
+        "Main de Midas B": {
+            "draft": 1372,
+            "pick": 1299,
+            "win": 379550,
+            "played": 1299000,
+            "death": 499595,
+            "fled": 671123,
+            "cleared": 128282
+        },
+        "Glaive d'argent": {
+            "draft": 1407,
+            "pick": 1200,
+            "win": 351368,
+            "played": 1200000,
+            "death": 387567,
+            "fled": 660978,
+            "cleared": 151455
+        },
+        "Armure du Roi Liche": {
+            "draft": 1407,
+            "pick": 1406,
+            "win": 403404,
+            "played": 1406000,
+            "death": 460063,
+            "fled": 816138,
+            "cleared": 129799
+        },
+        "Gros boulet": {
+            "draft": 1371,
+            "pick": 1363,
+            "win": 375181,
+            "played": 1363000,
+            "death": 532973,
+            "fled": 702365,
+            "cleared": 127662
+        },
+        "Faux De La Mort": {
+            "draft": 1393,
+            "pick": 1220,
+            "win": 345404,
+            "played": 1220000,
+            "death": 393461,
+            "fled": 718969,
+            "cleared": 107570
+        },
+        "Potion de Mana": {
+            "draft": 1360,
+            "pick": 1322,
+            "win": 363752,
+            "played": 1322000,
+            "death": 370749,
+            "fled": 864444,
+            "cleared": 86807
+        },
+        "Couteau Suisse": {
+            "draft": 1348,
+            "pick": 975,
+            "win": 276313,
+            "played": 975000,
+            "death": 363725,
+            "fled": 519751,
+            "cleared": 91524
+        },
+        "Item 5PV": {
+            "draft": 1357,
+            "pick": 1238,
+            "win": 340283,
+            "played": 1238000,
+            "death": 440486,
+            "fled": 694744,
+            "cleared": 102770
+        },
+        "Robe de mage": {
+            "draft": 1434,
+            "pick": 1431,
+            "win": 444548,
+            "played": 1431000,
+            "death": 417721,
+            "fled": 812782,
+            "cleared": 200497
+        },
+        "Getas du novice": {
+            "draft": 1368,
+            "pick": 872,
+            "win": 235726,
+            "played": 872000,
+            "death": 242874,
+            "fled": 580541,
+            "cleared": 48585
+        },
+        "Marteau de combat": {
+            "draft": 1373,
+            "pick": 1162,
+            "win": 323156,
+            "played": 1162000,
+            "death": 384155,
+            "fled": 672256,
+            "cleared": 105589
+        },
+        "Potion de feu liquide": {
+            "draft": 1342,
+            "pick": 921,
+            "win": 259833,
+            "played": 921000,
+            "death": 313909,
+            "fled": 512577,
+            "cleared": 94514
+        },
+        "Anneau volcanique": {
+            "draft": 1425,
+            "pick": 1045,
+            "win": 271625,
+            "played": 1045000,
+            "death": 387772,
+            "fled": 577720,
+            "cleared": 79508
+        },
+        "Gâteau spatial": {
+            "draft": 1364,
+            "pick": 1207,
+            "win": 330570,
+            "played": 1207000,
+            "death": 367199,
+            "fled": 748048,
+            "cleared": 91753
+        },
+        "Masque à gaz": {
+            "draft": 1370,
+            "pick": 1214,
+            "win": 342356,
+            "played": 1214000,
+            "death": 454165,
+            "fled": 632547,
+            "cleared": 127288
+        },
+        "Elixir de chance": {
+            "draft": 1378,
+            "pick": 1288,
+            "win": 366833,
+            "played": 1288000,
+            "death": 433930,
+            "fled": 731008,
+            "cleared": 123062
+        },
+        "Torche En Mousse": {
+            "draft": 1395,
+            "pick": 1033,
+            "win": 285527,
+            "played": 1033000,
+            "death": 376834,
+            "fled": 575609,
+            "cleared": 80557
+        },
+        "Casque Plus": {
+            "draft": 1324,
+            "pick": 1047,
+            "win": 283592,
+            "played": 1047000,
+            "death": 378663,
+            "fled": 552205,
+            "cleared": 116132
+        },
+        "Arc enflammé": {
+            "draft": 1408,
+            "pick": 955,
+            "win": 258811,
+            "played": 955000,
+            "death": 360406,
+            "fled": 525818,
+            "cleared": 68776
+        },
+        "Araignée domestique": {
+            "draft": 1383,
+            "pick": 992,
+            "win": 259007,
+            "played": 992000,
+            "death": 333798,
+            "fled": 609232,
+            "cleared": 48970
+        },
+        "Pierre du Naga": {
+            "draft": 1410,
+            "pick": 1317,
+            "win": 386546,
+            "played": 1317000,
+            "death": 459237,
+            "fled": 692921,
+            "cleared": 164842
+        },
+        "Potion feerique": {
+            "draft": 1372,
+            "pick": 1354,
+            "win": 378804,
+            "played": 1354000,
+            "death": 370006,
+            "fled": 879030,
+            "cleared": 104964
+        },
+        "Marteau d'Eternité": {
+            "draft": 1408,
+            "pick": 1408,
+            "win": 441977,
+            "played": 1408000,
+            "death": 1278743,
+            "fled": 35917,
+            "cleared": 93340
+        },
+        "Armure d'honneur": {
+            "draft": 1404,
+            "pick": 1380,
+            "win": 359390,
+            "played": 1380000,
+            "death": 507231,
+            "fled": 784303,
+            "cleared": 88466
+        },
+        "Fruit du Destin": {
+            "draft": 1410,
+            "pick": 1249,
+            "win": 346108,
+            "played": 1249000,
+            "death": 419400,
+            "fled": 712510,
+            "cleared": 117090
+        },
+        "Bonne vieille guinze": {
+            "draft": 1401,
+            "pick": 811,
+            "win": 219284,
+            "played": 811000,
+            "death": 382930,
+            "fled": 383230,
+            "cleared": 44840
+        },
+        "Barde": {
+            "draft": 1417,
+            "pick": 1415,
+            "win": 415171,
+            "played": 1415000,
+            "death": 481093,
+            "fled": 801835,
+            "cleared": 132072
+        },
+        "Armure Ardente": {
+            "draft": 1387,
+            "pick": 1372,
+            "win": 391719,
+            "played": 1372000,
+            "death": 448024,
+            "fled": 802114,
+            "cleared": 121862
+        },
+        "Codex Diabolus": {
+            "draft": 1436,
+            "pick": 1107,
+            "win": 309131,
+            "played": 1107000,
+            "death": 361954,
+            "fled": 657195,
+            "cleared": 87851
+        },
+        "Tentacule du Kraken": {
+            "draft": 1338,
+            "pick": 1338,
+            "win": 400792,
+            "played": 1338000,
+            "death": 482495,
+            "fled": 705249,
+            "cleared": 150256
+        },
+        "Pelle du Fossoyeur": {
+            "draft": 1391,
+            "pick": 1020,
+            "win": 291184,
+            "played": 1020000,
+            "death": 438190,
+            "fled": 518637,
+            "cleared": 63173
+        },
+        "Talisman Incertain": {
+            "draft": 1350,
+            "pick": 1337,
+            "win": 405182,
+            "played": 1337000,
+            "death": 427653,
+            "fled": 763558,
+            "cleared": 145789
+        },
+        "Concentré de fun": {
+            "draft": 1394,
+            "pick": 1375,
+            "win": 389970,
+            "played": 1375000,
+            "death": 358542,
+            "fled": 920000,
+            "cleared": 96458
+        },
+        "Pied de Biche": {
+            "draft": 1385,
+            "pick": 1234,
+            "win": 343931,
+            "played": 1234000,
+            "death": 435923,
+            "fled": 684515,
+            "cleared": 113562
+        },
+        "Katana": {
+            "draft": 1406,
+            "pick": 1383,
+            "win": 417449,
+            "played": 1383000,
+            "death": 349206,
+            "fled": 789317,
+            "cleared": 244477
+        },
+        "Cocktail Molotov": {
+            "draft": 1321,
+            "pick": 1237,
+            "win": 346795,
+            "played": 1237000,
+            "death": 448514,
+            "fled": 700471,
+            "cleared": 88015
+        },
+        "Zulfikar": {
+            "draft": 1356,
+            "pick": 1093,
+            "win": 310866,
+            "played": 1093000,
+            "death": 356737,
+            "fled": 612706,
+            "cleared": 123557
+        },
+        "Champignon Vénéneux": {
+            "draft": 1346,
+            "pick": 1115,
+            "win": 323850,
+            "played": 1115000,
+            "death": 389905,
+            "fled": 628665,
+            "cleared": 96430
+        },
+        "Dé du Tricheur": {
+            "draft": 1437,
+            "pick": 1230,
+            "win": 331268,
+            "played": 1230000,
+            "death": 409483,
+            "fled": 727078,
+            "cleared": 93439
+        },
+        "Crâne du Roi Liche": {
+            "draft": 1377,
+            "pick": 1257,
+            "win": 360944,
+            "played": 1257000,
+            "death": 422600,
+            "fled": 735038,
+            "cleared": 99362
+        },
+        "Torche Rouge": {
+            "draft": 1365,
+            "pick": 1333,
+            "win": 395578,
+            "played": 1333000,
+            "death": 450199,
+            "fled": 726350,
+            "cleared": 156451
+        },
+        "Coquille Salvatrice": {
+            "draft": 1389,
+            "pick": 1377,
+            "win": 386153,
+            "played": 1377000,
+            "death": 372267,
+            "fled": 906401,
+            "cleared": 98332
+        },
+        "Anneau Oceanique": {
+            "draft": 1448,
+            "pick": 1441,
+            "win": 428046,
+            "played": 1441000,
+            "death": 393350,
+            "fled": 883862,
+            "cleared": 163788
+        },
+        "Patte du RatLiche": {
+            "draft": 1392,
+            "pick": 1075,
+            "win": 291049,
+            "played": 1075000,
+            "death": 361555,
+            "fled": 616007,
+            "cleared": 97438
+        },
+        "Bouclier Dragon": {
+            "draft": 1427,
+            "pick": 1417,
+            "win": 406932,
+            "played": 1417000,
+            "death": 412693,
+            "fled": 883103,
+            "cleared": 121204
+        },
+        "Exterminator": {
+            "draft": 1367,
+            "pick": 952,
+            "win": 262868,
+            "played": 952000,
+            "death": 393881,
+            "fled": 429787,
+            "cleared": 128332
+        },
+        "Coiffe de sorcier": {
+            "draft": 1357,
+            "pick": 1098,
+            "win": 304786,
+            "played": 1098000,
+            "death": 387652,
+            "fled": 607440,
+            "cleared": 102908
+        },
+        "Singe doré": {
+            "draft": 1343,
+            "pick": 1009,
+            "win": 274887,
+            "played": 1009000,
+            "death": 450774,
+            "fled": 503851,
+            "cleared": 54375
+        },
+        "PotionOuPoison": {
+            "draft": 1393,
+            "pick": 1365,
+            "win": 374138,
+            "played": 1365000,
+            "death": 475849,
+            "fled": 774185,
+            "cleared": 114966
+        },
+        "Patins à Glace": {
+            "draft": 1334,
+            "pick": 883,
+            "win": 221860,
+            "played": 883000,
+            "death": 303135,
+            "fled": 529425,
+            "cleared": 50440
+        },
+        "Masque de la Peste": {
+            "draft": 1430,
+            "pick": 1328,
+            "win": 393154,
+            "played": 1328000,
+            "death": 450875,
+            "fled": 751936,
+            "cleared": 125189
+        },
+        "Maillet D'Argile": {
+            "draft": 1313,
+            "pick": 1072,
+            "win": 292724,
+            "played": 1072000,
+            "death": 372121,
+            "fled": 596977,
+            "cleared": 102902
+        },
+        "Fouet du fourbe": {
+            "draft": 1345,
+            "pick": 650,
+            "win": 157887,
+            "played": 650000,
+            "death": 232295,
+            "fled": 368599,
+            "cleared": 49106
+        },
+        "Pâté d'Ange": {
+            "draft": 1409,
+            "pick": 1202,
+            "win": 327650,
+            "played": 1202000,
+            "death": 368386,
+            "fled": 704835,
+            "cleared": 128779
+        },
+        "Graal en Mousse": {
+            "draft": 1381,
+            "pick": 1376,
+            "win": 401502,
+            "played": 1376000,
+            "death": 456417,
+            "fled": 794418,
+            "cleared": 125165
+        },
+        "Harpe": {
+            "draft": 1353,
+            "pick": 1029,
+            "win": 282097,
+            "played": 1029000,
+            "death": 285505,
+            "fled": 677047,
+            "cleared": 66448
+        },
+        "Cœur de Golem": {
+            "draft": 1361,
+            "pick": 1235,
+            "win": 363284,
+            "played": 1235000,
+            "death": 413109,
+            "fled": 682676,
+            "cleared": 139215
+        },
+        "Trou Noir Portatif": {
+            "draft": 1354,
+            "pick": 1287,
+            "win": 350808,
+            "played": 1287000,
+            "death": 474300,
+            "fled": 713211,
+            "cleared": 99489
+        },
+        "Coffre animé": {
+            "draft": 1299,
+            "pick": 1213,
+            "win": 367105,
+            "played": 1213000,
+            "death": 406417,
+            "fled": 638532,
+            "cleared": 168051
+        },
+        "Pain maudit": {
+            "draft": 1362,
+            "pick": 1158,
+            "win": 307596,
+            "played": 1158000,
+            "death": 433435,
+            "fled": 656702,
+            "cleared": 67863
+        },
+        "Katana en Mousse": {
+            "draft": 1358,
+            "pick": 1358,
+            "win": 415074,
+            "played": 1358000,
+            "death": 376229,
+            "fled": 843037,
+            "cleared": 138734
+        },
+        "Épée magique aléatoire": {
+            "draft": 1396,
+            "pick": 813,
+            "win": 212886,
+            "played": 813000,
+            "death": 266686,
+            "fled": 473847,
+            "cleared": 72467
+        },
+        "Esprit du Donjon": {
+            "draft": 1374,
+            "pick": 979,
+            "win": 251198,
+            "played": 979000,
+            "death": 368903,
+            "fled": 583367,
+            "cleared": 26730
+        },
+        "Pare-Buffle du Ponceur": {
+            "draft": 1419,
+            "pick": 1359,
+            "win": 409223,
+            "played": 1359000,
+            "death": 372082,
+            "fled": 835646,
+            "cleared": 151272
+        },
+        "Lunettes du Bricoleur": {
+            "draft": 1425,
+            "pick": 910,
+            "win": 248821,
+            "played": 910000,
+            "death": 320422,
+            "fled": 507681,
+            "cleared": 81897
+        },
+        "Bouclier caméléon": {
+            "draft": 1386,
+            "pick": 1310,
+            "win": 381360,
+            "played": 1310000,
+            "death": 371881,
+            "fled": 787844,
+            "cleared": 150275
+        },
+        "Randotion": {
+            "draft": 1431,
+            "pick": 1103,
+            "win": 301164,
+            "played": 1103000,
+            "death": 393568,
+            "fled": 625530,
+            "cleared": 83902
+        },
+        "Queue Du Charognard": {
+            "draft": 1367,
+            "pick": 1223,
+            "win": 347387,
+            "played": 1223000,
+            "death": 402874,
+            "fled": 712638,
+            "cleared": 107488
+        },
+        "Alliance Sanguine": {
+            "draft": 1339,
+            "pick": 616,
+            "win": 151191,
+            "played": 616000,
+            "death": 216212,
+            "fled": 365908,
+            "cleared": 33880
+        },
+        "Peigne en or": {
+            "draft": 1412,
+            "pick": 1195,
+            "win": 332613,
+            "played": 1195000,
+            "death": 422491,
+            "fled": 693497,
+            "cleared": 79012
+        },
+        "ItemUseless": {
+            "draft": 1380,
+            "pick": 398,
+            "win": 83804,
+            "played": 398000,
+            "death": 149624,
+            "fled": 227617,
+            "cleared": 20759
+        },
+        "Boîte à butin": {
+            "draft": 1368,
+            "pick": 1322,
+            "win": 395573,
+            "played": 1322000,
+            "death": 434944,
+            "fled": 715700,
+            "cleared": 171356
+        },
+        "Sainte Lance": {
+            "draft": 1413,
+            "pick": 1383,
+            "win": 430635,
+            "played": 1383000,
+            "death": 409428,
+            "fled": 808416,
+            "cleared": 165156
+        },
+        "Bouclier cassé": {
+            "draft": 1407,
+            "pick": 1298,
+            "win": 374531,
+            "played": 1298000,
+            "death": 370395,
+            "fled": 795288,
+            "cleared": 132317
+        },
+        "Bouclier de l'inventeur": {
+            "draft": 1331,
+            "pick": 1317,
+            "win": 375758,
+            "played": 1317000,
+            "death": 453068,
+            "fled": 727129,
+            "cleared": 136803
+        },
+        "Scaphandre": {
+            "draft": 1374,
+            "pick": 1344,
+            "win": 429660,
+            "played": 1344000,
+            "death": 548204,
+            "fled": 564738,
+            "cleared": 231058
+        },
+        "Marteau flamboyant": {
+            "draft": 1375,
+            "pick": 1163,
+            "win": 328371,
+            "played": 1163000,
+            "death": 374656,
+            "fled": 678514,
+            "cleared": 109830
+        },
+        "Lampe magique": {
+            "draft": 1385,
+            "pick": 1131,
+            "win": 312283,
+            "played": 1131000,
+            "death": 398869,
+            "fled": 659731,
+            "cleared": 72400
+        },
+        "Marmite Gélatineuse": {
+            "draft": 1374,
+            "pick": 1130,
+            "win": 323742,
+            "played": 1130000,
+            "death": 388082,
+            "fled": 640409,
+            "cleared": 101509
+        },
+        "Masque Dragon": {
+            "draft": 1385,
+            "pick": 1096,
+            "win": 290304,
+            "played": 1096000,
+            "death": 371454,
+            "fled": 628679,
+            "cleared": 95867
+        },
+        "Tronconneuse Enflammee": {
+            "draft": 1400,
+            "pick": 1114,
+            "win": 329235,
+            "played": 1114000,
+            "death": 275901,
+            "fled": 754115,
+            "cleared": 83984
+        },
+        "Anneau de Vie": {
+            "draft": 1392,
+            "pick": 1294,
+            "win": 401780,
+            "played": 1294000,
+            "death": 449529,
+            "fled": 634823,
+            "cleared": 209648
+        },
+        "Couteau Entre Les Dents": {
+            "draft": 1364,
+            "pick": 1089,
+            "win": 320279,
+            "played": 1089000,
+            "death": 376821,
+            "fled": 587074,
+            "cleared": 125105
+        },
+        "Armure Damnée": {
+            "draft": 1405,
+            "pick": 1267,
+            "win": 371550,
+            "played": 1267000,
+            "death": 466883,
+            "fled": 669862,
+            "cleared": 130255
+        },
+        "Set de Cœurs": {
+            "draft": 1405,
+            "pick": 1015,
+            "win": 281630,
+            "played": 1015000,
+            "death": 353671,
+            "fled": 585575,
+            "cleared": 75754
+        },
+        "Chapeau du novice": {
+            "draft": 1346,
+            "pick": 1043,
+            "win": 301061,
+            "played": 1043000,
+            "death": 341872,
+            "fled": 592050,
+            "cleared": 109078
+        },
+        "Item 4PV": {
+            "draft": 1384,
+            "pick": 1080,
+            "win": 286186,
+            "played": 1080000,
+            "death": 387329,
+            "fled": 612418,
+            "cleared": 80253
+        },
+        "Dé Maudit": {
+            "draft": 1351,
+            "pick": 1335,
+            "win": 392182,
+            "played": 1335000,
+            "death": 447987,
+            "fled": 747157,
+            "cleared": 139856
+        },
+        "Anneau de glace": {
+            "draft": 1350,
+            "pick": 1341,
+            "win": 390871,
+            "played": 1341000,
+            "death": 427713,
+            "fled": 762840,
+            "cleared": 150447
+        },
+        "Grelot du Bouffon": {
+            "draft": 1400,
+            "pick": 1225,
+            "win": 354306,
+            "played": 1225000,
+            "death": 431782,
+            "fled": 642551,
+            "cleared": 150667
+        },
+        "Sac de Constantinople": {
+            "draft": 1409,
+            "pick": 544,
+            "win": 128223,
+            "played": 544000,
+            "death": 253087,
+            "fled": 252029,
+            "cleared": 38884
+        },
+        "Ankh de réincarnation": {
+            "draft": 1360,
+            "pick": 1358,
+            "win": 378880,
+            "played": 1358000,
+            "death": 339735,
+            "fled": 927006,
+            "cleared": 91259
+        },
+        "Cape vaudou": {
+            "draft": 1352,
+            "pick": 1346,
+            "win": 375018,
+            "played": 1346000,
+            "death": 401685,
+            "fled": 819363,
+            "cleared": 124952
+        },
+        "Bouclier Magique": {
+            "draft": 1406,
+            "pick": 1083,
+            "win": 314753,
+            "played": 1083000,
+            "death": 369383,
+            "fled": 602713,
+            "cleared": 110904
+        },
+        "Yo-yo protecteur": {
+            "draft": 1368,
+            "pick": 1368,
+            "win": 421346,
+            "played": 1368000,
+            "death": 486309,
+            "fled": 722665,
+            "cleared": 159026
+        },
+        "Main de Midas": {
+            "draft": 1384,
+            "pick": 1359,
+            "win": 396763,
+            "played": 1359000,
+            "death": 548727,
+            "fled": 663083,
+            "cleared": 147190
+        },
+        "Feuille Eternelle": {
+            "draft": 1393,
+            "pick": 1333,
+            "win": 387597,
+            "played": 1333000,
+            "death": 389219,
+            "fled": 808038,
+            "cleared": 135743
+        },
+        "Valises de Cash": {
+            "draft": 1352,
+            "pick": 1202,
+            "win": 331062,
+            "played": 1202000,
+            "death": 414428,
+            "fled": 732438,
+            "cleared": 55134
+        },
+        "Seringue du docteur fou": {
+            "draft": 1353,
+            "pick": 941,
+            "win": 247350,
+            "played": 941000,
+            "death": 368597,
+            "fled": 496870,
+            "cleared": 75533
+        },
+        "Item 2PV": {
+            "draft": 1397,
+            "pick": 607,
+            "win": 147674,
+            "played": 607000,
+            "death": 220991,
+            "fled": 346794,
+            "cleared": 39215
+        },
+        "Bouillon d'âmes": {
+            "draft": 1361,
+            "pick": 1061,
+            "win": 289184,
+            "played": 1061000,
+            "death": 387188,
+            "fled": 603235,
+            "cleared": 70577
+        },
+        "Pioche de diamant": {
+            "draft": 1433,
+            "pick": 1361,
+            "win": 394016,
+            "played": 1361000,
+            "death": 508456,
+            "fled": 715352,
+            "cleared": 137192
+        },
+        "Calumet de la Paix": {
+            "draft": 1459,
+            "pick": 1421,
+            "win": 402900,
+            "played": 1421000,
+            "death": 468849,
+            "fled": 833505,
+            "cleared": 118646
+        },
+        "Pendentif du Novice": {
+            "draft": 1346,
+            "pick": 1331,
+            "win": 382174,
+            "played": 1331000,
+            "death": 451620,
+            "fled": 751102,
+            "cleared": 128278
+        },
+        "Kit vaudou": {
+            "draft": 1440,
+            "pick": 967,
+            "win": 263828,
+            "played": 967000,
+            "death": 332049,
+            "fled": 563578,
+            "cleared": 71373
+        },
+        "Pierre d'âme": {
+            "draft": 1409,
+            "pick": 1158,
+            "win": 324063,
+            "played": 1158000,
+            "death": 415815,
+            "fled": 666097,
+            "cleared": 76088
+        },
+        "Maillet Du Roi Liche": {
+            "draft": 1429,
+            "pick": 1429,
+            "win": 428761,
+            "played": 1429000,
+            "death": 509373,
+            "fled": 779753,
+            "cleared": 139874
+        },
+        "Hache de Glace": {
+            "draft": 1428,
+            "pick": 1411,
+            "win": 390551,
+            "played": 1411000,
+            "death": 487198,
+            "fled": 809825,
+            "cleared": 113977
+        },
+        "Chapeau stylé": {
+            "draft": 1342,
+            "pick": 1103,
+            "win": 300451,
+            "played": 1103000,
+            "death": 395382,
+            "fled": 644217,
+            "cleared": 63401
+        },
+        "Fausse couronne": {
+            "draft": 1411,
+            "pick": 1282,
+            "win": 363412,
+            "played": 1282000,
+            "death": 446516,
+            "fled": 718415,
+            "cleared": 117069
+        },
+        "Potion d'adrénaline": {
+            "draft": 1353,
+            "pick": 1267,
+            "win": 339913,
+            "played": 1267000,
+            "death": 451781,
+            "fled": 717215,
+            "cleared": 98004
+        },
+        "Cape de Plumes": {
+            "draft": 1338,
+            "pick": 1319,
+            "win": 361105,
+            "played": 1319000,
+            "death": 444713,
+            "fled": 768339,
+            "cleared": 105948
+        },
+        "Griffes de l'Arracheur": {
+            "draft": 1367,
+            "pick": 1090,
+            "win": 312113,
+            "played": 1090000,
+            "death": 363031,
+            "fled": 599207,
+            "cleared": 127762
+        },
+        "Torche Bleue": {
+            "draft": 1315,
+            "pick": 763,
+            "win": 202086,
+            "played": 763000,
+            "death": 265793,
+            "fled": 425849,
+            "cleared": 71358
+        },
+        "Parchemin de poncage": {
+            "draft": 1347,
+            "pick": 1347,
+            "win": 386715,
+            "played": 1347000,
+            "death": 436951,
+            "fled": 727107,
+            "cleared": 182942
+        },
+        "Fromage Puant": {
+            "draft": 1353,
+            "pick": 1351,
+            "win": 389202,
+            "played": 1351000,
+            "death": 477813,
+            "fled": 739710,
+            "cleared": 133477
+        },
+        "Lame de l'Harmonie": {
+            "draft": 1368,
+            "pick": 1105,
+            "win": 307186,
+            "played": 1105000,
+            "death": 350448,
+            "fled": 646974,
+            "cleared": 107578
+        },
+        "Epee mystique": {
+            "draft": 1361,
+            "pick": 1111,
+            "win": 293903,
+            "played": 1111000,
+            "death": 277304,
+            "fled": 764913,
+            "cleared": 68783
+        },
+        "Bottes de Vitesse": {
+            "draft": 1393,
+            "pick": 1093,
+            "win": 306675,
+            "played": 1093000,
+            "death": 242187,
+            "fled": 791963,
+            "cleared": 58850
+        },
+        "Attrape-Rêves": {
+            "draft": 1408,
+            "pick": 1398,
+            "win": 424281,
+            "played": 1398000,
+            "death": 448928,
+            "fled": 793752,
+            "cleared": 155320
+        },
+        "Couronne d'épines": {
+            "draft": 1367,
+            "pick": 1365,
+            "win": 426132,
+            "played": 1365000,
+            "death": 405734,
+            "fled": 785620,
+            "cleared": 173646
+        },
+        "Calice du Roi Sorcier": {
+            "draft": 1362,
+            "pick": 1183,
+            "win": 339778,
+            "played": 1183000,
+            "death": 414617,
+            "fled": 628376,
+            "cleared": 140007
+        },
+        "Cœur de Dragon": {
+            "draft": 1427,
+            "pick": 1414,
+            "win": 431837,
+            "played": 1414000,
+            "death": 494045,
+            "fled": 721533,
+            "cleared": 198422
+        },
+        "Corbeille d'or": {
+            "draft": 1394,
+            "pick": 895,
+            "win": 246487,
+            "played": 895000,
+            "death": 317808,
+            "fled": 529551,
+            "cleared": 47641
+        },
+        "Epaulette du Bourrin": {
+            "draft": 1386,
+            "pick": 1377,
+            "win": 428953,
+            "played": 1377000,
+            "death": 544983,
+            "fled": 634436,
+            "cleared": 197581
+        },
+        "Grenade Singe": {
+            "draft": 1379,
+            "pick": 917,
+            "win": 244859,
+            "played": 917000,
+            "death": 331602,
+            "fled": 513398,
+            "cleared": 72000
+        },
+        "Osselets de Résurrection": {
+            "draft": 1382,
+            "pick": 858,
+            "win": 240583,
+            "played": 858000,
+            "death": 222603,
+            "fled": 582746,
+            "cleared": 52651
+        },
+        "Tunique classe": {
+            "draft": 1368,
+            "pick": 1184,
+            "win": 321071,
+            "played": 1184000,
+            "death": 471662,
+            "fled": 627515,
+            "cleared": 84823
+        },
+        "Anneau du Feu": {
+            "draft": 1417,
+            "pick": 1292,
+            "win": 379353,
+            "played": 1292000,
+            "death": 422975,
+            "fled": 708359,
+            "cleared": 160666
+        },
+        "Perceuse a Breche": {
+            "draft": 1340,
+            "pick": 968,
+            "win": 268929,
+            "played": 968000,
+            "death": 340644,
+            "fled": 510287,
+            "cleared": 117069
+        },
+        "Chapelet de Vitalité": {
+            "draft": 1313,
+            "pick": 1112,
+            "win": 314187,
+            "played": 1112000,
+            "death": 397767,
+            "fled": 603831,
+            "cleared": 110402
+        },
+        "Anneau Plussain": {
+            "draft": 1366,
+            "pick": 1176,
+            "win": 327588,
+            "played": 1176000,
+            "death": 362756,
+            "fled": 734025,
+            "cleared": 79219
+        },
+        "Boomerang Mystique": {
+            "draft": 1345,
+            "pick": 1005,
+            "win": 271659,
+            "played": 1005000,
+            "death": 354782,
+            "fled": 574427,
+            "cleared": 75791
+        },
+        "Item 3PV 2": {
+            "draft": 1365,
+            "pick": 831,
+            "win": 210022,
+            "played": 831000,
+            "death": 301110,
+            "fled": 472485,
+            "cleared": 57405
+        },
+        "Grimoire Inconnu": {
+            "draft": 1387,
+            "pick": 1387,
+            "win": 426903,
+            "played": 1387000,
+            "death": 421663,
+            "fled": 736070,
+            "cleared": 229267
+        },
+        "Treize à Seize": {
+            "draft": 1393,
+            "pick": 1007,
+            "win": 276122,
+            "played": 1007000,
+            "death": 365679,
+            "fled": 552738,
+            "cleared": 88583
+        },
+        "Sceptre actif": {
+            "draft": 1384,
+            "pick": 1325,
+            "win": 385109,
+            "played": 1325000,
+            "death": 466377,
+            "fled": 728167,
+            "cleared": 130456
+        },
+        "Pistolet Pirate": {
+            "draft": 1327,
+            "pick": 792,
+            "win": 217285,
+            "played": 792000,
+            "death": 277393,
+            "fled": 436668,
+            "cleared": 77939
+        },
+        "Bouclier Golemique": {
+            "draft": 1420,
+            "pick": 1405,
+            "win": 385298,
+            "played": 1405000,
+            "death": 489239,
+            "fled": 788658,
+            "cleared": 127103
+        },
+        "Boulet de Canon": {
+            "draft": 1341,
+            "pick": 1234,
+            "win": 341013,
+            "played": 1234000,
+            "death": 444307,
+            "fled": 686767,
+            "cleared": 102926
+        },
+        "Viande Crue": {
+            "draft": 1367,
+            "pick": 1246,
+            "win": 337359,
+            "played": 1246000,
+            "death": 436696,
+            "fled": 702860,
+            "cleared": 106444
+        },
+        "Chameau": {
+            "draft": 1399,
+            "pick": 1321,
+            "win": 381400,
+            "played": 1321000,
+            "death": 496976,
+            "fled": 695444,
+            "cleared": 128580
+        },
+        "Plan presque parfait": {
+            "draft": 1383,
+            "pick": 1381,
+            "win": 406429,
+            "played": 1381000,
+            "death": 455177,
+            "fled": 789077,
+            "cleared": 136746
+        },
+        "Parchemin de Bahn": {
+            "draft": 1391,
+            "pick": 1317,
+            "win": 358498,
+            "played": 1317000,
+            "death": 454870,
+            "fled": 735195,
+            "cleared": 126935
+        },
+        "Lame Draconique": {
+            "draft": 1448,
+            "pick": 1135,
+            "win": 319532,
+            "played": 1135000,
+            "death": 358864,
+            "fled": 658605,
+            "cleared": 117531
+        },
+        "Fleau des liches": {
+            "draft": 1418,
+            "pick": 1416,
+            "win": 424074,
+            "played": 1416000,
+            "death": 453577,
+            "fled": 754695,
+            "cleared": 207728
+        },
+        "Anneau des surmulots": {
+            "draft": 1366,
+            "pick": 1273,
+            "win": 364825,
+            "played": 1273000,
+            "death": 420367,
+            "fled": 698725,
+            "cleared": 153908
+        },
+        "Délicieuse pizza": {
+            "draft": 1387,
+            "pick": 1379,
+            "win": 392046,
+            "played": 1379000,
+            "death": 413633,
+            "fled": 843027,
+            "cleared": 122340
+        },
+        "Gants de combat": {
+            "draft": 1311,
+            "pick": 1288,
+            "win": 356513,
+            "played": 1288000,
+            "death": 482782,
+            "fled": 675028,
+            "cleared": 130190
+        },
+        "Boîte de Pandore": {
+            "draft": 1404,
+            "pick": 973,
+            "win": 266893,
+            "played": 973000,
+            "death": 293388,
+            "fled": 465321,
+            "cleared": 214291
+        },
+        "Aspis d'Héraclès": {
+            "draft": 1325,
+            "pick": 1247,
+            "win": 358856,
+            "played": 1247000,
+            "death": 411859,
+            "fled": 713685,
+            "cleared": 121456
+        },
+        "Corne d'abordage": {
+            "draft": 1282,
+            "pick": 1055,
+            "win": 297202,
+            "played": 1055000,
+            "death": 370815,
+            "fled": 640635,
+            "cleared": 43550
+        },
+        "Kebab revigorant": {
+            "draft": 1390,
+            "pick": 1389,
+            "win": 430323,
+            "played": 1389000,
+            "death": 475266,
+            "fled": 763113,
+            "cleared": 150621
+        },
+        "Coquillage Magique": {
+            "draft": 1368,
+            "pick": 1337,
+            "win": 369147,
+            "played": 1337000,
+            "death": 450556,
+            "fled": 761179,
+            "cleared": 125265
+        },
+        "Marteau de Guerre": {
+            "draft": 1306,
+            "pick": 1280,
+            "win": 387323,
+            "played": 1280000,
+            "death": 453615,
+            "fled": 655977,
+            "cleared": 170408
+        },
+        "Item 3PV": {
+            "draft": 1311,
+            "pick": 831,
+            "win": 210171,
+            "played": 831000,
+            "death": 289698,
+            "fled": 483591,
+            "cleared": 57711
+        },
+        "Livre Sacré": {
+            "draft": 1374,
+            "pick": 1022,
+            "win": 285075,
+            "played": 1022000,
+            "death": 356710,
+            "fled": 567750,
+            "cleared": 97540
+        },
+        "Champ de force en mousse": {
+            "draft": 1346,
+            "pick": 1312,
+            "win": 368123,
+            "played": 1312000,
+            "death": 437267,
+            "fled": 766657,
+            "cleared": 108076
+        },
+        "Gants de Gaïa": {
+            "draft": 1393,
+            "pick": 1096,
+            "win": 327041,
+            "played": 1096000,
+            "death": 433009,
+            "fled": 540039,
+            "cleared": 122952
+        },
+        "CasqueBerserk": {
+            "draft": 1398,
+            "pick": 1353,
+            "win": 372610,
+            "played": 1353000,
+            "death": 485809,
+            "fled": 762086,
+            "cleared": 105105
+        },
+        "Potion de Glace": {
+            "draft": 1408,
+            "pick": 1365,
+            "win": 396127,
+            "played": 1365000,
+            "death": 472110,
+            "fled": 770670,
+            "cleared": 122220
+        },
+        "Arbalète trop grosse": {
+            "draft": 1416,
+            "pick": 1346,
+            "win": 379906,
+            "played": 1346000,
+            "death": 441770,
+            "fled": 797474,
+            "cleared": 106756
+        },
+        "Anneau Magique": {
+            "draft": 1372,
+            "pick": 1046,
+            "win": 301699,
+            "played": 1046000,
+            "death": 356642,
+            "fled": 563480,
+            "cleared": 125878
+        },
+        "Potion draconique": {
+            "draft": 1351,
+            "pick": 1348,
+            "win": 370382,
+            "played": 1348000,
+            "death": 362454,
+            "fled": 888066,
+            "cleared": 97480
+        },
+        "Dragoune": {
+            "draft": 1370,
+            "pick": 1123,
+            "win": 317901,
+            "played": 1123000,
+            "death": 366852,
+            "fled": 656642,
+            "cleared": 99506
+        },
+        "Coffre du Roi Sorcier": {
+            "draft": 1382,
+            "pick": 1017,
+            "win": 280530,
+            "played": 1017000,
+            "death": 368871,
+            "fled": 563695,
+            "cleared": 84434
+        },
+        "Canne à Chep": {
+            "draft": 1390,
+            "pick": 1334,
+            "win": 365368,
+            "played": 1334000,
+            "death": 432581,
+            "fled": 787951,
+            "cleared": 113468
+        },
+        "Platree de Berniques": {
+            "draft": 1383,
+            "pick": 1369,
+            "win": 373768,
+            "played": 1369000,
+            "death": 421603,
+            "fled": 834818,
+            "cleared": 112579
+        },
+        "Caisse enchantée": {
+            "draft": 1376,
+            "pick": 1088,
+            "win": 310440,
+            "played": 1088000,
+            "death": 385506,
+            "fled": 597385,
+            "cleared": 105109
+        },
+        "Fer a Cheval": {
+            "draft": 1369,
+            "pick": 759,
+            "win": 203485,
+            "played": 759000,
+            "death": 241517,
+            "fled": 450376,
+            "cleared": 67107
+        },
+        "Sabre mécanique": {
+            "draft": 1360,
+            "pick": 1229,
+            "win": 357762,
+            "played": 1229000,
+            "death": 445151,
+            "fled": 638636,
+            "cleared": 145213
+        },
+        "Couronne en Mousse": {
+            "draft": 1345,
+            "pick": 1329,
+            "win": 397629,
+            "played": 1329000,
+            "death": 423917,
+            "fled": 779977,
+            "cleared": 125106
+        }
+    },
+    "perso_stats": {
+        "Avatar N2": {
+            "win": 354339,
+            "played": 1068000,
+            "death": 348653,
+            "fled": 596015,
+            "cleared": 123332
+        },
+        "Roi Sorcier": {
+            "win": 284785,
+            "played": 1039000,
+            "death": 399522,
+            "fled": 544234,
+            "cleared": 95244
+        },
+        "Ninja": {
+            "win": 247648,
+            "played": 997000,
+            "death": 281625,
+            "fled": 658544,
+            "cleared": 56831
+        },
+        "Bête de l'Evénement N2": {
+            "win": 271404,
+            "played": 1040000,
+            "death": 384655,
+            "fled": 554865,
+            "cleared": 100480
+        },
+        "Princesse": {
+            "win": 290163,
+            "played": 1013000,
+            "death": 369423,
+            "fled": 542925,
+            "cleared": 100652
+        },
+        "Lapin Blanc N2": {
+            "win": 275539,
+            "played": 1052000,
+            "death": 377584,
+            "fled": 589336,
+            "cleared": 85080
+        },
+        "Tricheur": {
+            "win": 266284,
+            "played": 1027000,
+            "death": 354537,
+            "fled": 598358,
+            "cleared": 74105
+        },
+        "Savant Fou": {
+            "win": 301691,
+            "played": 1028000,
+            "death": 372549,
+            "fled": 533557,
+            "cleared": 121894
+        },
+        "Tricheur N2": {
+            "win": 298848,
+            "played": 1019000,
+            "death": 355417,
+            "fled": 585530,
+            "cleared": 78053
+        },
+        "Princesse N2": {
+            "win": 286908,
+            "played": 1009000,
+            "death": 363915,
+            "fled": 548444,
+            "cleared": 96641
+        },
+        "Inventeur génial": {
+            "win": 268057,
+            "played": 1023000,
+            "death": 360386,
+            "fled": 584568,
+            "cleared": 78046
+        },
+        "DocteurDePeste N2": {
+            "win": 303439,
+            "played": 1035000,
+            "death": 337401,
+            "fled": 603938,
+            "cleared": 93661
+        },
+        "Avatar": {
+            "win": 300461,
+            "played": 1053000,
+            "death": 370163,
+            "fled": 578789,
+            "cleared": 104048
+        },
+        "Chevalier Dragon": {
+            "win": 277617,
+            "played": 1012000,
+            "death": 355485,
+            "fled": 563976,
+            "cleared": 92539
+        },
+        "Prophète N2": {
+            "win": 238092,
+            "played": 1028000,
+            "death": 380901,
+            "fled": 579848,
+            "cleared": 67251
+        },
+        "Ninja N2": {
+            "win": 274253,
+            "played": 1062000,
+            "death": 281045,
+            "fled": 722387,
+            "cleared": 58568
+        },
+        "Chevalier Dragon N2": {
+            "win": 336054,
+            "played": 1058000,
+            "death": 341350,
+            "fled": 590236,
+            "cleared": 126414
+        },
+        "Berserker N2": {
+            "win": 326376,
+            "played": 1003000,
+            "death": 225356,
+            "fled": 689604,
+            "cleared": 88040
+        },
+        "Mercenaire Orc": {
+            "win": 294237,
+            "played": 1060000,
+            "death": 367370,
+            "fled": 604989,
+            "cleared": 87641
+        },
+        "Flutiste N2": {
+            "win": 297760,
+            "played": 1014000,
+            "death": 376188,
+            "fled": 548755,
+            "cleared": 89057
+        },
+        "Savant Fou N2": {
+            "win": 326572,
+            "played": 973000,
+            "death": 327389,
+            "fled": 486485,
+            "cleared": 159126
+        },
+        "Bête de l'Evénement": {
+            "win": 299132,
+            "played": 1085000,
+            "death": 418935,
+            "fled": 543147,
+            "cleared": 122918
+        },
+        "Roi Sorcier N2": {
+            "win": 325623,
+            "played": 1066000,
+            "death": 361869,
+            "fled": 584950,
+            "cleared": 119181
+        },
+        "Shaman N2": {
+            "win": 301546,
+            "played": 1027000,
+            "death": 354152,
+            "fled": 560876,
+            "cleared": 111972
+        },
+        "Shaman": {
+            "win": 268308,
+            "played": 1013000,
+            "death": 336365,
+            "fled": 599927,
+            "cleared": 76708
+        },
+        "Prophète": {
+            "win": 211876,
+            "played": 1019000,
+            "death": 395154,
+            "fled": 577275,
+            "cleared": 46571
+        },
+        "Lapin Blanc": {
+            "win": 258213,
+            "played": 1072000,
+            "death": 397286,
+            "fled": 602280,
+            "cleared": 72434
+        },
+        "Ponceur": {
+            "win": 298058,
+            "played": 1001000,
+            "death": 347465,
+            "fled": 515204,
+            "cleared": 138331
+        },
+        "Inventeur génial N2": {
+            "win": 305002,
+            "played": 1051000,
+            "death": 356100,
+            "fled": 593463,
+            "cleared": 101437
+        },
+        "Flutiste": {
+            "win": 255498,
+            "played": 982000,
+            "death": 368678,
+            "fled": 540323,
+            "cleared": 72999
+        },
+        "Berserker": {
+            "win": 335973,
+            "played": 1030000,
+            "death": 237913,
+            "fled": 698352,
+            "cleared": 93735
+        },
+        "DocteurDePeste": {
+            "win": 243262,
+            "played": 961000,
+            "death": 323389,
+            "fled": 560663,
+            "cleared": 76948
+        },
+        "Mercenaire Orc N2": {
+            "win": 349374,
+            "played": 1075000,
+            "death": 361087,
+            "fled": 593419,
+            "cleared": 120494
+        },
+        "Ponceur N2": {
+            "win": 360082,
+            "played": 1042000,
+            "death": 347311,
+            "fled": 511072,
+            "cleared": 183617
+        }
+    }
+}

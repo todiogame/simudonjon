@@ -2,11 +2,12 @@
 import random
 import os
 import json
-import pandas as pd
+import multiprocessing
 from tqdm import tqdm
 import sys
+import numpy as np
 
-# --- Imports locaux (vérifier les noms de fichiers) ---
+# --- Imports locaux ---
 from objets import objets_disponibles # Liste globale des instances d'objets
 from joueurs import Joueur              # Classe Joueur
 from simu import ordonnanceur         # Moteur de simulation de partie
@@ -18,10 +19,12 @@ from heros import persos_disponibles # Liste globale des instances Perso
 # ==============================================
 NB_DRAFT_SIMULATIONS = 10000            # Nombre total de drafts à simuler
 NB_GAMES_PER_DRAFT_FOR_STATS = 1000   # Nb parties jouées pour évaluer chaque draft
-ITERATIONS_PER_CHOICE_EVALUATION = 50 # Nb simulations dans calculWinrate (précision IA)
-ITERATIONS_INITIAL_RANDOM_WINRATE = 1000# Nb simulations pour pré-calcul WR objet
-SAVE_INTERVAL = 1                     # Sauvegarder les stats tous les X drafts
-STATS_FILENAME = f"item_stats_progressive_{random.randint(1000000, 9999999)}.json" # Fichier de sauvegarde avec ID aléatoire
+ITERATIONS_PER_CHOICE_EVALUATION = 30 # Nb simulations Monte-Carlo par candidat (graines communes => moins d'iterations suffisent)
+MC_PICKS_A_PARTIR_DE = 4              # picks 1-4 : priors seuls ; picks suivants : Monte-Carlo
+MC_NB_CANDIDATS = 3                   # le Monte-Carlo n'evalue que les meilleurs candidats au prior
+PRIORS_NB_PARTIES = 60000             # parties aleatoires pour calculer les priors de pick
+PRIORS_FICHIER = "draft_priors.json"  # cache des priors (supprimer le fichier pour forcer le recalcul)
+STATS_FILENAME = "item_stats_progressive.json"  # nom fixe : la reprise fonctionne et wr.py le trouve
 # ==============================================
 
 # --- Fonctions Helper pour Stats ---
@@ -40,66 +43,123 @@ def ensure_perso_stats_entry(perso_name, stats_dict):
             'win': 0, 'played': 0, 'death': 0, 'fled': 0, 'cleared': 0
         }
 
-# --- Pré-calcul Winrate Objets (Optionnel, au premier lancement) ---
-def calculItemWinrateRandobuild(iter=ITERATIONS_INITIAL_RANDOM_WINRATE):
-    """Calcule un winrate initial pour chaque objet basé sur des builds aléatoires."""
-    resultats_builds = []
-    objets_pool_global_copie = list(objets_disponibles)
-    heros_pool_global_copie = list(persos_disponibles)
-    print(f"Calcul WR initial objets sur {iter} simulations...")
+def _fusionner_stats(dest, src):
+    """Additionne les compteurs d'un batch (dict de dicts d'entiers) dans le total."""
+    for nom, valeurs in src.items():
+        d = dest.setdefault(nom, {})
+        for cle, v in valeurs.items():
+            d[cle] = d.get(cle, 0) + v
 
-    for _ in tqdm(range(iter), desc="Winrate Objets Initiaux"):
-        objets_disponibles_simu = list(objets_pool_global_copie); [o.repare() for o in objets_disponibles_simu]
-        persos_disponibles_simu = list(heros_pool_global_copie);
-        for p in persos_disponibles_simu: p.capacite_utilisee = False
-        joueurs = []
+# ==============================================
+# Priors de pick : winrate global par objet + synergie perso/objet,
+# calcules une fois sur des builds aleatoires puis mis en cache sur disque.
+# L'IA de pick utilise ces priors pour les premiers choix (au lieu de 50
+# parties Monte-Carlo par candidat, dont la decision etait surtout du bruit).
+# ==============================================
+_PRIORS = None
+
+def _charger_priors():
+    global _PRIORS
+    if _PRIORS is None and os.path.exists(PRIORS_FICHIER):
+        with open(PRIORS_FICHIER, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        _PRIORS = {
+            'objets': {nom: tuple(vt) for nom, vt in data['objets'].items()},
+            'perso_objet': {tuple(cle.split('||')): tuple(vt) for cle, vt in data['perso_objet'].items()},
+        }
+    return _PRIORS
+
+def _priors_batch(args):
+    """Worker : parties a builds aleatoires pour estimer les winrates objet et perso/objet."""
+    nb_parties, seed = args
+    random.seed(seed)
+    np.random.seed(seed & 0xFFFFFFFF)
+    stats_objets = {}
+    stats_perso_objet = {}
+    for _ in range(nb_parties):
+        objets_simu = list(objets_disponibles)
+        for o in objets_simu:
+            o.repare()
         nb_joueurs = random.choice([3, 4])
-        noms_joueurs = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
-
-        if len(persos_disponibles) < nb_joueurs: continue
-        personnages_assigner = random.sample(persos_disponibles, nb_joueurs)
-
-        objets_restants_pool = list(objets_disponibles_simu)
-        builds_valides = True
-        for i, nom in enumerate(noms_joueurs):
-            nb_a_prendre = min(6, len(objets_restants_pool))
-            if nb_a_prendre < 6: builds_valides = False; break
-            objets_joueur = random.sample(objets_restants_pool, nb_a_prendre)
-            for objet in objets_joueur: objets_restants_pool.remove(objet)
-            perso_instance = personnages_assigner[i]
-            joueurs.append(Joueur(nom, perso_instance, objets_joueur))
-
-        if not builds_valides or len(joueurs) != nb_joueurs: continue
-
-        deck = DonjonDeck()
-        vainqueur, _ = ordonnanceur(joueurs, deck, 6, objets_restants_pool, False)
+        noms = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
+        persos = random.sample(persos_disponibles, nb_joueurs)
+        joueurs = []
+        for i, nom in enumerate(noms):
+            objs = random.sample(objets_simu, 6)
+            for o in objs:
+                objets_simu.remove(o)
+            joueurs.append(Joueur(nom, persos[i], objs))
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), 6, objets_simu, False)
         for joueur in joueurs:
-            is_winner = 1 if joueur == vainqueur else 0
-            for objet in joueur.objets_initiaux:
-                resultats_builds.append({'Objet': objet.nom, 'Victoire': is_winner})
+            v = 1 if joueur is vainqueur else 0
+            pnom = joueur.personnage_nom
+            for o in joueur.objets_initiaux:
+                s = stats_objets.setdefault(o.nom, [0, 0]); s[0] += v; s[1] += 1
+                s = stats_perso_objet.setdefault((pnom, o.nom), [0, 0]); s[0] += v; s[1] += 1
+    return stats_objets, stats_perso_objet
 
-    if not resultats_builds: print("WARN: Aucune donnée pour calculItemWinrateRandobuild."); return
+def calculer_priors(nb_parties=PRIORS_NB_PARTIES, nb_process=None, force=False):
+    """Calcule (ou recharge depuis le cache) les priors de pick."""
+    global _PRIORS
+    if not force and _charger_priors() is not None:
+        return _PRIORS
+    if nb_process is None:
+        nb_process = max(1, (os.cpu_count() or 2) - 1)
+    print(f"Calcul des priors de pick sur {nb_parties} parties ({nb_process} process)...")
+    stats_objets = {}
+    stats_perso_objet = {}
+    nb_batches = nb_process * 4 if nb_process > 1 else 1
+    base, reste = divmod(nb_parties, nb_batches)
+    travaux = [(base + (1 if i < reste else 0), random.randrange(2**31)) for i in range(nb_batches)]
+    travaux = [t for t in travaux if t[0] > 0]
+    if nb_process > 1:
+        with multiprocessing.Pool(nb_process) as pool:
+            resultats = list(tqdm(pool.imap_unordered(_priors_batch, travaux), total=len(travaux), desc="Priors"))
+    else:
+        resultats = [_priors_batch(t) for t in tqdm(travaux, desc="Priors")]
+    for so, spo in resultats:
+        for nom, (v, t) in so.items():
+            d = stats_objets.setdefault(nom, [0, 0]); d[0] += v; d[1] += t
+        for cle, (v, t) in spo.items():
+            d = stats_perso_objet.setdefault(cle, [0, 0]); d[0] += v; d[1] += t
+    with open(PRIORS_FICHIER, 'w', encoding='utf-8') as f:
+        json.dump({
+            'nb_parties': nb_parties,
+            'objets': stats_objets,
+            'perso_objet': {f"{p}||{o}": vt for (p, o), vt in stats_perso_objet.items()},
+        }, f, ensure_ascii=False)
+    _PRIORS = {'objets': {k: tuple(v) for k, v in stats_objets.items()},
+               'perso_objet': {k: tuple(v) for k, v in stats_perso_objet.items()}}
+    print(f"Priors sauvegardés dans {PRIORS_FICHIER}.")
+    return _PRIORS
 
-    df_resultats = pd.DataFrame(resultats_builds)
-    df_stats_objets = df_resultats.groupby('Objet')['Victoire'].agg(['sum', 'count']).reset_index()
-    df_stats_objets.columns = ['Objet', 'Victoires', 'Total']
-    df_stats_objets['Winrate'] = df_stats_objets.apply(lambda r: (r['Victoires']/r['Total'])*100 if r['Total']>0 else 0, axis=1)
-
-    for obj_g in objets_disponibles:
-        wr_series = df_stats_objets.loc[df_stats_objets['Objet'] == obj_g.nom, 'Winrate']
-        obj_g.winrate = wr_series.iloc[0] if not wr_series.empty else 0.0
-
-    print("Winrates initiaux assignés.")
+def score_pick(objet, perso, priors):
+    """Score d'un objet pour un perso : winrate global + synergie perso/objet (avec shrinkage)."""
+    v, t = priors['objets'].get(objet.nom, (0, 0))
+    wr_objet = v / t if t else 0.28
+    v2, t2 = priors['perso_objet'].get((perso.nom, objet.nom), (0, 0))
+    synergie = 0.0
+    if t2:
+        # la synergie observee est bruitee sur peu de parties : on la retrecit vers 0
+        synergie = (v2 / t2 - wr_objet) * (t2 / (t2 + 200.0))
+    return wr_objet + synergie
 
 
 # --- Calcul Winrate pour une combinaison et un personnage donné ---
-def calculWinrate(combinaison, objets_autres_joueurs, perso_joueur, persos_autres, iterations=ITERATIONS_PER_CHOICE_EVALUATION):
-    """Simule des parties pour évaluer une combinaison d'items pour un personnage spécifique."""
+def calculWinrate(combinaison, objets_autres_joueurs, perso_joueur, persos_autres,
+                  iterations=ITERATIONS_PER_CHOICE_EVALUATION, seed_base=None):
+    """Simule des parties pour évaluer une combinaison d'items pour un personnage spécifique.
+
+    seed_base (optionnel) : graines communes (CRN) — chaque iteration j est jouee avec la meme
+    graine pour tous les candidats compares, ce qui reduit fortement le bruit de la comparaison."""
     seuil_pv_essai_fuite = 6
     victoires = 0
     if iterations <= 0: return 0.0
 
-    for _ in range(iterations):
+    for it in range(iterations):
+        if seed_base is not None:
+            random.seed(seed_base + it * 9973)
+            np.random.seed((seed_base + it * 9973) & 0xFFFFFFFF)
         nb_joueurs = 1 + len(persos_autres)
         noms_joueurs = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
         idx_joueur_teste = random.randrange(nb_joueurs)
@@ -158,40 +218,62 @@ def calculWinrate(combinaison, objets_autres_joueurs, perso_joueur, persos_autre
 
 # --- Choix d'objet par l'IA pendant le draft ---
 def choisirObjet(i, objets_joueurs, mains_joueurs, personnages_assigner, log):
-    """Évalue les objets dans la main et retourne le meilleur selon calculWinrate."""
-    joueur_index = i
-    main_actuelle = mains_joueurs[joueur_index]
-    if not main_actuelle: return None
+    """Choisit un objet dans la main :
+    - picks 1 a MC_PICKS_A_PARTIR_DE : priors (winrate objet + synergie perso), quasi gratuit ;
+    - derniers picks : Monte-Carlo a graines communes sur les MC_NB_CANDIDATS meilleurs candidats."""
+    main_actuelle = mains_joueurs[i]
+    if not main_actuelle:
+        return None
+    perso_instance_joueur = personnages_assigner[i]
+    priors = _charger_priors()
 
-    objets_actuels_joueur = objets_joueurs[joueur_index]
-    perso_instance_joueur = personnages_assigner[joueur_index]
-    persos_autres = [personnages_assigner[j] for j in range(len(objets_joueurs)) if j != joueur_index]
-    autres_builds = [objets_joueurs[j] for j in range(len(objets_joueurs)) if j != joueur_index]
+    if priors is not None:
+        scores = {objet.nom: score_pick(objet, perso_instance_joueur, priors) for objet in main_actuelle}
+        candidats = sorted(main_actuelle, key=lambda o: scores[o.nom], reverse=True)
+        if log:
+            print(f"  Priors pour {perso_instance_joueur.nom}: " +
+                  ", ".join(f"{o.nom}={scores[o.nom]*100:.1f}" for o in candidats))
+        if len(objets_joueurs[i]) < MC_PICKS_A_PARTIR_DE:
+            if log: print(f"  -> Choix au prior: {candidats[0].nom}")
+            return candidats[0]
+        candidats = candidats[:MC_NB_CANDIDATS]
+    else:
+        candidats = list(main_actuelle)  # pas de priors : Monte-Carlo sur toute la main (mode degrade)
 
-    meilleur_objet_instance = None
-    meilleur_winrate = -1.0 # Utiliser float pour comparaison
+    # Monte-Carlo avec graines communes : tous les candidats sont evalues sur les memes parties
+    objets_actuels_joueur = objets_joueurs[i]
+    persos_autres = [personnages_assigner[j] for j in range(len(objets_joueurs)) if j != i]
+    autres_builds = [objets_joueurs[j] for j in range(len(objets_joueurs)) if j != i]
 
-    # Préparer objets pour simulation (une seule fois)
-    main_reparee = list(main_actuelle); [o.repare() for o in main_reparee]
     objets_actuels_repares = list(objets_actuels_joueur); [o.repare() for o in objets_actuels_repares]
     autres_builds_repares = [[o for o in build] for build in autres_builds]
     for build in autres_builds_repares: [o.repare() for o in build]
 
-    if log: print(f"  Évaluation pour {perso_instance_joueur.nom}:")
-    for objet_test in main_reparee:
+    # on sauvegarde l'etat RNG : les evaluations seedees ne doivent pas derailler le flux du draft
+    etat_rnd = random.getstate()
+    etat_np = np.random.get_state()
+    seed_base = random.randrange(2**31)
+
+    meilleur_objet = None
+    meilleur_winrate = -1.0
+    if log: print(f"  Évaluation Monte-Carlo pour {perso_instance_joueur.nom}:")
+    for objet_test in candidats:
+        objet_test.repare()
         combinaison_test = objets_actuels_repares + [objet_test]
-        winrate = calculWinrate(combinaison_test, autres_builds_repares, perso_instance_joueur, persos_autres)
+        winrate = calculWinrate(combinaison_test, autres_builds_repares, perso_instance_joueur,
+                                persos_autres, seed_base=seed_base)
         if log: print(f"    -> Test {objet_test.nom}: {winrate:.2f}")
         if winrate > meilleur_winrate:
             meilleur_winrate = winrate
-            meilleur_objet_instance = next((o for o in main_actuelle if o.nom == objet_test.nom), None)
+            meilleur_objet = objet_test
 
-    if meilleur_objet_instance is None and main_actuelle:
-        # Fallback : prendre le 1er objet de la main si aucun WR positif trouvé
-        meilleur_objet_instance = main_actuelle[0]
-        if log: print(f"    -> Fallback (aucun WR>0): choix de {meilleur_objet_instance.nom}")
+    random.setstate(etat_rnd)
+    np.random.set_state(etat_np)
 
-    return meilleur_objet_instance
+    if meilleur_objet is None and main_actuelle:
+        meilleur_objet = main_actuelle[0]
+        if log: print(f"    -> Fallback: choix de {meilleur_objet.nom}")
+    return meilleur_objet
 
 
 # --- Simulation d'un draft complet ---
@@ -269,9 +351,77 @@ def jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs_listes, personn
     return vainqueur, joueurs_finaux
 
 
+# --- Worker multiprocessing : un batch de drafts complets ---
+def _draft_batch(args):
+    """Enchaine nb_drafts drafts complets (phase de picks + parties d'evaluation)
+    et retourne des compteurs agreges, fusionnes ensuite par le parent."""
+    nb_drafts, nb_games, seed = args
+    random.seed(seed)
+    np.random.seed(seed & 0xFFFFFFFF)
+    _charger_priors()  # depuis le cache disque (calcule par le parent avant le Pool)
+    item_stats = {}
+    perso_stats = {}
+    drafts_faits = 0
+
+    for _ in range(nb_drafts):
+        nb_joueurs = random.choice([3, 4])
+        noms = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
+        if len(persos_disponibles) < nb_joueurs:
+            continue
+        persos = random.sample(persos_disponibles, nb_joueurs)
+
+        resultat_draft = draftGame(noms, persos, False)
+        if resultat_draft is None:
+            continue
+        objets_draft, objets_pris, objets_dispo_local, _, builds = resultat_draft
+        drafts_faits += 1
+
+        for obj in objets_draft:
+            ensure_item_stats_entry(obj.nom, item_stats); item_stats[obj.nom]['draft'] += 1
+        for obj in objets_pris:
+            ensure_item_stats_entry(obj.nom, item_stats); item_stats[obj.nom]['pick'] += 1
+
+        for _ in range(nb_games):
+            vainqueur, joueurs_apres = jouerLaGame(objets_dispo_local, noms, builds, persos, False)
+            if joueurs_apres is None:
+                continue
+            nom_vainqueur = getattr(vainqueur, 'nom', None)
+            for j_final in joueurs_apres:
+                is_win = (j_final.nom == nom_vainqueur)
+                is_dead = not j_final.vivant
+                fled = j_final.fuite_reussie
+                cleared = j_final.dans_le_dj
+                perso_nom = getattr(j_final, 'personnage_nom', 'Inconnu')
+
+                # Stats Perso
+                ensure_perso_stats_entry(perso_nom, perso_stats)
+                stats_p = perso_stats[perso_nom]
+                stats_p['played'] += 1
+                if is_dead: stats_p['death'] += 1
+                elif fled: stats_p['fled'] += 1
+                elif cleared: stats_p['cleared'] += 1
+                if is_win: stats_p['win'] += 1
+
+                # Stats Objets
+                for obj in j_final.objets_initiaux:
+                    ensure_item_stats_entry(obj.nom, item_stats)
+                    stats_i = item_stats[obj.nom]
+                    stats_i['played'] += 1
+                    if is_dead: stats_i['death'] += 1
+                    elif fled: stats_i['fled'] += 1
+                    elif cleared: stats_i['cleared'] += 1
+                    if is_win: stats_i['win'] += 1
+
+    return item_stats, perso_stats, drafts_faits
+
+
 # --- Fonction Principale ---
-def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_STATS, filename=STATS_FILENAME):
-    """Lance la simulation complète des drafts et des parties associées."""
+def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_STATS,
+                   filename=STATS_FILENAME, nb_process=None):
+    """Lance la simulation complète des drafts et des parties associées (multiprocess)."""
+    if nb_process is None:
+        nb_process = max(1, (os.cpu_count() or 2) - 1)
+
     item_stats = {}
     perso_stats = {}
     start_draft = 0
@@ -289,66 +439,45 @@ def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_ST
     else:
         print("Démarrage nouvelle simulation.")
 
+    drafts_completes = start_draft
+
     if start_draft >= iter:
         print("Simulation déjà complétée.")
     else:
-        if start_draft == 0:
-            calculItemWinrateRandobuild(iter=ITERATIONS_INITIAL_RANDOM_WINRATE)
+        calculer_priors(nb_process=nb_process)
 
-        print(f"Objectif: {iter} drafts. Démarrage de {start_draft + 1}...")
-        for draft_iteration in tqdm(range(start_draft, iter), initial=start_draft, total=iter, desc="Simulation drafts"):
-            nb_joueurs = random.choice([3, 4])
-            noms = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
-            if len(persos_disponibles) < nb_joueurs: continue
-            persos = random.sample(persos_disponibles, nb_joueurs)
-            for p in persos: p.capacite_utilisee = False
-            
-            resultat_draft = draftGame(noms, persos, False)
-            if resultat_draft is None: continue
-            objets_draft, objets_pris, objets_dispo_local, _, builds = resultat_draft
+        restant = iter - start_draft
+        # petits batches de drafts pour une progression/sauvegarde regulieres
+        drafts_par_batch = max(1, min(5, restant // (nb_process * 4) if nb_process > 1 else restant))
+        travaux = []
+        attribues = 0
+        while attribues < restant:
+            n = min(drafts_par_batch, restant - attribues)
+            travaux.append((n, nb_games, random.randrange(2**31)))
+            attribues += n
 
-            for obj in objets_draft: ensure_item_stats_entry(obj.nom, item_stats); item_stats[obj.nom]['draft'] += 1
-            for obj in objets_pris: ensure_item_stats_entry(obj.nom, item_stats); item_stats[obj.nom]['pick'] += 1
+        def integrer(resultat):
+            nonlocal drafts_completes
+            so, sp, faits = resultat
+            _fusionner_stats(item_stats, so)
+            _fusionner_stats(perso_stats, sp)
+            drafts_completes += faits
+            save_data = {"drafts_completed": drafts_completes, "item_stats": item_stats, "perso_stats": perso_stats}
+            try:
+                with open(filename, "w", encoding='utf-8') as f:
+                    json.dump(save_data, f, indent=4, ensure_ascii=False)
+            except IOError as e:
+                print(f"\nERREUR sauvegarde: {e}")
 
-            objets_dispo_simu = list(objets_dispo_local)
-            for _ in range(nb_games):
-                vainqueur, joueurs_apres = jouerLaGame(objets_dispo_simu, noms, builds, persos, False)
-                if joueurs_apres is None: continue
-
-                nom_vainqueur = getattr(vainqueur, 'nom', None)
-                for j_final in joueurs_apres:
-                    is_win = (j_final.nom == nom_vainqueur)
-                    is_dead = not j_final.vivant
-                    fled = j_final.fuite_reussie
-                    cleared = j_final.dans_le_dj
-                    perso_nom = getattr(j_final, 'personnage_nom', 'Inconnu')
-
-                    # Stats Perso
-                    ensure_perso_stats_entry(perso_nom, perso_stats)
-                    stats_p = perso_stats[perso_nom]
-                    stats_p['played'] += 1
-                    if is_dead: stats_p['death'] += 1
-                    elif fled: stats_p['fled'] += 1
-                    elif cleared: stats_p['cleared'] += 1
-                    if is_win: stats_p['win'] += 1
-
-                    # Stats Objets
-                    for obj in j_final.objets_initiaux:
-                        ensure_item_stats_entry(obj.nom, item_stats)
-                        stats_i = item_stats[obj.nom]
-                        stats_i['played'] += 1
-                        if is_dead: stats_i['death'] += 1
-                        elif fled: stats_i['fled'] += 1
-                        elif cleared: stats_i['cleared'] += 1
-                        if is_win: stats_i['win'] += 1
-
-            # Sauvegarde
-            num_draft_actuel = draft_iteration + 1
-            if num_draft_actuel % SAVE_INTERVAL == 0 or num_draft_actuel == iter:
-                 save_data = {"drafts_completed": num_draft_actuel, "item_stats": item_stats, "perso_stats": perso_stats}
-                 try:
-                     with open(filename, "w", encoding='utf-8') as f: json.dump(save_data, f, indent=4, ensure_ascii=False)
-                 except IOError as e: print(f"\nERREUR sauvegarde: {e}")
+        print(f"Objectif: {iter} drafts ({nb_games} parties d'évaluation chacun), {nb_process} process. Démarrage de {start_draft + 1}...")
+        if nb_process > 1:
+            with multiprocessing.Pool(nb_process) as pool:
+                for resultat in tqdm(pool.imap_unordered(_draft_batch, travaux),
+                                     total=len(travaux), desc="Simulation drafts"):
+                    integrer(resultat)
+        else:
+            for travail in tqdm(travaux, desc="Simulation drafts"):
+                integrer(_draft_batch(travail))
 
     # --- Calcul et Affichage final ---
     print("\nCalcul stats finales...")
@@ -401,7 +530,7 @@ def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_ST
     for s in sorted_persos: print(f"{s['Personnage']:<20} {s['Played']:<10} {s['Win%']:<8.2f} {s['Death%']:<8.2f} {s['Fled%']:<8.2f} {s['Clear%']:<8.2f}")
     print("-" * 70)
 
-    print(f"\nStats finales basées sur {iter if start_draft >= iter else start_draft} drafts complétés.")
+    print(f"\nStats finales basées sur {drafts_completes} drafts complétés.")
     print(f"Données sauvegardées dans {filename}")
 
 # --- Lancement ---
@@ -428,19 +557,20 @@ if __name__ == "__main__":
         if len(persos_disponibles) < nb_joueurs_test:
             print(f"ERREUR: Pas assez de personnages disponibles ({len(persos_disponibles)}) pour {nb_joueurs_test} joueurs.")
         else:
-            # 3. Assigner des personnages aléatoirement
+            # 3. S'assurer que les priors de pick existent
+            calculer_priors()
+
+            # 4. Assigner des personnages aléatoirement
             persos_test = random.sample(persos_disponibles, nb_joueurs_test)
             print(f"Joueurs et Personnages pour ce draft:")
             for nom, perso in zip(noms_test, persos_test):
                 print(f"- {nom}: {perso.nom}")
             print("-" * 30)
 
-            # 4. Appeler draftGame avec log=True
-            # Optionnel: Précalculer les WR initiaux si besoin pour le choix IA
-            # calculItemWinrateRandobuild(iter=500) # Iter plus faible pour un seul run
+            # 5. Appeler draftGame avec log=True
             resultat_draft_test = draftGame(noms_test, persos_test, log=True)
 
-            # 5. Afficher le résultat du draft (optionnel)
+            # 6. Afficher le résultat du draft
             if resultat_draft_test:
                 objets_dans_le_draft, objets_pris_joueurs, objets_disponibles_retour, _, objets_joueurs_finaux = resultat_draft_test
                 print("\n--- Résultat du Draft ---")
@@ -463,6 +593,5 @@ if __name__ == "__main__":
 
     else:
         # --- MODE : Simulation Complète (Comportement par défaut) ---
-        print("\nMode : Lancement de la simulation complète (aucun argument ou argument non reconnu)...")
-        # L'appel original qui lance toutes les simulations
+        print("\nMode : Lancement de la simulation complète...")
         simudraftgames()

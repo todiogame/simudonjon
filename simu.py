@@ -2,10 +2,11 @@ import random
 import numpy as np
 
 from objets import *
+from objets import SANS_HOOK_OBJET
 from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
 from heros import *
-from heros import persos_disponibles
+from heros import persos_disponibles, SANS_HOOK_PERSO
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     # arreter la simulation si on a un objet casse dans une main
     for j in joueurs:
@@ -14,13 +15,29 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
     log_details = []
     nb_joueurs = len(joueurs)
-    
+
+    # tables de dispatch : pour chaque hook, les classes qui ne l'implementent pas
+    # (on saute les appels no-op ; le filtre est par classe et applique a chaque
+    # iteration sur joueur.objets, donc les objets pioches en cours de partie sont couverts)
+    O_RENC = SANS_HOOK_OBJET['en_rencontre']; O_RENC_EV = SANS_HOOK_OBJET['en_rencontre_event']
+    O_VAINCU = SANS_HOOK_OBJET['en_vaincu']; O_SUBIT = SANS_HOOK_OBJET['en_subit_dommages']
+    O_COMBAT = SANS_HOOK_OBJET['en_combat']; O_SURVIE = SANS_HOOK_OBJET['en_survie']
+    O_MORT = SANS_HOOK_OBJET['en_mort']; O_FUITE = SANS_HOOK_OBJET['en_fuite']
+    O_FUITE_DEF = SANS_HOOK_OBJET['en_fuite_definitive']
+    O_DEBUT = SANS_HOOK_OBJET['debut_tour']; O_FIN = SANS_HOOK_OBJET['fin_tour']
+    P_RENC = SANS_HOOK_PERSO['en_rencontre']; P_SUBIT = SANS_HOOK_PERSO['en_subit_dommages']
+    P_VAINCU = SANS_HOOK_PERSO['en_vaincu']; P_COMBAT = SANS_HOOK_PERSO['en_combat']
+    P_COMBAT_LATE = SANS_HOOK_PERSO['en_combat_late']; P_SURVIE = SANS_HOOK_PERSO['en_survie']
+    P_FUITE = SANS_HOOK_PERSO['en_fuite']
+    P_DEBUT = SANS_HOOK_PERSO['debut_tour']; P_FIN = SANS_HOOK_PERSO['fin_tour']
+
     donjon.melange()
     class Jeu:
         defausse = []
         tour = 0
         execute_next_monster = False
         traquenard_actif = False
+        traquenard_paye = False
         kraken_vu = False
         donjon
     Jeu.joueurs = joueurs
@@ -32,6 +49,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     
     for j in joueurs:
         j.trier_objets_par_priorite()
+        j.perso_obj.debut_partie(j, Jeu, log_details)  # reset aussi l'etat une-fois-par-partie du perso
         for objet in j.objets:
             objet.debut_partie(j, Jeu, log_details)
     
@@ -65,7 +83,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
         joueur = joueurs[index_joueur]
 
-        log_details.append(f"Tour de {joueur.nom} ({joueur.perso_obj.nom}), {joueur.pv_total}PV, {len(joueur.pile_monstres_vaincus)}MV {',qui rejoue' if joueur.rejoue else ''}")
+        if log:
+            log_details.append(f"Tour de {joueur.nom} ({joueur.perso_obj.nom}), {joueur.pv_total}PV, {len(joueur.pile_monstres_vaincus)}MV {',qui rejoue' if joueur.rejoue else ''}")
         
         # trigger de debut de tour
         # reset AVANT les triggers, pour qu'un effet de debut de tour puisse poser rejoue (ex: Bonne vieille guinze)
@@ -75,11 +94,27 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             j.doit_passer = False
             j.reset_monstres_ajoutes()  # Réinitialise le compteur de monstres ajoutés pour chaque joueur
         if not rejoue_precedent:
-            if hasattr(joueur, 'perso_obj'):
+            if hasattr(joueur, 'perso_obj') and type(joueur.perso_obj) not in P_DEBUT:
                 joueur.perso_obj.debut_tour(joueur, Jeu, log_details)
-            for objet in list(joueur.objets):  # copie: certains objets se retirent de la liste (Gants de Gaïa)
+            # comprehension = copie filtree: certains objets se retirent de la liste (Gants de Gaïa)
+            for objet in [o for o in joueur.objets if type(o) not in O_DEBUT]:
                 objet.debut_tour(joueur, Jeu, log_details)
-        
+
+        # des effets de debut de tour peuvent vider le Donjon (Tricheur...)
+        if Jeu.donjon.vide:
+            log_details.append("Le Donjon est vide. Fin de la partie.")
+            break
+
+        # saut de tour complet (Lapin Blanc) : pas de pioche ce tour-ci
+        if joueur.passe_son_tour:
+            joueur.passe_son_tour = False
+            joueur.tour += 1
+            log_details.append(f"{joueur.nom} saute son tour sans piocher.\n")
+            index_joueur += 1
+            if index_joueur >= nb_joueurs:
+                index_joueur = 0
+            continue
+
         # Le joueur pioche une carte
         carte = donjon.prochaine_carte()
         if carte is None:
@@ -96,16 +131,21 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         if joueur.deciderDeFuir(Jeu, log_details):
             # Tentative de fuite
             joueur.jet_fuite = joueur.rollDice(Jeu, log_details) + joueur.calculer_modificateurs()
-            log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
+            if log:
+                log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
             joueur.jet_fuite_lance = True
-            #use items en_fuite
+            #use perso et items en_fuite
+            if type(joueur.perso_obj) not in P_FUITE:
+                joueur.perso_obj.en_fuite(joueur, Jeu, log_details)
             for objet in joueur.objets:
-                objet.en_fuite(joueur, Jeu, log_details)
+                if type(objet) not in O_FUITE:
+                    objet.en_fuite(joueur, Jeu, log_details)
             
 
 
 
-        log_details.append(f"tour {joueur.tour}. {joueur.nom} ({joueur.perso_obj.nom}) a pioché {carte.titre}.")
+        if log:
+            log_details.append(f"tour {joueur.tour}. {joueur.nom} ({joueur.perso_obj.nom}) a pioché {carte.titre}.")
         effet_carte = carte.effet
         carte_ignoree = False
         if isinstance(carte, CarteEvent):
@@ -113,7 +153,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             Jeu.traquenard_actif = False
             for joueur_proprietaire in Jeu.joueurs:
                 for objet in joueur_proprietaire.objets:
-                    objet.en_rencontre_event(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                    if type(objet) not in O_RENC_EV:
+                        objet.en_rencontre_event(joueur_proprietaire, joueur, carte, Jeu, log_details)
             
             if effet_carte == "INCEPTION":
                 event_defausse = [c for c in Jeu.defausse if getattr(c, 'event', False)]
@@ -132,13 +173,23 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         log_details.append(f"{autre_joueur.nom} gagne 2 PV grâce à {carte.titre}. PV restant: {autre_joueur.pv_total}")
 
             if effet_carte == "REPAIR":
+                # Bricoleur: defausser un monstre pour reparer un objet brise
                 objets_brisés = [objet for objet in joueur.objets if not objet.intact]
-                if objets_brisés:
-                    objet_reparé = random.choice(objets_brisés)
+                gratuit = getattr(joueur.perso_obj, 'ignore_cout_evenements', False)
+                monstres_defaussables = [m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet)]
+                if objets_brisés and (gratuit or monstres_defaussables):
+                    if gratuit:
+                        log_details.append(f"{joueur.nom} ({joueur.perso_obj.nom}) ne défausse pas de monstre pour {carte.titre}.")
+                    else:
+                        monstre_defausse = min(monstres_defaussables, key=lambda m: m.puissance)
+                        joueur.pile_monstres_vaincus.remove(monstre_defausse)
+                        Jeu.defausse.append(monstre_defausse)
+                        log_details.append(f"{joueur.nom} défausse {monstre_defausse.titre} pour {carte.titre}.")
+                    objet_reparé = max(objets_brisés, key=lambda o: o.pv_bonus)
                     objet_reparé.repare()
                     joueur.pv_total += objet_reparé.pv_bonus
                     log_details.append(f"Réparé {objet_reparé.nom} grâce à {carte.titre}. PV total augmenté de {objet_reparé.pv_bonus}, PV restant: {joueur.pv_total}")
-                else: log_details.append(f"{carte.titre} n'a' rien a reparer.")
+                else: log_details.append(f"{carte.titre} n'a rien a reparer (ou pas de monstre a defausser).")
 
             if effet_carte == "ALLY":
                 Jeu.execute_next_monster = True
@@ -147,24 +198,37 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             if effet_carte == "TRAP":
                 Jeu.traquenard_actif = True
                 Jeu.execute_next_monster = False
-                log_details.append(f"L'effet {carte.titre} est actif. La prochaine carte monstre Ne peut PAS être exécutée.")
+                log_details.append(f"L'effet {carte.titre} est actif. Exécuter la prochaine carte monstre coûtera 3 PV.")
 
             if effet_carte == "INJECTION":
-                golem_count = sum(1 for monstre in joueur.pile_monstres_vaincus if "Golem" in monstre.types)
-                if golem_count > 0:
-                    joueur.pv_total += 2 * golem_count
-                    log_details.append(f"Gagnez {2 * golem_count} PV grâce à {carte.titre} (2 PV pour chaque Golem). PV restant: {joueur.pv_total}")
-                else:
+                # Tous les joueurs gagnent 2 PV par Golem dans leur pile
+                injection_effective = False
+                for j_dj in [j for j in joueurs if j.dans_le_dj]:
+                    golem_count = sum(1 for monstre in j_dj.pile_monstres_vaincus if "Golem" in monstre.types)
+                    if golem_count > 0:
+                        injection_effective = True
+                        j_dj.pv_total += 2 * golem_count
+                        log_details.append(f"{j_dj.nom} gagne {2 * golem_count} PV grâce à {carte.titre} (2 PV pour chaque Golem). PV restant: {j_dj.pv_total}")
+                if not injection_effective:
                     log_details.append(f"{carte.titre} ne fait rien.")
                     
             if effet_carte == "FORTUNE_WHEEL":
-                jet_wheel = joueur.rollDice(Jeu, log_details, 2)
-                joueur.pv_total += jet_wheel
-                log_details.append(f"{joueur.nom} a gagné {jet_wheel} PV grâce à {carte.titre}. PV: {joueur.pv_total}")
-                if jet_wheel == 1:
-                    objet_casse_wheel = joueur.decideBriseObjet(Jeu, log_details)
-                    if objet_casse_wheel:
-                        log_details.append(f"{carte.titre} brise {objet_casse_wheel.nom}.")
+                # Roue de l'infortune: defausser un monstre pour lancer le de et gagner autant de PV
+                gratuit = getattr(joueur.perso_obj, 'ignore_cout_evenements', False)
+                monstres_defaussables = [m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet)]
+                if gratuit or (monstres_defaussables and joueur.pv_total <= 6):  # IA: paye 1 PV de score si les PV sont bas
+                    if gratuit:
+                        log_details.append(f"{joueur.nom} ({joueur.perso_obj.nom}) ne défausse pas de monstre pour {carte.titre}.")
+                    else:
+                        monstre_defausse = min(monstres_defaussables, key=lambda m: m.puissance)
+                        joueur.pile_monstres_vaincus.remove(monstre_defausse)
+                        Jeu.defausse.append(monstre_defausse)
+                        log_details.append(f"{joueur.nom} défausse {monstre_defausse.titre} pour {carte.titre}.")
+                    jet_wheel = joueur.rollDice(Jeu, log_details)
+                    joueur.pv_total += jet_wheel
+                    log_details.append(f"{joueur.nom} a gagné {jet_wheel} PV grâce à {carte.titre}. PV: {joueur.pv_total}")
+                else:
+                    log_details.append(f"{joueur.nom} n'utilise pas {carte.titre}.")
             
             if effet_carte == "SOULSTORM":
                 for autre_joueur in joueurs:
@@ -210,7 +274,20 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     else:
                         log_details.append(f"Pas d'objet disponible pour {joueur.nom} à piocher.")
                 else:
-                    log_details.append(f"{joueur.nom} a {len(objets_intacts)} objets intacts, il n'en pioche pas.")
+                    # Sinon: peut defausser un objet intact pour en repiocher un
+                    # IA: echange l'objet intact le moins prioritaire (sans sacrifier de gros PV bonus)
+                    objets_echangeables = [o for o in objets_intacts if o.pv_bonus <= 2]
+                    if objets_echangeables and len(Jeu.objets_dispo):
+                        objet_jete = min(objets_echangeables, key=lambda o: o.priorite)
+                        joueur.objets.remove(objet_jete)
+                        joueur.pv_total -= objet_jete.pv_bonus
+                        log_details.append(f"{joueur.nom} défausse {objet_jete.nom} grâce à {carte.titre} pour repiocher un objet.")
+                        nouvel_objet = random.choice(Jeu.objets_dispo)
+                        Jeu.objets_dispo.remove(nouvel_objet)
+                        joueur.ajouter_objet(nouvel_objet)
+                        log_details.append(f"{joueur.nom} pioche un nouvel objet: {nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV.")
+                    else:
+                        log_details.append(f"{joueur.nom} a {len(objets_intacts)} objets intacts, il n'en pioche pas.")
 
             # Le joueur rejoue
             Jeu.defausse.append(carte)
@@ -288,16 +365,18 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 carte.dommages += 2  # Ajouter 2 dommages supplémentaires pour Chevaucheur de rat
                 log_details.append(f"{carte.titre} inflige 2 dommages supplémentaires.")
             if effet_carte == "LORD" and joueur.medailles > 0:
-                carte.dommages += 4 * joueur.medailles
-                log_details.append(f"Rencontré {carte.titre}, inflige +4 dommages par médaille, total {carte.dommages}.")
+                carte.dommages += 2 * joueur.medailles
+                log_details.append(f"Rencontré {carte.titre}, inflige +2 dommages par médaille, total {carte.dommages}.")
 
             
             #use items en_rencontre
             for joueur_proprietaire in Jeu.joueurs:
-                joueur_proprietaire.perso_obj.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                if type(joueur_proprietaire.perso_obj) not in P_RENC:
+                    joueur_proprietaire.perso_obj.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
 
                 for objet in joueur_proprietaire.objets:
-                    objet.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                    if type(objet) not in O_RENC:
+                        objet.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
                 
 
             if joueur.jet_fuite_lance: 
@@ -309,7 +388,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     joueur.jet_fuite_lance = False
                     for joueur_proprietaire in Jeu.joueurs:
                         for objet in joueur_proprietaire.objets:
-                            objet.en_fuite_definitive(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                            if type(objet) not in O_FUITE_DEF:
+                                objet.en_fuite_definitive(joueur_proprietaire, joueur, carte, Jeu, log_details)
                     continue
                 else:
                     # Fuite échouée, affronter le monstre normalement
@@ -354,20 +434,36 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 
                 #use items
                 if not carte_ignoree:
-                    joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
-                    for objet in list(joueur.objets):  # copie: certains objets se retirent de la liste (Hache de Glace)
-                        if carte.executed:  # deja execute (par le perso ou un objet precedent), ne pas re-executer
+                    # Traquenard rework: on PEUT executer le monstre, mais ca coute 3 PV.
+                    # L'IA accepte de payer si le monstre fait assez mal et qu'elle survivra au cout.
+                    Jeu.traquenard_paye = False
+                    if Jeu.traquenard_actif and joueur.pv_total > 4 and carte.dommages > 3:
+                        Jeu.traquenard_actif = False
+                        Jeu.traquenard_paye = True
+                        log_details.append(f"{joueur.nom} est prêt à payer 3 PV pour exécuter {carte.titre} malgré le Traquenard.")
+                    if type(joueur.perso_obj) not in P_COMBAT:
+                        joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
+                    # comprehension = copie filtree: certains objets se retirent de la liste (Hache de Glace).
+                    # Chaque objet decide via ses rules/worthit ; on ne s'arrete que si le monstre
+                    # est execute ou si le joueur a fui (l'ancien break a dommages<=0 empechait
+                    # d'executer les monstres a 0 dommages comme la Fee des que le 1er objet etait inerte).
+                    for objet in [o for o in joueur.objets if type(o) not in O_COMBAT]:
+                        if carte.executed or joueur.fuite_reussie:
                             break
                         objet.en_combat(joueur, carte, Jeu, log_details)
-                        if carte.executed or (carte.dommages <= 0 and not effet_carte == "LIMON") or joueur.fuite_reussie:
-                            break
                     if(not joueur.dans_le_dj):
                         # mort/fuite en plein combat : la carte ne retourne sur le Donjon
                         # que si elle n'a pas deja ete executee (sinon elle est deja dans une pile/defausse)
                         if not carte.executed:
                             donjon.rajoute_en_haut_de_la_pile(carte)
                         continue
-                    joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
+                    if type(joueur.perso_obj) not in P_COMBAT_LATE:
+                        joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
+                    if Jeu.traquenard_paye:
+                        if carte.executed:
+                            joueur.pv_total -= 3
+                            log_details.append(f"{joueur.nom} perd 3 PV pour avoir exécuté {carte.titre} malgré le Traquenard. PV restant: {joueur.pv_total}")
+                        Jeu.traquenard_paye = False
                 
             if not carte_ignoree and not carte.executed:
                 Jeu.traquenard_actif = False
@@ -388,12 +484,15 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     if objet_avale:
                         log_details.append(f"Le {carte.titre} avale {objet_avale.nom}.")
             
-                log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
-                
+                if log:
+                    log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
+
                 for joueur_proprietaire in Jeu.joueurs:
-                    joueur_proprietaire.perso_obj.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                    if type(joueur_proprietaire.perso_obj) not in P_SUBIT:
+                        joueur_proprietaire.perso_obj.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
                     for objet in joueur_proprietaire.objets:
-                        objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                        if type(objet) not in O_SUBIT:
+                            objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
                         
                 if effet_carte and "ARRA" in effet_carte and carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0 and joueur.pv_total > 0:
                     # fix hard du miroir il ne copie pas l'arracheur sinon ca boucle infinie...
@@ -414,11 +513,22 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 carte.types = []
 
             if joueur.pv_total <= 0:
-                #use items survie
-                for objet in joueur.objets:
-                    objet.en_survie(joueur, carte, Jeu, log_details)
-                    if joueur.pv_total > 0:
-                        break
+                #use perso et items survie
+                if type(joueur.perso_obj) not in P_SURVIE:
+                    joueur.perso_obj.en_survie(joueur, carte, Jeu, log_details)
+                if joueur.pv_total <= 0:
+                    for objet in joueur.objets:
+                        if type(objet) in O_SURVIE:
+                            continue
+                        objet.en_survie(joueur, carte, Jeu, log_details)
+                        if joueur.pv_total > 0:
+                            break
+                # une carte deja en defausse (MAUDIT, executee-et-defaussee par un objet comme
+                # Cape vaudou) ou remise au Donjon (Tentacule du Kraken...) ne doit pas etre
+                # dupliquee dans la pile par survit()
+                if carte in joueur.pile_monstres_vaincus:
+                    if carte in Jeu.defausse or carte.index in Jeu.donjon.ordre[Jeu.donjon.index:]:
+                        joueur.pile_monstres_vaincus.remove(carte)
             # drop Egide
             if not carte_ignoree and effet_carte == "GUARDIAN_ANGEL":
                 log_details.append(f"{joueur.nom} recoit l'Egide !")
@@ -431,11 +541,14 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 
                 for joueur_proprietaire in Jeu.joueurs:
                     for objet in joueur_proprietaire.objets:
-                        objet.en_mort(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                        if type(objet) not in O_MORT:
+                            objet.en_mort(joueur_proprietaire, joueur, carte, Jeu, log_details)
 
                 # la carte ne retourne sur le Donjon que si elle n'est pas deja ailleurs
-                # (MAUDIT -> defausse, executee -> pile du joueur)
-                if not carte.executed and effet_carte != "MAUDIT":
+                # (MAUDIT -> defausse, executee/vaincue avant la mort -> pile du joueur,
+                #  ex: LIMON vaincu a 0 dommages puis mort en perdant les PV de l'objet brise,
+                #  carte_ignoree -> Kraken deja remis sous le donjon / Ange Gardien deja defausse)
+                if not carte.executed and not carte_ignoree and effet_carte != "MAUDIT" and carte not in joueur.pile_monstres_vaincus:
                     donjon.rajoute_en_haut_de_la_pile(carte)
                 index_joueur += 1
                 if index_joueur >= nb_joueurs:
@@ -444,10 +557,12 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             
             #use items en_vaincu
             if not carte_ignoree:
-                joueur.perso_obj.en_vaincu(joueur, joueur, carte, Jeu, log_details) #opti, que le savant fou
+                if type(joueur.perso_obj) not in P_VAINCU:
+                    joueur.perso_obj.en_vaincu(joueur, joueur, carte, Jeu, log_details) #opti, que le savant fou
                 for joueur_proprietaire in Jeu.joueurs:
                     for objet in joueur_proprietaire.objets:
-                        objet.en_vaincu(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                        if type(objet) not in O_VAINCU:
+                            objet.en_vaincu(joueur_proprietaire, joueur, carte, Jeu, log_details)
             
             if joueur.rejoue or joueur.doit_passer:
                 log_details.append(f"{joueur.nom} {'doit' if joueur.rejoue else 'ne doit pas'} rejouer et {'doit' if joueur.doit_passer else 'ne doit pas'} passer")
@@ -456,13 +571,17 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             #TODO: forcer la passe avec joueur.doit_passer, actuellement tlm passe sans se poser de question
             #probleme avec le scaphandre qui spam passe
             if joueur.dans_le_dj and (not joueur.rejoue and not Jeu.execute_next_monster):
-                # il passe : sequence objets fin du tour
+                # il passe : sequence perso et objets fin du tour
+                if type(joueur.perso_obj) not in P_FIN:
+                    joueur.perso_obj.fin_tour(joueur, Jeu, log_details)
                 for objet in joueur.objets:
-                    objet.fin_tour(joueur, Jeu, log_details)
+                    if type(objet) not in O_FIN:
+                        objet.fin_tour(joueur, Jeu, log_details)
                 # Passer son tour, au joueur suivant
                 joueur.tour += 1
                 if len([joueur for joueur in joueurs if joueur.dans_le_dj]) > 1:
-                    log_details.append(f"{joueur.nom} passe son tour.\n")
+                    if log:
+                        log_details.append(f"{joueur.nom} passe son tour.\n")
                     index_joueur += 1
                     if index_joueur >= nb_joueurs:
                         index_joueur = 0
