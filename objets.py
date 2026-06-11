@@ -122,7 +122,7 @@ class Objet:
         if self.intact:
             self.intact = False
             for joueur_proprietaire in Jeu.joueurs:
-                for objet in joueur_proprietaire.objets:
+                for objet in list(joueur_proprietaire.objets):  # copie: certains effets retirent des objets (Trou Noir Portatif)
                     objet.en_activated(joueur_proprietaire, joueur, self, Jeu, log_details)
     
     def execute(self, joueur, carte, log_details):
@@ -1383,7 +1383,7 @@ class ElixirDeChance(Objet):
         self.gagnePV(3, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
     def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, Jeu, log_details):
-        if self.intact and (jet < jet_voulu and not reversed) or (jet > jet_voulu and reversed):
+        if self.intact and ((jet < jet_voulu and not reversed) or (jet > jet_voulu and reversed)):
             self.gagnePV(3, joueur, log_details)
             self.destroy(joueur, Jeu, log_details)
             return 1 if reversed else 6
@@ -1457,7 +1457,7 @@ class CoffreDuRoiSorcier(Objet):
     def en_mort(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if joueur_proprietaire.dans_le_dj and not joueur.vivant and self.intact:
             log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour tenter de récupérer des objets de {joueur.nom}.")
-            for objet in joueur.objets:
+            for objet in list(joueur.objets):  # copie: on retire des objets de la liste pendant l'iteration
                 if objet.intact:
                     jet = joueur_proprietaire.rollDice(Jeu, log_details, 6)
                     if jet == 6:
@@ -1692,6 +1692,7 @@ class TentaculeDuKraken(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.gagnePV(carte.puissance, joueur, log_details)
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        Jeu.defausse.remove(carte)  # la carte retourne dans le Donjon, pas dans la defausse
         Jeu.donjon.rajoute_en_haut_de_la_pile(carte)
         Jeu.donjon.remelange()
         log_details.append(f"{joueur.nom} remet {carte.titre} dans le Donjon grâce à {self.nom}.")
@@ -1704,6 +1705,7 @@ class GrenadeSinge(Objet):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        Jeu.defausse.remove(carte)  # la carte retourne dans le Donjon, pas dans la defausse
         Jeu.donjon.rajoute_en_haut_de_la_pile(carte)
         Jeu.donjon.remelange()
         log_details.append(f"{joueur.nom} remet {carte.titre} dans le Donjon grâce à {self.nom}.")
@@ -1905,7 +1907,7 @@ class MailletDuRoiLiche(Objet):
     def __init__(self):
         super().__init__("Maillet Du Roi Liche", True, types_tags=["Golem", "Liche", "Démon"])
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and ("Golem" in carte.types or "Lich" in carte.types or "Démon" in carte.types)
+        return not Jeu.traquenard_actif and ("Golem" in carte.types or "Liche" in carte.types or "Démon" in carte.types)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         self.gagnePV(3, joueur, log_details)

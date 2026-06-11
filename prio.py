@@ -13,6 +13,7 @@ import itertools
 import json
 import shutil
 import sys
+from heros import persos_disponibles
 
 def display_simu(r=0):
         
@@ -38,14 +39,19 @@ def display_simu(r=0):
             o.priorite = priorites_objets.get(o.nom, 49.5) * (1 + random.uniform(-0.3, 0.3))
             # o.priorite = min(100, max(0, priorites_objets.get(o.nom, 49.5) + random.uniform(-20, 20)))
 
-        # Initialisation des joueurs avec des points de vie aléatoires entre 2 et 4
+        # Reset des capacites une-fois-par-partie (instances Perso partagees)
+        for p in persos_disponibles:
+            p.capacite_utilisee = False
+
+        # Initialisation des joueurs avec des personnages aléatoires
         joueurs = []
         nb_joueurs = random.choice([3, 4])
-        for nom in ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]:
+        personnages_assigner = random.sample(persos_disponibles, nb_joueurs)
+        for i, nom in enumerate(["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]):
             objets_joueur = random.sample(objets_disponibles_simu, 6)
             for objet in objets_joueur:
                 objets_disponibles_simu.remove(objet)
-            joueurs.append(Joueur(nom, random.randint(2, 4), objets_joueur))
+            joueurs.append(Joueur(nom, personnages_assigner[i], objets_joueur))
 
         # Création de la copie des joueurs et des cartes
         deck = DonjonDeck()

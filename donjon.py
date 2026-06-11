@@ -46,6 +46,7 @@ def display_simu(r=0):
         persos_disponibles_simu = list(persos_disponibles)
         for p in persos_disponibles_simu:
             p.compteur = 0
+            p.capacite_utilisee = False  # reset des capacites une-fois-par-partie (Princesse, Inventeur, Avatar...)
 
         # Initialisation des joueurs avec des perso aléatoires 
         joueurs = []

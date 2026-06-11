@@ -10,6 +10,10 @@ class CarteMonstre:
         self.executed = False
         self.dommages = 0
         self.is_X = is_X
+        # valeurs initiales pour reset a la pioche (les effets comme Potion de Glace,
+        # MIROIR ou SHAPESHIFTER mutent la carte partagee du deck)
+        self.puissance_initiale = puissance
+        self.types_initiaux = list(self.types)
 
 class CarteEvent:
     def __init__(self, titre, description, effet=None):

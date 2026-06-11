@@ -68,15 +68,17 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         log_details.append(f"Tour de {joueur.nom} ({joueur.perso_obj.nom}), {joueur.pv_total}PV, {len(joueur.pile_monstres_vaincus)}MV {',qui rejoue' if joueur.rejoue else ''}")
         
         # trigger de debut de tour
-        if not joueur.rejoue:
-            if hasattr(joueur, 'perso_obj'):
-                joueur.perso_obj.debut_tour(joueur, Jeu, log_details)
-            for objet in joueur.objets:
-                objet.debut_tour(joueur, Jeu, log_details)
+        # reset AVANT les triggers, pour qu'un effet de debut de tour puisse poser rejoue (ex: Bonne vieille guinze)
+        rejoue_precedent = joueur.rejoue
         for j in joueurs:
             j.rejoue = False
             j.doit_passer = False
             j.reset_monstres_ajoutes()  # Réinitialise le compteur de monstres ajoutés pour chaque joueur
+        if not rejoue_precedent:
+            if hasattr(joueur, 'perso_obj'):
+                joueur.perso_obj.debut_tour(joueur, Jeu, log_details)
+            for objet in list(joueur.objets):  # copie: certains objets se retirent de la liste (Gants de Gaïa)
+                objet.debut_tour(joueur, Jeu, log_details)
         
         # Le joueur pioche une carte
         carte = donjon.prochaine_carte()
@@ -85,6 +87,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             break
         if isinstance(carte, CarteMonstre):
             carte.executed = False
+            # reset l'etat de la carte partagee (Potion de Glace, MIROIR, SHAPESHIFTER...)
+            carte.puissance = carte.puissance_initiale
+            carte.types = list(carte.types_initiaux)
 
         joueur.jet_fuite_lance = False
 
@@ -232,8 +237,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     # le premier type qu'on trouve on le donne au monstre
                     for objet in joueur.objets:
                         if objet.intact and objet.types_tags:
-                            carte.types = objet.types_tags[0]
-                            log_details.append(f"Le {carte.titre} devient un {carte.types} (car {joueur.nom} a {objet.nom}.).")
+                            carte.types = [objet.types_tags[0]]
+                            log_details.append(f"Le {carte.titre} devient un {carte.types[0]} (car {joueur.nom} a {objet.nom}.).")
                             break
                             
                 if effet_carte == "SLEEPING":
@@ -350,12 +355,17 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 #use items
                 if not carte_ignoree:
                     joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
-                    for objet in joueur.objets:
+                    for objet in list(joueur.objets):  # copie: certains objets se retirent de la liste (Hache de Glace)
+                        if carte.executed:  # deja execute (par le perso ou un objet precedent), ne pas re-executer
+                            break
                         objet.en_combat(joueur, carte, Jeu, log_details)
                         if carte.executed or (carte.dommages <= 0 and not effet_carte == "LIMON") or joueur.fuite_reussie:
                             break
                     if(not joueur.dans_le_dj):
-                        donjon.rajoute_en_haut_de_la_pile(carte)
+                        # mort/fuite en plein combat : la carte ne retourne sur le Donjon
+                        # que si elle n'a pas deja ete executee (sinon elle est deja dans une pile/defausse)
+                        if not carte.executed:
+                            donjon.rajoute_en_haut_de_la_pile(carte)
                         continue
                     joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
                 
@@ -366,11 +376,13 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
 
                 #item survie ici
                 # Ne pas ajouter le Gobelin Fantôme à la pile des monstres vaincus
-                if effet_carte == "MAUDIT":  
+                if effet_carte == "MAUDIT":
                     Jeu.defausse.append(carte)
                     log_details.append(f"Le {carte.titre} disparait.")
                 else:
-                    if (joueur.vivant): joueur.ajouter_monstre_vaincu(carte)
+                    # ne garder le monstre que si on survit aux dommages
+                    # (si un objet de survie sauve le joueur, survit() ajoute la carte lui-meme)
+                    if joueur.vivant and joueur.pv_total > 0: joueur.ajouter_monstre_vaincu(carte)
                 if effet_carte == "LIMON":
                     objet_avale = joueur.decideBriseObjet(Jeu, log_details)
                     if objet_avale:
@@ -383,7 +395,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     for objet in joueur_proprietaire.objets:
                         objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
                         
-                if effet_carte and "ARRA" in effet_carte and carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0:
+                if effet_carte and "ARRA" in effet_carte and carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0 and joueur.pv_total > 0:
                     # fix hard du miroir il ne copie pas l'arracheur sinon ca boucle infinie...
                     monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
                     donjon.rajoute_en_haut_de_la_pile(monstre_remis)
@@ -420,8 +432,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 for joueur_proprietaire in Jeu.joueurs:
                     for objet in joueur_proprietaire.objets:
                         objet.en_mort(joueur_proprietaire, joueur, carte, Jeu, log_details)
-                
-                donjon.rajoute_en_haut_de_la_pile(carte)
+
+                # la carte ne retourne sur le Donjon que si elle n'est pas deja ailleurs
+                # (MAUDIT -> defausse, executee -> pile du joueur)
+                if not carte.executed and effet_carte != "MAUDIT":
+                    donjon.rajoute_en_haut_de_la_pile(carte)
                 index_joueur += 1
                 if index_joueur >= nb_joueurs:
                     index_joueur = 0
@@ -557,6 +572,11 @@ def loguer_x_parties(x=1):
 
     for i in range(x):
         print(f"\n--- Partie Test Log {i+1} ---")
+
+        # Reset des capacites une-fois-par-partie (les instances Perso sont partagees entre parties)
+        perso_test.capacite_utilisee = False
+        for p in persos_disponibles:
+            p.capacite_utilisee = False
 
         # Préparer les objets disponibles pour cette partie
         objets_pool_global = list(objets_disponibles) # Copie de la liste globale
