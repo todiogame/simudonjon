@@ -31,6 +31,34 @@ Defibrilateur en panne.
 - **Nouveaux implémentés** : Bourse garnie (PV+3, +1 PV de victoire), et grâce aux couleurs :
   **Lanterne chromatique** et **Cinq pierres de Nüwa** (retirés de la liste « écartés » ci-dessous).
 
+## IA v2 — fuite par espérance + priors self-play (12 juin 2026)
+Deux améliorations de l'IA, validées par bancs A/B à tables mixtes (nouvelle IA contre
+ancienne dans la même partie) :
+- **Politique de fuite par espérance** (`joueurs.py`, `politique_fuite = 'ev'` par défaut) :
+  « fuir ou piocher » est résolu comme un arrêt optimal par DP sur la composition exacte
+  du Donjon restant (profil par carte : dégâts attendus, puissance de fuite, gain, les X
+  anticipés comme à la rencontre). La létalité est évaluée aux PV actuels (pas de
+  trajectoire projetée), les objets actifs de combat/survie neutralisent une fraction des
+  cartes mortelles (`EFFICACITE_OPTION`), et la valeur d'un score verrouillé en fuyant est
+  pondérée par la position face au meilleur adversaire projeté (en retard → on gamble, en
+  tête → on verrouille). Mourir coûte score×poids + `VALEUR_MEDAILLE_PTS` + `VALEUR_SURVIE_PTS`.
+  Remplace `pv_min_fuite = randint(2,7)` et le seuil 0,25 (conservés dans
+  `_decision_fuite_seuils` pour comparaison). **Résultats** : +4,4 points de winrate de
+  manche (30,6 % vs 26,2 %), +3,7 points de winrate de soirée (30,4 % vs 26,7 %), pour
+  +56 % de temps par partie (filtres rapides avant le profilage du deck, cf. `timing_ia.py`).
+  Bancs : `bench_fuite.py` (manche), `bench_party.py` (soirée), `sweep_fuite.py` (constantes).
+- **Priors de pick en self-play itéré** (`python draft.py priors`) : itération 1 sur builds
+  aléatoires (comme avant), puis 2 itérations où l'IA drafte avec les priors précédents
+  (ε=0,15 d'exploration) et on remesure. Corrige le biais « valeur d'un objet quand tout
+  le monde joue au hasard ». **Résultats** : +5,1 points de winrate de manche à draft mixte
+  (30,2 % vs 25,2 %). Banc : `bench_priors.py` (anciens priors sauvegardés dans
+  `draft_priors.v1-random.json`).
+- **Cumul des deux** (`python bench_priors.py 100000 total`) : l'IA v2 complète gagne
+  32,0 % de ses manches contre 24,5 % pour l'IA v1 à la même table (**+7,5 points**,
+  soit ~30 % de victoires en plus en tête-à-tête).
+- **À refaire après ces changements** : régénérer `party_stats.json` (le 1M de soirées en
+  cache a été simulé avec l'ancienne IA et les anciens priors).
+
 ## Mode soirée — party.py (12 juin 2026)
 `party.py` simule des soirées complètes, au plus près de la vraie façon de jouer :
 2 à 5 manches (uniforme) + manches de départage jusqu'à un leader strict en Médailles,
@@ -52,10 +80,11 @@ de la manche. Sauvegarde `party_stats.json` au format 2 (stats par état).
   le Parfum de Scandale récupère les deux. `joueur.partie_joueurs` est posé par
   l'ordonnanceur.
 - **IA médailles** (sans effet à 0 Médaille, donc neutre pour donjon.py/draft.py) :
-  seuil de fuite `pv_min_fuite + 2/Médaille`, seuil de risque 0,25 abaissé de
-  0,05/Médaille, `_degats_attendus` évalue le Rongeur de medaille au total des
-  Médailles en jeu (plus 10 forfaitaire), l'Empaleur d'imprudent à 2 avec Médaille,
-  le Saigneur Vampire à +2/Médaille. Constantes en tête de `joueurs.py`.
+  `_degats_attendus` évalue le Rongeur de medaille au total des Médailles en jeu
+  (plus 10 forfaitaire), l'Empaleur d'imprudent à 2 avec Médaille, le Saigneur
+  Vampire à +2/Médaille. Constantes en tête de `joueurs.py`. (Les seuils
+  `pv_min_fuite + 2/Médaille` et 0,25−0,05/Médaille ne concernent plus que
+  l'ancienne politique `'seuils'` — la politique par défaut est l'EV, cf. IA v2.)
 - **Draft soirée** : objets `bonus_sans_medaille` (les 6 « novice ») décotés quand on
   détient une Médaille ; Totem/Parfum/Coupe bonifiés selon l'état. Constantes en tête
   de `party.py`.

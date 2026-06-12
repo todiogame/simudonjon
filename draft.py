@@ -22,8 +22,12 @@ NB_GAMES_PER_DRAFT_FOR_STATS = 1000   # Nb parties jouées pour évaluer chaque 
 ITERATIONS_PER_CHOICE_EVALUATION = 30 # Nb simulations Monte-Carlo par candidat (graines communes => moins d'iterations suffisent)
 MC_PICKS_A_PARTIR_DE = 4              # picks 1-4 : priors seuls ; picks suivants : Monte-Carlo
 MC_NB_CANDIDATS = 3                   # le Monte-Carlo n'evalue que les meilleurs candidats au prior
-PRIORS_NB_PARTIES = 60000             # parties aleatoires pour calculer les priors de pick
-PRIORS_FICHIER = "draft_priors.json"  # cache des priors (supprimer le fichier pour forcer le recalcul)
+PRIORS_NB_PARTIES = 60000             # parties par iteration pour calculer les priors de pick
+PRIORS_ITERATIONS = 3                 # 1 = builds aleatoires ; au-dela : self-play (l'IA drafte
+                                      # avec les priors de l'iteration precedente, puis on remesure)
+PRIORS_EPSILON = 0.15                 # part de picks aleatoires en self-play (exploration :
+                                      # sans elle, un objet sous-cote ne serait plus jamais mesure)
+PRIORS_FICHIER = "draft_priors.json"  # cache des priors (python draft.py priors pour recalculer)
 STATS_FILENAME = "item_stats_progressive.json"  # nom fixe : la reprise fonctionne et wr.py le trouve
 # ==============================================
 
@@ -69,27 +73,67 @@ def _charger_priors():
         }
     return _PRIORS
 
+def _draft_rapide(persos, priors_par_joueur, epsilon=0.0):
+    """Draft complet aux priors seuls (mains de 7 qui tournent, 6 picks chacun),
+    sans Monte-Carlo. priors_par_joueur : un dict de priors par siege (le meme pour
+    tous en self-play). epsilon : part de picks uniformes (exploration).
+    Retourne (builds, objets_restants)."""
+    pool = list(objets_disponibles)
+    for o in pool:
+        o.repare()
+    nb = len(persos)
+    mains = []
+    for _ in range(nb):
+        main = random.sample(pool, min(7, len(pool)))
+        for o in main:
+            pool.remove(o)
+        mains.append(main)
+    builds = [[] for _ in range(nb)]
+    while any(len(b) < 6 for b in builds) and any(mains):
+        suivantes = [[] for _ in range(nb)]
+        for i in range(nb):
+            if len(builds[i]) < 6 and mains[i]:
+                if epsilon and random.random() < epsilon:
+                    choix = random.choice(mains[i])
+                else:
+                    priors = priors_par_joueur[i]
+                    choix = max(mains[i], key=lambda o: score_pick(o, persos[i], priors))
+                builds[i].append(choix)
+                mains[i].remove(choix)
+            suivantes[(i + 1) % nb] = mains[i]
+        mains = suivantes
+    poubelle = [o for main in mains for o in main]
+    return builds, pool + poubelle
+
+
 def _priors_batch(args):
-    """Worker : parties a builds aleatoires pour estimer les winrates objet et perso/objet."""
-    nb_parties, seed = args
+    """Worker : parties pour estimer les winrates objet et perso/objet.
+    priors=None : builds aleatoires (iteration 1). Sinon : builds draftes aux priors
+    de l'iteration precedente, avec epsilon d'exploration (self-play)."""
+    nb_parties, seed, priors, epsilon = args
     random.seed(seed)
     np.random.seed(seed & 0xFFFFFFFF)
     stats_objets = {}
     stats_perso_objet = {}
     for _ in range(nb_parties):
-        objets_simu = list(objets_disponibles)
-        for o in objets_simu:
-            o.repare()
         nb_joueurs = random.choice([3, 4])
         noms = ["Sagarex", "Francis", "Mastho", "Mr.Adam"][:nb_joueurs]
         persos = random.sample(persos_disponibles, nb_joueurs)
-        joueurs = []
-        for i, nom in enumerate(noms):
-            objs = random.sample(objets_simu, 6)
-            for o in objs:
-                objets_simu.remove(o)
-            joueurs.append(Joueur(nom, persos[i], objs))
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), 6, objets_simu, False)
+        if priors is None:
+            objets_simu = list(objets_disponibles)
+            for o in objets_simu:
+                o.repare()
+            builds = []
+            for _i in range(nb_joueurs):
+                objs = random.sample(objets_simu, 6)
+                for o in objs:
+                    objets_simu.remove(o)
+                builds.append(objs)
+            restants = objets_simu
+        else:
+            builds, restants = _draft_rapide(persos, [priors] * nb_joueurs, epsilon)
+        joueurs = [Joueur(noms[i], persos[i], builds[i]) for i in range(nb_joueurs)]
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), 6, restants, False)
         for joueur in joueurs:
             v = 1 if joueur is vainqueur else 0
             pnom = joueur.personnage_nom
@@ -98,38 +142,50 @@ def _priors_batch(args):
                 s = stats_perso_objet.setdefault((pnom, o.nom), [0, 0]); s[0] += v; s[1] += 1
     return stats_objets, stats_perso_objet
 
-def calculer_priors(nb_parties=PRIORS_NB_PARTIES, nb_process=None, force=False):
-    """Calcule (ou recharge depuis le cache) les priors de pick."""
+def calculer_priors(nb_parties=PRIORS_NB_PARTIES, nb_process=None, force=False,
+                    iterations=PRIORS_ITERATIONS):
+    """Calcule (ou recharge depuis le cache) les priors de pick, par self-play itere :
+    iteration 1 sur builds aleatoires, puis chaque iteration drafte avec les priors de
+    la precedente et remesure. Corrige le biais 'valeur d'un objet quand tout le monde
+    joue au hasard' ; seuls les priors de la derniere iteration sont conserves."""
     global _PRIORS
     if not force and _charger_priors() is not None:
         return _PRIORS
     if nb_process is None:
         nb_process = max(1, (os.cpu_count() or 2) - 1)
-    print(f"Calcul des priors de pick sur {nb_parties} parties ({nb_process} process)...")
-    stats_objets = {}
-    stats_perso_objet = {}
-    nb_batches = nb_process * 4 if nb_process > 1 else 1
-    base, reste = divmod(nb_parties, nb_batches)
-    travaux = [(base + (1 if i < reste else 0), random.randrange(2**31)) for i in range(nb_batches)]
-    travaux = [t for t in travaux if t[0] > 0]
-    if nb_process > 1:
-        with multiprocessing.Pool(nb_process) as pool:
-            resultats = list(tqdm(pool.imap_unordered(_priors_batch, travaux), total=len(travaux), desc="Priors"))
-    else:
-        resultats = [_priors_batch(t) for t in tqdm(travaux, desc="Priors")]
-    for so, spo in resultats:
-        for nom, (v, t) in so.items():
-            d = stats_objets.setdefault(nom, [0, 0]); d[0] += v; d[1] += t
-        for cle, (v, t) in spo.items():
-            d = stats_perso_objet.setdefault(cle, [0, 0]); d[0] += v; d[1] += t
+    priors_courants = None
+    for it in range(iterations):
+        mode = "builds aléatoires" if priors_courants is None else f"self-play (eps={PRIORS_EPSILON})"
+        print(f"Priors {it + 1}/{iterations} ({mode}) : {nb_parties} parties, {nb_process} process...")
+        stats_objets = {}
+        stats_perso_objet = {}
+        nb_batches = nb_process * 4 if nb_process > 1 else 1
+        base, reste = divmod(nb_parties, nb_batches)
+        travaux = [(base + (1 if i < reste else 0), random.randrange(2**31),
+                    priors_courants, PRIORS_EPSILON) for i in range(nb_batches)]
+        travaux = [t for t in travaux if t[0] > 0]
+        if nb_process > 1:
+            with multiprocessing.Pool(nb_process) as pool:
+                resultats = list(tqdm(pool.imap_unordered(_priors_batch, travaux),
+                                      total=len(travaux), desc=f"Priors {it + 1}/{iterations}"))
+        else:
+            resultats = [_priors_batch(t) for t in tqdm(travaux, desc=f"Priors {it + 1}/{iterations}")]
+        for so, spo in resultats:
+            for nom, (v, t) in so.items():
+                d = stats_objets.setdefault(nom, [0, 0]); d[0] += v; d[1] += t
+            for cle, (v, t) in spo.items():
+                d = stats_perso_objet.setdefault(cle, [0, 0]); d[0] += v; d[1] += t
+        priors_courants = {'objets': {k: tuple(v) for k, v in stats_objets.items()},
+                           'perso_objet': {k: tuple(v) for k, v in stats_perso_objet.items()}}
     with open(PRIORS_FICHIER, 'w', encoding='utf-8') as f:
         json.dump({
             'nb_parties': nb_parties,
-            'objets': stats_objets,
-            'perso_objet': {f"{p}||{o}": vt for (p, o), vt in stats_perso_objet.items()},
+            'iterations': iterations,
+            'objets': {k: list(v) for k, v in priors_courants['objets'].items()},
+            'perso_objet': {f"{p}||{o}": list(vt)
+                            for (p, o), vt in priors_courants['perso_objet'].items()},
         }, f, ensure_ascii=False)
-    _PRIORS = {'objets': {k: tuple(v) for k, v in stats_objets.items()},
-               'perso_objet': {k: tuple(v) for k, v in stats_perso_objet.items()}}
+    _PRIORS = priors_courants
     print(f"Priors sauvegardés dans {PRIORS_FICHIER}.")
     return _PRIORS
 
@@ -545,7 +601,11 @@ if __name__ == "__main__":
             print(f"WARN: Impossible de changer de répertoire: {e}")
 
     # Vérifier les arguments de la ligne de commande
-    if len(sys.argv) > 1 and sys.argv[1] == '1':
+    if len(sys.argv) > 1 and sys.argv[1] == 'priors':
+        # --- MODE : recalcul force des priors de pick (self-play itere) ---
+        calculer_priors(force=True)
+
+    elif len(sys.argv) > 1 and sys.argv[1] == '1':
         # --- MODE : Lancement d'UN SEUL draft avec logs ---
         print("\nMode : Lancement d'un draft unique avec logs (Argument '1' détecté)...")
 
@@ -588,8 +648,9 @@ if __name__ == "__main__":
          # Si un argument est donné mais ce n'est pas '1'
          print(f"Argument non reconnu : '{sys.argv[1]}'")
          print("Usage :")
-         print(f"  python {sys.argv[0]}    : Lance la simulation complète.")
-         print(f"  python {sys.argv[0]} 1 : Lance un seul draft avec logs.")
+         print(f"  python {sys.argv[0]}        : Lance la simulation complète.")
+         print(f"  python {sys.argv[0]} 1      : Lance un seul draft avec logs.")
+         print(f"  python {sys.argv[0]} priors : Recalcule les priors de pick (self-play itéré).")
 
     else:
         # --- MODE : Simulation Complète (Comportement par défaut) ---
