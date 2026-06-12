@@ -24,6 +24,11 @@ def nb_couleurs(objets, intacts_seulement=False):
     return len({o.couleur for o in objets
                 if o.couleur and (o.intact or not intacts_seulement)})
 
+class ExecutionImpossible(Exception):
+    """Levee quand un objet tente d'executer une carte non executable (Troll).
+    Attrapee dans Objet.en_combat : l'objet n'est pas consomme, le combat continue."""
+
+
 class Objet:
     def __init__(self, nom, actif=False, pv_bonus=0, modificateur_de=0, effet=None, intact=True, types_tags=None, puissance_tags=None):
         self.nom = nom
@@ -112,7 +117,11 @@ class Objet:
 
     def en_combat(self, joueur, carte, Jeu, log_details):
         if self.condition(joueur, carte, Jeu, log_details):
-            self.combat_effet(joueur, carte, Jeu, log_details)
+            try:
+                self.combat_effet(joueur, carte, Jeu, log_details)
+            except ExecutionImpossible:
+                # Troll : la carte ne peut pas etre executee, l'objet reste range
+                log_details.append(f"{carte.titre} ne peut pas être exécuté : {joueur.nom} n'utilise pas {self.nom}.")
 
     
     def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
@@ -149,17 +158,23 @@ class Objet:
                     objet.en_activated(joueur_proprietaire, joueur, self, Jeu, log_details)
     
     def execute(self, joueur, carte, log_details):
+        if getattr(carte, 'non_executable', False):
+            raise ExecutionImpossible(carte.titre)  # Troll
         carte.executed = True
         joueur.ajouter_monstre_vaincu(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter {carte.titre}")
 
     def executeEtDefausse(self, joueur, carte, Jeu, log_details):
+        if getattr(carte, 'non_executable', False):
+            raise ExecutionImpossible(carte.titre)  # Troll
         carte.executed = True
         joueur.monstres_ajoutes_ce_tour += 1
         Jeu.defausse.append(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter et défausser {carte.titre}")
 
     def absorbe(self, joueur, carte, log_details, value=None):
+        if getattr(carte, 'non_executable', False):
+            raise ExecutionImpossible(carte.titre)  # Troll
         value = value or carte.puissance
         carte.executed = True
         joueur.pv_total += value  # Absorber les PV
@@ -1746,7 +1761,7 @@ class OsseletsDeResurrection(Objet):
     def __init__(self):
         super().__init__("Osselets de Résurrection", False, 0)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= joueur.pv_total
+        return carte.dommages >= joueur.pv_total and not getattr(carte, 'non_executable', False)
     # def survie_effet(self, joueur, carte, Jeu, log_details):
     #     if joueur.pv_total >= 3:
     #         self.survit(1, joueur, carte, log_details)
@@ -2343,6 +2358,9 @@ def _choisir_objet_a_sacrifier(joueur, exclus):
 
 def _execute_carte_suivante(objet, joueur, suivante, Jeu, log_details):
     # consomme la carte regardee sur le Donjon et l'ajoute executee a la pile
+    if getattr(suivante, 'non_executable', False):
+        log_details.append(f"{suivante.titre} ne peut pas être exécuté : {objet.nom} le laisse sur le Donjon.")
+        return
     Jeu.donjon.prochaine_carte()
     suivante.executed = True
     suivante.puissance = suivante.puissance_initiale
@@ -2744,7 +2762,8 @@ class GriffesEclair(Objet):
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if self.intact and joueur_proprietaire == joueur and carte.executed:
             suivante = _peek_prochaine_carte(Jeu)
-            if isinstance(suivante, CarteMonstre) and suivante.puissance_initiale <= 5:
+            if (isinstance(suivante, CarteMonstre) and suivante.puissance_initiale <= 5
+                    and not suivante.non_executable):
                 _execute_carte_suivante(self, joueur, suivante, Jeu, log_details)
                 joueur.doit_passer = True
                 log_details.append(f"{joueur.nom} doit passer son tour ({self.nom}).")
@@ -3288,7 +3307,7 @@ class DagueDeBrutus(Objet):
     def __init__(self):
         super().__init__("Dague de Brutus", True)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif
+        return not Jeu.traquenard_actif and not getattr(carte, 'non_executable', False)
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):

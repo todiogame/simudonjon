@@ -1,7 +1,8 @@
 import numpy as np
 
 class CarteMonstre:
-    def __init__(self, titre, puissance, types=None, description="", effet=None, is_X=False):
+    def __init__(self, titre, puissance, types=None, description="", effet=None, is_X=False,
+                 non_executable=False):
         self.titre = titre
         self.puissance = puissance
         self.types = types if types else [titre]
@@ -10,6 +11,7 @@ class CarteMonstre:
         self.executed = False
         self.dommages = 0
         self.is_X = is_X
+        self.non_executable = non_executable  # Troll : ne peut pas etre execute
         # valeurs initiales pour reset a la pioche (les effets comme Potion de Glace,
         # MIROIR ou SHAPESHIFTER mutent la carte partagee du deck)
         self.puissance_initiale = puissance
@@ -71,6 +73,7 @@ class DonjonDeck:
             CarteMonstre("Equipe de singes", 0, [], "La <b>puissance</b> de ce monstre est égale à <b>deux fois</b> le nombre de joueurs dans le Donjon.", "MONKEY_TEAM", is_X=True),
             CarteMonstre("Kraken", 10, [], "Si c'est <b>la première fois</b> que le Kraken apparait, vous pouvez le remettre <b>sous le Donjon.</b>", "KRAKEN"),
             CarteMonstre("Faucheuse", 0, [], "La <b>puissance</b> de ce monstre est égale à la <b>moitié de vos Points de Vie</b> quand vous la rencontrez,\narrondis à l'inférieur.", "REAPER", is_X=True),
+            CarteMonstre("Troll", 0, [], "Copie le monstre tout en <b>dessous</b> de votre pile de monstres vaincus.\n<b>Vous ne pouvez pas l'exécuter.</b>", "TROLL", is_X=True, non_executable=True),
             CarteEvent("Descente angélique", "Gagnez 3pv.", "HEAL"),
             CarteEvent("Bricoleur", "Vous pouvez <b>défausser</b> un monstre pour <b>réparer</b> un de vos objets <b>brisé</b>.", "REPAIR"),
             CarteEvent("Allié", "Si la prochaine carte est un monstre, vous pouvez <b>l'exécuter</b>.", "ALLY"),

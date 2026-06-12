@@ -31,6 +31,28 @@ Defibrilateur en panne.
 - **Nouveaux implémentés** : Bourse garnie (PV+3, +1 PV de victoire), et grâce aux couleurs :
   **Lanterne chromatique** et **Cinq pierres de Nüwa** (retirés de la liste « écartés » ci-dessous).
 
+## Synchro Donjon avec le tableur (12 juin 2026, onglets Monstres + Event)
+Vérification carte par carte contre le tableur (ids monstres 1-47, events 101-110) :
+- **Troll (id 47) ajouté** : puissance X, « Copie le monstre tout en dessous de votre pile
+  de monstres vaincus. Vous ne pouvez pas l'exécuter. » Implémentation : copie comme le
+  Miroir mais depuis le bas de la pile (`simu.py`), `carte.non_executable` bloque
+  l'exécution partout (helpers `execute`/`executeEtDefausse`/`absorbe` lèvent
+  `ExecutionImpossible`, attrapée dans `Objet.en_combat` sans consommer l'objet ;
+  Osselets/Dague de Brutus/Griffes éclair/Allié gardés explicitement). Les réducteurs de
+  dégâts restent utilisables. L'IA l'anticipe (profil EV : puissance = bas de la pile,
+  jamais exécutable).
+- **Empaleur d'imprudent corrigé** : avec une Médaille il « inflige seulement 2 dommages »
+  — la puissance reste 7 (fuite et exécution se jouent contre 7) ; avant, le sim mettait
+  `puissance = 2`, ce qui facilitait à tort la fuite et l'exécution.
+- Tout le reste est conforme (26 monstres de base, 19 autres spéciaux, 10 événements —
+  un seul exemplaire de chaque événement, confirmé volontairement malgré la colonne
+  Duplication du tableur). Les monstres « règle de Donjon » sans id (Kaléidosaure...)
+  restent hors simulation.
+- Priors recalculés après la synchro (`python draft.py priors`).
+- NB : la composition du deck étant confirmée (≈56 cartes), l'écart de taux de ponçage
+  humains (~50 %) vs simu (~14 %) ne vient PAS du deck — piste suivante : PV/soins des
+  héros (onglet Perso) ou règle de table non simulée.
+
 ## IA v2 — fuite par espérance + priors self-play (12 juin 2026)
 Deux améliorations de l'IA, validées par bancs A/B à tables mixtes (nouvelle IA contre
 ancienne dans la même partie) :

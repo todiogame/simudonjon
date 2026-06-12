@@ -311,6 +311,24 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         carte.types = []
                         log_details.append(f"Le {carte.titre} n'a pas de carte a copier, puissance zero.")
 
+                if effet_carte == "TROLL":
+                    # copie le monstre tout en DESSOUS de la pile (memes semantiques que
+                    # le Miroir) ; la non-executabilite est portee par carte.non_executable
+                    if joueur.pile_monstres_vaincus:
+                        carte_copiee = joueur.pile_monstres_vaincus[0]
+                        carte.puissance = carte_copiee.puissance
+                        carte.types = list(carte_copiee.types)
+                        effet_carte = carte_copiee.effet
+                        log_details.append(f"Le {carte.titre} copie {carte_copiee.titre} (dessous de la pile) avec une puissance de {carte.puissance}.")
+                    else:
+                        carte.puissance = 0
+                        carte.types = []
+                        log_details.append(f"Le {carte.titre} n'a pas de carte a copier, puissance zero.")
+                    if Jeu.execute_next_monster:
+                        # l'Allie est depense sur le Troll mais ne peut pas l'executer
+                        Jeu.execute_next_monster = False
+                        log_details.append(f"Impossible d'exécuter le {carte.titre} : l'effet Exécute est perdu.")
+
                 if effet_carte == "SHAPESHIFTER":
                     # on parcours les type_tags des objets intacts du joueur
                     # le premier type qu'on trouve on le donne au monstre
@@ -345,11 +363,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     carte.puissance = joueur.pv_total // 2
                     log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (la moitie des PV (arrondi inferieur)).")
 
-                if effet_carte == "NOOB":
-                    if joueur.medailles > 0:
-                        carte.puissance = 2
-                        log_details.append(f"Rencontré {carte.titre}, puissance réduite à 2 grâce aux médailles.")
-
                 if effet_carte == "MEDAIL":
                     nb_medailles = 0
                     for j in Jeu.joueurs:
@@ -363,6 +376,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             
             carte.dommages = carte.puissance
 
+            if effet_carte == "NOOB" and joueur.medailles > 0:
+                # Empaleur d'imprudent : "inflige seulement 2 dommages" avec une Médaille.
+                # La puissance reste 7 (fuite et exécution se jouent contre 7).
+                carte.dommages = 2
+                log_details.append(f"Rencontré {carte.titre}, il n'inflige que 2 dommages grâce aux médailles.")
             if effet_carte and "ADD_2_DOM" in effet_carte:
                 carte.dommages += 2  # Ajouter 2 dommages supplémentaires pour Chevaucheur de rat
                 log_details.append(f"{carte.titre} inflige 2 dommages supplémentaires.")

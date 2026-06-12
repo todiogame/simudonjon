@@ -28,13 +28,13 @@ TAUX_GAIN_PAR_PIOCHE = 0.7  # points qu'un adversaire encore dans le Donjon marq
 # cache sur chaque carte sous _profil_ev)
 (_C_KRAKEN, _C_ANGE, _C_SLEEPING, _C_MEDAIL, _C_MIMIC, _C_SINGES, _C_FAUCHEUSE,
  _C_CHAROGNARD, _C_MIROIR, _C_NOOB, _C_LORD, _C_MAUDIT, _C_ARRA, _C_GOLD,
- _C_RAT) = range(1, 16)
+ _C_RAT, _C_TROLL) = range(1, 17)
 _PROFIL_CODES = {
     "KRAKEN": _C_KRAKEN, "GUARDIAN_ANGEL": _C_ANGE, "SLEEPING": _C_SLEEPING,
     "MEDAIL": _C_MEDAIL, "MIMIC": _C_MIMIC, "MONKEY_TEAM": _C_SINGES,
     "REAPER": _C_FAUCHEUSE, "SCAVENGER": _C_CHAROGNARD, "MIROIR": _C_MIROIR,
     "NOOB": _C_NOOB, "LORD": _C_LORD, "MAUDIT": _C_MAUDIT, "ARRA": _C_ARRA,
-    "GOLD": _C_GOLD, "ADD_2_DOM": _C_RAT,
+    "GOLD": _C_GOLD, "ADD_2_DOM": _C_RAT, "TROLL": _C_TROLL,
 }
 
 class Joueur:
@@ -244,6 +244,8 @@ class Joueur:
 
     def peut_executer_facilement(self, carte, couverture=None):
         """Heuristique: un objet intact tague pour ce type ou cette puissance peut gerer la carte."""
+        if getattr(carte, 'non_executable', False):
+            return False  # Troll
         types = getattr(carte, 'types', None)
         if types is None:
             return False
@@ -389,10 +391,11 @@ class Joueur:
                     p_est = len(pile)
                 elif code == _C_MIROIR:
                     p_est = pile[-1].puissance if pile else 0
-                elif code == _C_NOOB and medailles:
-                    p_est = 2
-            if (p_est in puissances_couvertes
-                    or not types_couverts.isdisjoint(types_init)):
+                elif code == _C_TROLL:
+                    p_est = pile[0].puissance if pile else 0  # copie le DESSOUS de la pile
+            # le Troll ne peut pas etre execute, quels que soient nos objets
+            if code != _C_TROLL and (p_est in puissances_couvertes
+                                     or not types_couverts.isdisjoint(types_init)):
                 cle = (0, p_est, 2.0 if code == _C_GOLD else 1.0, False)
                 profils[cle] = get(cle, 0.0) + 1.0
                 continue
@@ -403,6 +406,8 @@ class Joueur:
                     degats += 2
                 elif code == _C_LORD:
                     degats += 2 * medailles
+                elif code == _C_NOOB and medailles:
+                    degats = 2  # "inflige seulement 2 dommages" (la puissance reste 7)
                 elif code == _C_GOLD:
                     gain = 2.0
                 elif code == _C_MAUDIT or code == _C_ARRA:
