@@ -1,9 +1,8 @@
 # Ignore Python bytecode files
 *.pyc
 __pycache__/
-# Caches et resultats de simulation (regenerables)
-draft_priors*.json
-item_stats_progressive*.json
-party_stats.json
+# Backups locaux de simulation (les caches utiles draft_priors.json,
+# item_stats_progressive.json et party_stats.json sont versionnes)
+*.avant-synchro-juin2026.json
 backupfile_*.json
 priorites_objets_backup.json
