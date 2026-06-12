@@ -48,7 +48,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     index_joueur = 0  # Initialisation de l'index du joueur courant
     
     for j in joueurs:
+        j.partie_joueurs = joueurs  # utilise par perdre_medaille (Parfum de Scandale)
         j.trier_objets_par_priorite()
+        j.appliquer_panoplies(log_details)  # +2 PV par 3 objets de meme couleur (bonus d'avant-partie)
         j.perso_obj.debut_partie(j, Jeu, log_details)  # reset aussi l'etat une-fois-par-partie du perso
         for objet in j.objets:
             objet.debut_partie(j, Jeu, log_details)
@@ -501,8 +503,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
 
                 if effet_carte == "MEDAIL" and carte.dommages > 0 and joueur.medailles > 0:
-                    joueur.medailles -= 1
-                    log_details.append(f"Perdu une medaille en affrontant {carte.titre}, médailles restantes: {joueur.medailles}")
+                    log_details.append(f"{carte.titre} fait perdre une medaille à {joueur.nom}.")
+                    joueur.perdre_medaille(log_details)
 
                 if effet_carte == "FAIRY":
                     joueur.doit_passer = True
@@ -696,7 +698,8 @@ def loguer_x_parties(x=1):
         # "Tronconneuse Enflammee",
         "Scaphandre",
         # "Anneau de glace",
-        "Bonne vieille guinze",
+        # "Bonne vieille guinze",  # objet supprime du jeu (synchro juin 2026)
+        "Parchemin d'XP",
     ]
 
     for i in range(x):

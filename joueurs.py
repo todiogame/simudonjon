@@ -2,6 +2,11 @@ from objets import *
 from objets import SANS_HOOK_OBJET
 import random
 
+# Mode soiree (party.py) : prudence des detenteurs de Medailles (mourir en coute une).
+# Sans Medaille (donjon.py, draft.py), ces constantes sont sans effet.
+PRUDENCE_PV_PAR_MEDAILLE = 2        # le seuil de PV declenchant la fuite monte d'autant par Medaille
+PRUDENCE_RISQUE_PAR_MEDAILLE = 0.05 # la part de cartes mortelles toleree baisse d'autant par Medaille
+
 class Joueur:
     def __init__(self, nom, perso_instance, objets=None, medailles=0):
         self.nom = nom
@@ -28,11 +33,25 @@ class Joueur:
         self.monstres_ajoutes_ce_tour = 0
         self.tiebreaker = False
         self.cartes_connues = set()  # cartes du Donjon vues via les objets de divination
+        self.partie_joueurs = None   # tous les joueurs de la partie (pose par l'ordonnanceur, pour le Parfum de Scandale)
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)
         self.pv_total += objet.pv_bonus
         self.trier_objets_par_priorite() # maintenir les objets tries dans le bon ordre d'utilisation
+
+    def appliquer_panoplies(self, log_details):
+        # Panoplie : +2 PV par groupe de 3 objets de meme couleur au debut de la partie.
+        # Bonus fige : il n'est ni perdu ni gagne quand des objets sont detruits/pioches
+        # en cours de partie. Cumulable (2 panoplies, ou 6 objets de la meme couleur = +4).
+        compte = {}
+        for objet in self.objets:
+            if objet.couleur:
+                compte[objet.couleur] = compte.get(objet.couleur, 0) + 1
+        bonus = 2 * sum(n // 3 for n in compte.values())
+        if bonus:
+            self.pv_total += bonus
+            log_details.append(f"Panoplie ! {self.nom} a 3 objets de même couleur et gagne {bonus} PV (total {self.pv_total}).")
 
     def calculer_modificateurs(self):
         modificateur_perso = getattr(self.perso_obj, 'modificateur_de', 0)
@@ -50,14 +69,43 @@ class Joueur:
     def mort(self, log_details):
         self.vivant = False
         self.dans_le_dj = False
-        if self.medailles > 0:
-            if any(getattr(objet, 'protege_medailles', False) and objet.intact for objet in self.objets):
-                log_details.append(f"{self.nom} garde sa medaille (Totem d'immunité) !")
-            else:
-                log_details.append(f"{self.nom} a perdu une medaille !")
-                self.medailles -= 1
-            
-    
+        self.perdre_medaille(log_details, mort=True)
+
+    def perdre_medaille(self, log_details, mort=False):
+        """Perte d'une Medaille (mort, Rongeur de medaille...). Le Totem d'immunité ne
+        protège que contre la perte à la mort ; un adversaire vivant avec un Parfum de
+        Scandale intact récupère directement la Medaille perdue."""
+        if self.medailles <= 0:
+            return
+        if mort and any(getattr(objet, 'protege_medailles', False) and objet.intact for objet in self.objets):
+            log_details.append(f"{self.nom} garde sa medaille (Totem d'immunité) !")
+            return
+        self.medailles -= 1
+        log_details.append(f"{self.nom} a perdu une medaille ! ({self.medailles} restante(s))")
+        for autre in (self.partie_joueurs or []):
+            if autre is not self and autre.vivant and any(
+                    getattr(objet, 'vole_medailles_perdues', False) and objet.intact for objet in autre.objets):
+                autre.medailles += 1
+                log_details.append(f"{autre.nom} récupère la medaille perdue (Parfum de Scandale) ! ({autre.medailles})")
+                break
+
+    def changer_niveau_perso(self, niveau, log_details):
+        """Parchemin d'XP / Potion de Jouvence : le héros passe (ou reste) au niveau demandé.
+        Instance fraîche (la capacité une-fois-par-partie redevient disponible) ;
+        pv_base suit le nouveau niveau, les PV en jeu ne bougent que via le soin
+        explicite de la carte qui appelle ce changement."""
+        if getattr(self.perso_obj, 'level', 1) == niveau:
+            return
+        try:
+            nouveau = type(self.perso_obj)(niveau)
+        except TypeError:
+            return  # héros sans variante de niveau
+        self.perso_obj = nouveau
+        self.personnage_nom = nouveau.nom
+        self.pv_base = nouveau.pv_bonus
+        log_details.append(f"Le héros de {self.nom} devient {self.personnage_nom}.")
+
+
     def calculScoreFinal(self, log_details):
         log_details.append(f"Calcul du score de {self.nom} : {len(self.pile_monstres_vaincus)} monstres vaincus.")
         self.score_final = len(self.pile_monstres_vaincus)
@@ -129,6 +177,24 @@ class Joueur:
         prochaine = donjon.cartes[donjon.ordre[donjon.index]]
         return prochaine if prochaine in self.cartes_connues else None
 
+    def _degats_attendus(self, carte, Jeu):
+        """Dégâts anticipés d'une carte du Donjon pour CE joueur (scans de fuite/repioche).
+        Tient compte des effets liés aux Médailles (mode soirée de party.py)."""
+        if carte.is_X:
+            if carte.effet and "MEDAIL" in carte.effet:
+                # Rongeur de medaille : puissance = total des Médailles en jeu
+                return sum(j.medailles for j in Jeu.joueurs)
+            return 10
+        d = carte.puissance_initiale
+        if carte.effet:
+            if "NOOB" in carte.effet and self.medailles:
+                return 2  # Empaleur d'imprudent : puissance 2 si on a une Médaille
+            if "ADD_2_DOM" in carte.effet:
+                d += 2
+            if "LORD" in carte.effet:
+                d += 2 * self.medailles  # Saigneur Vampire : +2 dommages par Médaille
+        return d
+
     def _couverture_objets(self):
         """Types et puissances que les objets intacts du joueur savent gerer (tags)."""
         types_couverts = set()
@@ -176,10 +242,7 @@ class Joueur:
             c = donjon.cartes[i]
             if getattr(c, 'event', False):
                 continue
-            d = 10 if c.is_X else c.puissance_initiale
-            if c.effet and "ADD_2_DOM" in c.effet:
-                d += 2
-            if d > 2 and not self.peut_executer_facilement(c, couverture):
+            if self._degats_attendus(c, Jeu) > 2 and not self.peut_executer_facilement(c, couverture):
                 return False
 
         # 2) objets qui recompensent plusieurs monstres vaincus dans le meme tour
@@ -194,6 +257,18 @@ class Joueur:
         # 3) la pioche est quasi gratuite pour nous: continuer a poncer le Donjon
         log_details.append(f"{self.nom} ne risque plus rien et continue de poncer le Donjon.")
         return True
+
+    def _nb_options_combat(self):
+        # Objets actifs intacts qui peuvent reellement proteger: hook de combat ou
+        # de survie. Les actifs sans aucun des deux (Parachute dore, Potion
+        # d'escampette, Pelle du Fossoyeur...) ou marques non_combattant (usage
+        # trop situationnel) ne protegent pas: les compter retardait la fuite et
+        # faisait mourir l'IA.
+        return sum(1 for o in self.objets
+                   if o.actif and o.intact
+                   and not getattr(o, 'non_combattant', False)
+                   and (type(o) not in SANS_HOOK_OBJET['en_combat']
+                        or type(o) not in SANS_HOOK_OBJET['en_survie']))
 
     def deciderDeFuir(self, Jeu, log_details):
         # --- NOUVELLE Condition : Interdiction de fuir au Tour 1 ---
@@ -216,7 +291,7 @@ class Joueur:
             if self.peut_executer_facilement(carte_connue) or carte_connue.puissance <= 2:
                 return False  # la prochaine carte est gerable
             if (carte_connue.puissance >= self.pv_total
-                    and sum(getattr(o, 'actif', False) and o.intact for o in self.objets) <= 1):
+                    and self._nb_options_combat() <= 1):
                 log_details.append(f"==> {self.nom} sait que {carte_connue.titre} arrive et TENTE LA FUITE.")
                 return True
 
@@ -225,14 +300,16 @@ class Joueur:
         # Condition 1: PV faibles et peu d'options actives restantes
         # Certains objets (Ceinture du Ponceur) doivent anticiper la fuite: leurs PV "de decision"
         # sont reduits pour fuir a temps (avant que la fuite ne devienne interdite)
+        # Mode soiree: mourir avec des Medailles en coute une, on fuit donc plus tot.
         pv_decision = self.pv_total - sum(getattr(objet, 'malus_pv_decision_fuite', 0)
                                           for objet in self.objets if objet.intact)
-        peu_options = sum(getattr(objet, 'actif', False) and getattr(objet, 'intact', False)
-                          for objet in self.objets) <= 1
-        pv_faible_et_peu_options = peu_options and pv_decision <= self.pv_min_fuite
+        seuil_pv = self.pv_min_fuite + PRUDENCE_PV_PAR_MEDAILLE * self.medailles
+        peu_options = self._nb_options_combat() <= 1
+        pv_faible_et_peu_options = peu_options and pv_decision <= seuil_pv
         if peu_options and not pv_faible_et_peu_options:
             # Risque concret: proportion des cartes restantes du Donjon qui nous tueraient.
             # Seuil 0.25 choisi par balayage: meilleur score moyen/median pose, morts 42% -> 32%
+            # (abaisse par Medaille detenue : un detenteur prend moins de risques)
             donjon = Jeu.donjon
             restantes = donjon.ordre[donjon.index:]
             if len(restantes):
@@ -242,12 +319,11 @@ class Joueur:
                     c = donjon.cartes[i]
                     if getattr(c, 'event', False):
                         continue
-                    d = 10 if c.is_X else c.puissance_initiale
-                    if c.effet and "ADD_2_DOM" in c.effet:
-                        d += 2
-                    if d >= self.pv_total and not self.peut_executer_facilement(c, couverture):
+                    if (self._degats_attendus(c, Jeu) >= self.pv_total
+                            and not self.peut_executer_facilement(c, couverture)):
                         mortelles += 1
-                pv_faible_et_peu_options = mortelles / len(restantes) >= 0.25
+                seuil_risque = max(0.10, 0.25 - PRUDENCE_RISQUE_PAR_MEDAILLE * self.medailles)
+                pv_faible_et_peu_options = mortelles / len(restantes) >= seuil_risque
         # if pv_faible_et_peu_options:
             #  log_details.append(f"--> {self.nom} Condition Fuite 1 (PV Faible/Opt): VRAI (PV {self.pv_total} <= Seuil {self.pv_min_fuite})")
 

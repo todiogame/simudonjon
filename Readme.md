@@ -41,7 +41,13 @@ Simulation de donjons, combats et phases de draft pour l'analyse statistique et 
 
 ## 🚀 Utilisation Principale
 
-Il existe deux modes principaux pour lancer les simulations : `donjon.py` pour une simulation standard et `draft.py` pour une simulation incluant une phase de draft.
+Il existe trois modes principaux pour lancer les simulations : `donjon.py` pour une simulation standard, `draft.py` pour une simulation incluant une phase de draft, et `party.py` pour une simulation de soirées complètes (plusieurs manches, Médailles et niveaux de héros portés entre les manches — au plus près de la vraie façon de jouer).
+
+* Pour une simulation de soirées (winrate de soirée par objet/héros) :
+    ```bash
+    python party.py      # simulation de masse
+    python party.py 2    # 2 soirées détaillées avec logs
+    ```
 
 L'argument passé en ligne de commande détermine le mode d'exécution :
 
@@ -92,6 +98,7 @@ L'argument passé en ligne de commande détermine le mode d'exécution :
 
 * `donjon.py`: Point d'entrée pour les simulations de donjon standard. Gère les arguments `sys.argv` pour le nombre de parties ou le mode winrate.
 * `draft.py`: Point d'entrée pour les simulations incluant une phase de draft. Gère les arguments `sys.argv`.
+* `party.py`: Point d'entrée pour les simulations de soirées complètes (2 à 5 manches + départage, draft avant chaque manche, Médailles et niveaux de héros conservés entre les manches). Métrique principale : winrate de soirée.
 * `simu.py`: Point d'entrée alternatif offrant plus d'options via `argparse`. Peut-être utilisé pour des tests spécifiques ou par les autres scripts.
 * `aggreg.py`: Module d'agrégation des statistiques et résultats de simulation. Permet de consolider et analyser les données sur plusieurs parties.
 * `wr.py`: Contient la logique spécifique au calcul et à l'affichage formaté du winrate.

@@ -6,6 +6,24 @@ from monstres import CarteMonstre
 with open('priorites_objets.json', 'r') as json_file:
     priorites_objets = json.load(json_file)
 
+# Couleurs des objets (tableur, colonne Color) : 1=rouge, 2=vert, 3=bleu, 4=violet, 5=jaune
+COULEUR_NOMS = {1: 'rouge', 2: 'vert', 3: 'bleu', 4: 'violet', 5: 'jaune'}
+
+def _cle_nom(nom):
+    # cle de lookup insensible a la casse et aux accents (les titres du tableur varient)
+    import unicodedata
+    s = unicodedata.normalize('NFD', nom)
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    return ''.join(c for c in s.lower() if c.isalnum())
+
+with open('item_visuals.json', 'r', encoding='utf-8') as json_file:
+    couleurs_objets = {_cle_nom(nom): data.get('color_code')
+                       for nom, data in json.load(json_file).items()}
+
+def nb_couleurs(objets, intacts_seulement=False):
+    return len({o.couleur for o in objets
+                if o.couleur and (o.intact or not intacts_seulement)})
+
 class Objet:
     def __init__(self, nom, actif=False, pv_bonus=0, modificateur_de=0, effet=None, intact=True, types_tags=None, puissance_tags=None):
         self.nom = nom
@@ -15,6 +33,7 @@ class Objet:
         self.intact = intact
         self.actif = actif
         self.priorite = priorites_objets.get(nom, 49.5)  # Utilise la priorité du JSON ou 0 par défaut
+        self.couleur = couleurs_objets.get(_cle_nom(nom))  # 1-5 (cf. COULEUR_NOMS), None si hors tableur
         self.compteur = 0
         self.types_tags = types_tags if types_tags is not None else []
         self.puissance_tags = puissance_tags if puissance_tags is not None else []
@@ -248,9 +267,9 @@ class MarteauDeGuerre(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         
-class EpauletteDuBourrin(Objet):
+class EpauletteDuPonceur(Objet):
     def __init__(self):
-        super().__init__("Epaulette du Bourrin", False, 3, -2)
+        super().__init__("Epaulette du Ponceur", False, 3, -2)
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > 0
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -266,9 +285,9 @@ class MainDeMidas(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.absorbe(joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
-class MainDeMidasB(Objet):
+class MidasDeBronze(Objet):
     def __init__(self):
-        super().__init__("Main de Midas B", True, puissance_tags=[1, 2, 3, 4])
+        super().__init__("Midas de Bronze", True, puissance_tags=[1, 2, 3, 4])
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance <= 4 and not Jeu.traquenard_actif
     def worthit(self, joueur, carte, Jeu, log_details):
@@ -276,18 +295,16 @@ class MainDeMidasB(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.absorbe(joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
-class Item6PV(Objet):
-    def __init__(self):
-        super().__init__("Item 6PV", False, 6)
 class ArmureEnCuir(Objet):
     def __init__(self):
-        super().__init__("Item 5PV", False, 5)
+        super().__init__("Armure en cuir", False, 5)
 class CotteDeMailles(Objet):
     def __init__(self):
-        super().__init__("Item 4PV", False, 4)
-class Item2PV(Objet):
-    def __init__(self):
-        super().__init__("Item 2PV", False, 2)
+        super().__init__("Cotte de mailles", False, 4)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == 0 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
 class ParcheminDeBahn(Objet):
     def __init__(self):
         super().__init__("Parchemin de Bahn", True)
@@ -386,14 +403,6 @@ class BouclierDragon(Objet):
         if ("Dragon" in carte.types) and joueur_proprietaire==joueur:
             self.repare()
 
-class PotionDeMana(Objet):
-    def __init__(self):
-        super().__init__("Potion de Mana", True)
-    def survie_effet(self, joueur, carte, Jeu, log_details):
-        if len(joueur.pile_monstres_vaincus):
-            self.survit(1, joueur, carte, log_details)
-            self.destroy(joueur, Jeu, log_details)
-
 class KebabRevigorant(Objet):
     def __init__(self):
         super().__init__("Kebab revigorant", True)
@@ -472,6 +481,7 @@ class PiocheDeDiamant(Objet):
 class ChapeauDuNovice(Objet):
     def __init__(self):
         super().__init__("Chapeau du novice", False, types_tags=["Orc"])
+        self.bonus_sans_medaille = True
     def rules(self, joueur, carte, Jeu, log_details):
         return ("Orc" in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -546,12 +556,6 @@ class AnneauMagique(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.absorbe(joueur, carte, log_details)
 
-class TroisPV(Objet):
-    def __init__(self):
-        super().__init__("Item 3PV", False, 3)
-class TroisPV_(Objet):
-    def __init__(self):
-        super().__init__("Item 3PV 2", False, 3)
 class ArmureDHonneur(Objet):
     def __init__(self):
         super().__init__("Armure d'honneur", False, 3)
@@ -689,10 +693,6 @@ class GraalEnMousse(Objet):
         self.execute(joueur, carte, log_details)
         if len(joueur.pile_monstres_vaincus) >= 5 and self.intact:
             self.destroy(joueur, Jeu, log_details)
-
-class ItemUseless(Objet):
-    def __init__(self):
-        super().__init__("ItemUseless", False)
 
 class ArmureDamnee(Objet):
     def __init__(self):
@@ -851,6 +851,7 @@ class AnneauPlussain(Objet):
 class GetasDuNovice(Objet):
     def __init__(self):
         super().__init__("Getas du novice", False, 2, 2)
+        self.bonus_sans_medaille = True
     def en_fuite(self, joueur, Jeu, log_details):
         # 1 reroll
         if (not joueur.medailles and joueur.jet_fuite < 4) and self.intact:
@@ -1082,6 +1083,7 @@ class LivreSacre(Objet):
 class PendentifDuNovice(Objet):
     def __init__(self):
         super().__init__("Pendentif du Novice", False, 3, types_tags=["Gobelin"])
+        self.bonus_sans_medaille = True
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif and "Gobelin" in carte.types and not joueur.medailles
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -1429,19 +1431,19 @@ class PotionDeFeuLiquide(Objet):
             log_details.append(f"{self.nom} de {joueur_proprietaire.nom} se repare.")
             self.repare()
             
-class CasquePlus(Objet):
+class CasqueACornes(Objet):
     def __init__(self):
-        super().__init__("Casque Plus", False)
+        super().__init__("Casque à cornes", False)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif and self.compteur <= 2
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.compteur += 1
         # self.execute(joueur, carte, log_details)
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        log_details.append(f"Le Casque Plus fait bing, utilisations: {self.compteur}")
+        log_details.append(f"Le Casque à cornes fait bing, utilisations: {self.compteur}")
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if self.compteur >= 2 and self.intact and joueur_proprietaire.dans_le_dj and joueur_proprietaire == joueur:
-            log_details.append(f"Le Casque Plus est detruit.")
+            log_details.append(f"Le Casque à cornes est detruit.")
             self.destroy(joueur_proprietaire, Jeu, log_details)
             
 class AnkhDeReincarnation(Objet):
@@ -1477,24 +1479,24 @@ class CoeurDeDragon(Objet):
         if "Dragon" in carte.types and self.intact:
             self.gagnePV(4, joueur_proprietaire, log_details)
 
-class PotionDAdrenaline(Objet):
+class ShotDAdrenaline(Objet):
     def __init__(self):
-        super().__init__("Potion d'adrénaline", True)
-    def potionDAdrenaline(self, joueur, Jeu, log_details):
+        super().__init__("Shot d'adrénaline", True)
+    def shotDAdrenaline(self, joueur, Jeu, log_details):
         if self.intact:
             if joueur.pv_total == 1:
                 self.gagnePV(10, joueur, log_details)
             else:
                 self.gagnePV(2, joueur, log_details)
             self.destroy(joueur, Jeu, log_details)
-    
+
     def debut_tour(self, joueur, Jeu, log_details):
         if joueur.pv_total == 1:
-            self.potionDAdrenaline(joueur, Jeu, log_details)
-        
+            self.shotDAdrenaline(joueur, Jeu, log_details)
+
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if (joueur.pv_total <= carte.dommages and joueur.pv_total+2 > carte.dommages)  or joueur.pv_total == 1:
-            self.potionDAdrenaline(joueur, Jeu, log_details)
+            self.shotDAdrenaline(joueur, Jeu, log_details)
 
 class PeigneEnOr(Objet):
     def __init__(self):
@@ -1874,9 +1876,9 @@ class GriffesDeLArracheur(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.absorbe(joueur, carte, log_details, 3)
 
-class Harpe(Objet):
+class HarpeCinglante(Objet):
     def __init__(self):
-        super().__init__("Harpe", False, 0, 0)
+        super().__init__("Harpe Cinglante", False, 0, 0)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif and joueur.pv_total <= 4
     def worthit(self, joueur, carte, Jeu, log_details):
@@ -2182,8 +2184,20 @@ class BouillonDAmes(Objet):
         self.destroy(joueur, Jeu, log_details)       
          
 class SacDeConstantinople(Objet):
+    non_combattant = True  # utile seulement s'il y a des Dragons a voler: ne retarde pas la fuite
+
     def __init__(self):
         super().__init__("Sac de Constantinople", True)
+
+    def _dragons_volables(self, joueur, Jeu):
+        chez_les_autres = sum(
+            1 for j in Jeu.joueurs if j is not joueur and j.dans_le_dj
+            for monstre in j.pile_monstres_vaincus
+            if any("Dragon" in type_carte for type_carte in monstre.types)
+        )
+        en_defausse = sum(1 for c in Jeu.defausse
+                          if "Dragon" in getattr(c, 'types', []) and not getattr(c, 'event', False))
+        return chez_les_autres + en_defausse
 
     def _activer_sac(self, joueur, Jeu, log_details, contexte=""):
         log_details.append(f"{joueur.nom} utilise {self.nom}{' en ' + contexte if contexte else ''}")
@@ -2205,21 +2219,28 @@ class SacDeConstantinople(Objet):
             Jeu.defausse.remove(dragon)
             joueur.ajouter_monstre_vaincu(dragon)
             log_details.append(f"{joueur.nom} récupère {dragon.titre} (Dragon) de la défausse")
-        
+
+        # "gagnez autant de PV que vous avez de Dragons dans votre pile"
+        dragons_en_pile = sum(1 for m in joueur.pile_monstres_vaincus
+                              if any("Dragon" in t for t in m.types))
+        if dragons_en_pile:
+            self.gagnePV(dragons_en_pile, joueur, log_details)
+
         self.destroy(joueur, Jeu, log_details)
 
     def debut_tour(self, joueur, Jeu, log_details):
-        if self.intact:
-            # Calculer le nombre total de dragons chez les autres joueurs
-            autres_joueurs = [j for j in Jeu.joueurs if j != joueur and j.dans_le_dj]
-            total_dragons = sum(
-                1 for j in autres_joueurs 
-                for monstre in j.pile_monstres_vaincus 
-                if any("Dragon" in type_carte for type_carte in monstre.types)
-            )
-            # Activation seulement s'il y a au moins 2 dragons chez les autres joueurs
-            if total_dragons >= 2:
-                self._activer_sac(joueur, Jeu, log_details)
+        # Activation seulement s'il y a au moins 2 dragons a recuperer (autres joueurs + defausse)
+        if self.intact and self._dragons_volables(joueur, Jeu) >= 2:
+            self._activer_sac(joueur, Jeu, log_details)
+
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # en urgence: les PV gagnes (dragons voles + deja en pile) peuvent sauver
+        return carte.dommages >= joueur.pv_total and (
+            self._dragons_volables(joueur, Jeu) > 0
+            or any("Dragon" in t for m in joueur.pile_monstres_vaincus for t in m.types))
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self._activer_sac(joueur, Jeu, log_details, contexte="urgence")
 
     def fuite_definitive_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         if self.intact and joueur_proprietaire == joueur:
@@ -2416,6 +2437,7 @@ class TotemDImmunite(Objet):
 class CeintureDuNovice(Objet):
     def __init__(self):
         super().__init__("Ceinture du novice", False, 3)
+        self.bonus_sans_medaille = True
     def debut_partie(self, joueur, Jeu, log_details):
         if joueur.medailles == 0:
             self.gagnePV(3, joueur, log_details)
@@ -2423,6 +2445,7 @@ class CeintureDuNovice(Objet):
 class AnneauDuNovice(Objet):
     def __init__(self):
         super().__init__("Anneau du novice", True)
+        self.bonus_sans_medaille = True
     def survie_effet(self, joueur, carte, Jeu, log_details):
         self.survit(joueur.pv_base if joueur.medailles == 0 else 1, joueur, carte, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -2430,12 +2453,60 @@ class AnneauDuNovice(Objet):
 class CapeDuNovice(Objet):
     def __init__(self):
         super().__init__("Cape du novice", True)
+        self.bonus_sans_medaille = True
     def rules(self, joueur, carte, Jeu, log_details):
         return (carte.puissance % 2 == 1 or joueur.medailles == 0) and not Jeu.traquenard_actif
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class CoupeDesChampions(Objet):
+    def __init__(self):
+        super().__init__("Coupe des champions", False, 1)
+        # lu par party.py a l'attribution de la Medaille de la manche (2 au lieu de 1)
+        self.medailles_victoire = 2
+
+class ParfumDeScandale(Objet):
+    def __init__(self):
+        super().__init__("Parfum de Scandale", False)
+        self.vole_medailles_perdues = True  # consulte par Joueur.perdre_medaille
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(1, joueur, log_details)
+
+class ParcheminDXP(Objet):
+    # "Votre héros passe (ou reste) niveau 2. Gagnez autant de PV que vos PV de héros."
+    def __init__(self):
+        super().__init__("Parchemin d'XP", True)
+    def debut_tour(self, joueur, Jeu, log_details):
+        # IA: la capacite N2 rapporte d'autant plus qu'elle arrive tot, et le soin
+        # ne se perime pas -> upgrade immediat si le heros est encore niveau 1
+        if self.intact and getattr(joueur.perso_obj, 'level', 1) == 1:
+            self._utiliser(joueur, Jeu, log_details)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # heros deja N2 : garde comme soin d'urgence
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self._utiliser(joueur, Jeu, log_details)
+    def _utiliser(self, joueur, Jeu, log_details):
+        joueur.changer_niveau_perso(2, log_details)
+        self.gagnePV(joueur.pv_base, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class PotionDeJouvence(Objet):
+    # "Votre héros passe (ou reste) niveau 1. Gagnez deux fois vos PV de héros."
+    def __init__(self):
+        super().__init__("Potion de Jouvence", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # N1 : pur soin sans inconvenient, s'utilise des qu'un coup fait mal.
+        # N2 : redescendre coute la capacite amelioree -> seulement pour eviter la mort.
+        if getattr(joueur.perso_obj, 'level', 1) == 1:
+            return carte.dommages > (joueur.pv_total / 2)
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        joueur.changer_niveau_perso(1, log_details)
+        self.gagnePV(2 * joueur.pv_base, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
 
 class PommeDAdam(Objet):
@@ -2572,6 +2643,7 @@ class CraneDuNecromancien(Objet):
         self.execute(joueur, carte, log_details)
 
 class LanceDeSilence(Objet):
+    non_combattant = True  # ne sert que contre les monstres X (rares): ne retarde pas la fuite
     def __init__(self):
         super().__init__("Lance de Silence", True)
     def rules(self, joueur, carte, Jeu, log_details):
@@ -2621,16 +2693,27 @@ class Donjondex(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class TapisVolant(Objet):
+    # "Fuyez le Donjon a tout moment" : tant que la pile n'est pas vide, il est
+    # quasi impossible de mourir avec cet objet. L'IA ponce donc sans craindre
+    # la mort et s'envole juste avant le coup fatal.
     def __init__(self):
         super().__init__("Tapis volant", True)
-    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        # fuite garantie en defaussant un monstre, quand les PV sont critiques
-        if (self.intact and joueur_proprietaire == joueur and joueur.dans_le_dj
-                and joueur.pv_total <= 4 and joueur.tour >= 2
-                and sum(o.actif and o.intact for o in joueur.objets) <= 1
-                and _defausse_monstre_de_pile(joueur, Jeu, log_details)):
-            log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le Donjon !\n")
+    def rules(self, joueur, carte, Jeu, log_details):
+        return any(not (m.effet and "GOLD" in m.effet) for m in joueur.pile_monstres_vaincus)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # s'envole avant de subir le coup fatal (la carte retourne sur le Donjon)
+        if _defausse_monstre_de_pile(joueur, Jeu, log_details):
             joueur.fuite()
+            log_details.append(f"{joueur.nom} s'envole du Donjon avec {self.nom} !\n")
+            self.destroy(joueur, Jeu, log_details)
+    def en_fuite(self, joueur, Jeu, log_details):
+        # fuite volontaire : le tapis remplace un jet mal parti par une sortie garantie
+        if (self.intact and joueur.jet_fuite <= 5
+                and _defausse_monstre_de_pile(joueur, Jeu, log_details)):
+            joueur.jet_fuite = 100
+            log_details.append(f"{joueur.nom} s'envole du Donjon avec {self.nom} (fuite garantie).")
             self.destroy(joueur, Jeu, log_details)
 
 class MasqueMaudit(Objet):
@@ -2739,11 +2822,12 @@ class BarbecueDuPonceur(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class RoseDOr(Objet):
+    non_combattant = True  # gardee pour ses +2 PV de fin de partie: ne retarde pas la fuite
     def __init__(self):
         super().__init__("Rose d'or", True)
     def worthit(self, joueur, carte, Jeu, log_details):
-        # garder la rose intacte vaut 2 Points de Victoire
-        return joueur.pv_total <= 2
+        # garder la rose intacte vaut 2 Points de Victoire, mais mourir perd tout
+        return joueur.pv_total <= 2 or carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.gagnePV(3, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -2827,6 +2911,7 @@ class PotageImprovise(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class ClocheDuDejaVu(Objet):
+    non_combattant = True  # son usage de combat (urgence) coute souvent 1 PV de score: pas une vraie option
     def __init__(self):
         super().__init__("La Cloche du Déjà-Vu", True)
     def _fodder(self, Jeu):
@@ -2844,6 +2929,26 @@ class ClocheDuDejaVu(Objet):
                 self.gagnePV(3, joueur, log_details)
                 log_details.append(f"{joueur.nom} remet {monstre.titre} sur le Donjon avec {self.nom}.")
                 self.destroy(joueur, Jeu, log_details)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return bool(self._fodder(Jeu)
+                    or any(not (m.effet and "GOLD" in m.effet) for m in joueur.pile_monstres_vaincus))
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # urgence: les +3 PV sauvent du coup fatal; remet le monstre le plus faible
+        # (defausse de preference, sinon sa propre pile)
+        faciles = self._fodder(Jeu)
+        if faciles:
+            monstre = faciles[0]
+            Jeu.defausse.remove(monstre)
+        else:
+            candidats = [m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet)]
+            monstre = min(candidats, key=lambda m: 0 if m.is_X else m.puissance)
+            joueur.pile_monstres_vaincus.remove(monstre)
+        Jeu.donjon.rajoute_en_haut_de_la_pile(monstre)
+        self.gagnePV(3, joueur, log_details)
+        log_details.append(f"{joueur.nom} remet {monstre.titre} sur le Donjon avec {self.nom} (urgence).")
+        self.destroy(joueur, Jeu, log_details)
 
 class CapeDInvisibilite(Objet):
     def __init__(self):
@@ -2860,12 +2965,19 @@ class CapeDInvisibilite(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class SlipDeLaResurgence(Objet):
+    non_combattant = True  # +2 PV par autre actif intact: a 1 PV pres, ce n'est pas une option de combat
     def __init__(self):
         super().__init__("Slip de la Résurgence", True)
     def _compte(self, joueur):
         return sum(1 for o in joueur.objets if o is not self and o.actif and o.intact)
+    def debut_tour(self, joueur, Jeu, log_details):
+        # utiliser tot, pendant que les autres actifs sont encore intacts
+        # (attendre des PV bas est perdant: les actifs se consomment plus vite que les PV)
+        if self.intact and self._compte(joueur) >= 3:
+            self.gagnePV(2 * self._compte(joueur), joueur, log_details)
+            self.destroy(joueur, Jeu, log_details)
     def worthit(self, joueur, carte, Jeu, log_details):
-        return joueur.pv_total <= 4 and self._compte(joueur) >= 2
+        return carte.dommages >= joueur.pv_total and self._compte(joueur) >= 1
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.gagnePV(2 * self._compte(joueur), joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -3312,16 +3424,6 @@ class TambourDeKui(Objet):
 
 # --- fournee novembre 2025 ---
 
-class EplucheDonjon(Objet):
-    def __init__(self):
-        super().__init__("Épluche-Donjon", False, 3)
-    def debut_tour(self, joueur, Jeu, log_details):
-        # IA: en PV critiques, ecarte la carte du dessus (a l'aveugle) plutot que de la piocher
-        if self.intact and joueur.pv_total <= 4 and not Jeu.donjon.vide:
-            carte = Jeu.donjon.prochaine_carte()
-            Jeu.defausse.append(carte)
-            log_details.append(f"{joueur.nom} défausse {carte.titre} du Donjon ({self.nom}).")
-
 class ParachuteDore(Objet):
     def __init__(self):
         super().__init__("Parachute doré", True)
@@ -3348,28 +3450,6 @@ class Paratonnerre(Objet):
         if carte.puissance >= 7:
             _repare_un_objet(joueur, [self], log_details, self.nom)
 
-class CrocsEnflamees(Objet):
-    def __init__(self):
-        super().__init__("Crocs enflamées", False, 7)
-    def en_fuite(self, joueur, Jeu, log_details):
-        if self.intact:
-            self.perdPV(1, joueur, log_details)
-
-class GlandePineale(Objet):
-    def __init__(self):
-        super().__init__("Glande pinéale", False)
-    def debut_tour(self, joueur, Jeu, log_details):
-        self.modificateur_de = sum(1 for j in Jeu.joueurs if j.dans_le_dj) if self.intact else 0
-    def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance == joueur.pv_base and not Jeu.traquenard_actif
-    def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.execute(joueur, carte, log_details)
-
-class OursinDodu(Objet):
-    # (la perte volontaire de PV n'est pas utilisee par l'IA)
-    def __init__(self):
-        super().__init__("Oursin dodu", False, 4)
-
 class SurinCrasseux(Objet):
     def __init__(self):
         super().__init__("Surin crasseux", True)
@@ -3383,25 +3463,6 @@ class SurinCrasseux(Objet):
             self.piocheItem(joueur, Jeu, log_details)
         self.destroy(joueur, Jeu, log_details)
 
-class SceauDeLegalisation(Objet):
-    def __init__(self):
-        super().__init__("Sceau de Légalisation", False, 6)
-    def fin_tour(self, joueur, Jeu, log_details):
-        if self.intact and joueur.pv_total % 2 == 1:
-            self.perdPV(1, joueur, log_details)
-
-class MiroirDuRised(Objet):
-    def __init__(self):
-        super().__init__("Miroir du Riséd", False)
-    def rules(self, joueur, carte, Jeu, log_details):
-        if not joueur.pile_monstres_vaincus or Jeu.traquenard_actif:
-            return False
-        sommet = joueur.pile_monstres_vaincus[-1]
-        return any(t in sommet.types for t in carte.types)
-    def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.execute(joueur, carte, log_details)
-        self.gagnePV(2, joueur, log_details)
-
 class BottesDePoncage(Objet):
     def __init__(self):
         super().__init__("Bottes de Ponçage", False, 6)
@@ -3413,38 +3474,6 @@ class BottesDePoncage(Objet):
                 c = Jeu.donjon.prochaine_carte()
                 Jeu.defausse.append(c)
                 log_details.append(f"{c.titre} est défaussé du Donjon ({self.nom}).")
-
-class MarteauCommuniste(Objet):
-    def __init__(self):
-        super().__init__("Marteau Communiste", False, types_tags=["Golem"])
-    def rules(self, joueur, carte, Jeu, log_details):
-        return "Golem" in carte.types
-    def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= 2 and any(
-            j is not joueur and j.dans_le_dj and j.pv_total > 1 for j in Jeu.joueurs)
-    def combat_effet(self, joueur, carte, Jeu, log_details):
-        # repartit les dommages du Golem 1 par 1 entre les joueurs (en ignorant ceux a 1 PV)
-        # le proprietaire est toujours inclus, meme si un autre objet l'a tue/fait fuir plus tot dans ce combat
-        participants = [j for j in Jeu.joueurs if j.dans_le_dj or j is joueur]
-        parts = {id(j): 0 for j in participants}
-        reste = carte.dommages
-        i = participants.index(joueur)
-        refus_consecutifs = 0
-        while reste > 0 and refus_consecutifs < len(participants):
-            j = participants[i % len(participants)]
-            if j is joueur or j.pv_total - parts[id(j)] > 1:
-                parts[id(j)] += 1
-                reste -= 1
-                refus_consecutifs = 0
-            else:
-                refus_consecutifs += 1
-            i += 1
-        for j in participants:
-            if j is not joueur and parts[id(j)]:
-                j.pv_total -= parts[id(j)]
-                log_details.append(f"{j.nom} perd {parts[id(j)]} PV ({self.nom}).")
-        carte.dommages = parts[id(joueur)] + reste
-        log_details.append(f"{joueur.nom} ne subit que {carte.dommages} dommages ({self.nom}).")
 
 class BombeDeMidas(Objet):
     def __init__(self):
@@ -3460,56 +3489,6 @@ class BombeDeMidas(Objet):
         joueur._gerer_pv_bonus(sacrifie, log_details)
         self.gagnePV(carte.puissance, joueur, log_details)
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        self.destroy(joueur, Jeu, log_details)
-
-class TogeDuNecromancien(Objet):
-    # (la remise volontaire de son dernier monstre sur le Donjon n'est pas utilisee par l'IA)
-    def __init__(self):
-        super().__init__("Toge du Nécromancien", False, 2)
-
-class BouclierDuBerserk(Objet):
-    def __init__(self):
-        super().__init__("Bouclier du Berserk", True)
-        self.carte_utilisee = None
-    def debut_partie(self, joueur, Jeu, log_details):
-        self.carte_utilisee = None
-    def rules(self, joueur, carte, Jeu, log_details):
-        return joueur.pv_total > 1
-    def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= 3
-    def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.perdPV(1, joueur, log_details)
-        self.reduc_damage(3, joueur, carte, log_details)
-        self.carte_utilisee = carte
-        self.destroy(joueur, Jeu, log_details)
-    def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if (not self.intact and joueur_proprietaire == joueur and carte.dommages > 0
-                and carte is not self.carte_utilisee):
-            log_details.append(f"{self.nom} de {joueur.nom} se répare.")
-            self.repare()
-
-class BarometreDeGloire(Objet):
-    def __init__(self):
-        super().__init__("Baromètre de Gloire", False)
-    def decompte_effet(self, joueur, joueurs_final, log_details):
-        if joueur in joueurs_final and joueur.pv_total == max(j.pv_total for j in joueurs_final):
-            log_details.append(f"{self.nom} de {joueur.nom}: chacun ajoute ses PV restants à son score !")
-            for j in joueurs_final:
-                j.score_final += max(0, j.pv_total)
-
-class CygneNoir(Objet):
-    def __init__(self):
-        super().__init__("Cygne Noir", True)
-    def rules(self, joueur, carte, Jeu, log_details):
-        return joueur.tour >= 3
-    def worthit(self, joueur, carte, Jeu, log_details):
-        return max(1, len(joueur.pile_monstres_vaincus)) >= joueur.pv_total + 3
-    def combat_effet(self, joueur, carte, Jeu, log_details):
-        log_details.append(f"{joueur.nom} utilise {self.nom}: les PV de chacun = ses monstres vaincus (min 1).")
-        for j in Jeu.joueurs:
-            if j.dans_le_dj:
-                j.pv_total = max(1, len(j.pile_monstres_vaincus))
-                log_details.append(f"{j.nom} passe à {j.pv_total} PV.")
         self.destroy(joueur, Jeu, log_details)
 
 class CouteauQuiTombe(Objet):
@@ -3533,15 +3512,6 @@ class CouteauQuiTombe(Objet):
             self.cartes_obligatoires -= 1
             if self.cartes_obligatoires > 0:
                 joueur.rejoue = True
-
-class AvisDeRecherche(Objet):
-    def __init__(self):
-        super().__init__("Avis de recherche", False)
-    def rules(self, joueur, carte, Jeu, log_details):
-        return (carte.puissance >= 4 and len(carte.types) > 0 and carte.effet is not None
-                and not Jeu.traquenard_actif)
-    def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.execute(joueur, carte, log_details)
 
 class CarapaceBleue(Objet):
     def __init__(self):
@@ -3654,6 +3624,43 @@ class FilDuDestin(Objet):
         log_details.append(f"{joueur.nom} réordonne les 4 prochaines cartes du Donjon ({self.nom}).")
         self.destroy(joueur, Jeu, log_details)
 
+# --- Maj tableur 12 juin 2026 : couleurs des objets ---------------------------
+
+class BourseGarnie(Objet):
+    def __init__(self):
+        super().__init__("Bourse garnie", False, 3)
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(1, joueur, log_details)
+
+class LanterneChromatique(Objet):
+    def __init__(self):
+        super().__init__("Lanterne chromatique", False, 2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        # puissance == nb de couleurs differentes dans ses objets, intacts ET brises
+        return carte.puissance == nb_couleurs(joueur.objets) and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class CinqPierresDeNuwa(Objet):
+    def __init__(self):
+        super().__init__("Cinq pierres de Nüwa", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # en urgence, ou des que les 5 couleurs sont reunies (PV max + l'objet est defausse, pas brise)
+        return (carte.dommages >= joueur.pv_total
+                or nb_couleurs(joueur.objets, intacts_seulement=True) == 5)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        couleurs = nb_couleurs(joueur.objets, intacts_seulement=True)
+        self.gagnePV(couleurs, joueur, log_details)
+        if couleurs == 5:
+            self.gagnePV(5, joueur, log_details)
+            self.destroy(joueur, Jeu, log_details)
+            # defausse : ne reste pas comme objet brise (sauf si une reaction l'a deja retire, ex: Trou Noir)
+            if self in joueur.objets:
+                joueur.objets.remove(self)
+            log_details.append(f"Les {self.nom} sont défaussées.")
+        else:
+            self.destroy(joueur, Jeu, log_details)
+
 # --- Table de dispatch des hooks (optimisation) ------------------------------
 # Pour chaque hook, l'ensemble des CLASSES qui ne l'implementent PAS (ni le
 # wrapper en_X ni l'effet X_effet) : on saute l'appel no-op dans les boucles
@@ -3697,16 +3704,15 @@ SANS_HOOK_OBJET = _table_sans_hook(Objet, _HOOKS_OBJET)
 
 # Liste des objets
 objets_disponibles = [
-    MainDeMidas(), 
-    MainDeMidasB(),
-    HacheDeGlace(), 
+    MainDeMidas(),
+    MidasDeBronze(),
+    HacheDeGlace(),
     MarteauDeGuerre(),
     FleauDesLiches(),
-    EpauletteDuBourrin(),
-    Item6PV(),
+    EpauletteDuPonceur(),
     ArmureEnCuir(),  # 5pv
     CotteDeMailles(), # 4pv
-    ParcheminDeBahn(), 
+    ParcheminDeBahn(),
     SingeDore(), 
     GateauSpatial(),
     CouteauSuisse(),
@@ -3714,8 +3720,7 @@ objets_disponibles = [
     BouclierGolemique(),
     Barde(),
     BouclierDragon(),
-    PotionDeMana(),
-    KebabRevigorant(), 
+    KebabRevigorant(),
     ArcEnflamme(),   
     ParcheminDeTeleportation(),
     GrosBoulet(),
@@ -3733,8 +3738,6 @@ objets_disponibles = [
     TronconneuseEnflammee(),
     TuniqueClasse(),
     AnneauMagique(),
-    TroisPV(),
-    TroisPV_(),
     ArmureDHonneur(),
     PierreDAme(),
     CoeurDeGolem(),
@@ -3748,7 +3751,6 @@ objets_disponibles = [
     BouclierCasse(),
     PlanPresqueParfait(),
     GraalEnMousse(),
-    ItemUseless(),
     AnneauDesSurmulots(),
     ArmureDamnee(),
     PatinsAGlace(),
@@ -3812,11 +3814,11 @@ objets_disponibles = [
     ChapeauStyle(),
     Chameau(),
     PotionDeFeuLiquide(),
-    CasquePlus(),
+    CasqueACornes(),
     AnkhDeReincarnation(),
     CoffreDuRoiSorcier(),
     CoeurDeDragon(),
-    PotionDAdrenaline(),
+    ShotDAdrenaline(),
     PeigneEnOr(),
     LampeMagique(),
     CanneAChep(),
@@ -3843,7 +3845,7 @@ objets_disponibles = [
     LunettesDuBricoleur(),
     AttrapeReves(),
     DeMaudit(),
-    Harpe(),
+    HarpeCinglante(),
     BouclierMagique(),
     ViandeCrue(),
     MailletDuRoiLiche(),
@@ -3874,7 +3876,6 @@ objets_disponibles = [
     CalumetDeLaPaix(),
     Zulfikar(),
     AnneauDeGlace(),
-    Item2PV(),
     GrenadeSinge(),
     # --- synchro tableur juin 2026 ---
     CoeurDeTarasque(),
@@ -3949,31 +3950,28 @@ objets_disponibles = [
     EpeeDeDamocles(),
     VoileDIsis(),
     TambourDeKui(),
-    EplucheDonjon(),
     ParachuteDore(),
     PoigneeDeMain(),
     Paratonnerre(),
-    CrocsEnflamees(),
-    GlandePineale(),
-    OursinDodu(),
     SurinCrasseux(),
-    SceauDeLegalisation(),
-    MiroirDuRised(),
     BottesDePoncage(),
-    MarteauCommuniste(),
     BombeDeMidas(),
-    TogeDuNecromancien(),
-    BouclierDuBerserk(),
-    BarometreDeGloire(),
-    CygneNoir(),
     CouteauQuiTombe(),
-    AvisDeRecherche(),
     CarapaceBleue(),
     JournalDuFutur(),
     BinoclesDeLInventeur(),
     OeilDHorus(),
     OiseauDeMauvaisAugure(),
     FilDuDestin(),
+    # --- maj tableur 12 juin 2026 (couleurs) ---
+    BourseGarnie(),
+    LanterneChromatique(),
+    CinqPierresDeNuwa(),
+    # --- mode soiree (party.py) : Medailles inter-manches et niveaux de heros ---
+    CoupeDesChampions(),
+    ParfumDeScandale(),
+    ParcheminDXP(),
+    PotionDeJouvence(),
 ]
 
 
@@ -3982,12 +3980,11 @@ __all__ = [
             "objets_disponibles",
             "Egide",
             "MainDeMidas",
-            "MainDeMidasB",
+            "MidasDeBronze",
             "HacheDeGlace",
             "MarteauDeGuerre",
             "FleauDesLiches",
-            "EpauletteDuBourrin",
-            "Item6PV",
+            "EpauletteDuPonceur",
             "ArmureEnCuir",
             "CotteDeMailles",
             "ParcheminDeBahn",
@@ -3998,7 +3995,6 @@ __all__ = [
             "BouclierGolemique",
             "Barde",
             "BouclierDragon",
-            "PotionDeMana",
             "KebabRevigorant",
             "ArcEnflamme",
             "ParcheminDeTeleportation",
@@ -4017,8 +4013,6 @@ __all__ = [
             "TronconneuseEnflammee",
             "TuniqueClasse",
             "AnneauMagique",
-            "TroisPV",
-            "TroisPV_",
             "ArmureDHonneur",
             "CoeurDeGolem",
             "PierreDAme",
@@ -4032,7 +4026,6 @@ __all__ = [
             "BouclierCasse",
             "PlanPresqueParfait",
             "GraalEnMousse",
-            "ItemUseless",
             "AnneauDesSurmulots",
             "ArmureDamnee",
             "PatinsAGlace",
@@ -4096,11 +4089,11 @@ __all__ = [
             "ChapeauStyle",
             "Chameau",
             "PotionDeFeuLiquide",
-            "CasquePlus",
+            "CasqueACornes",
             "AnkhDeReincarnation",
             "CoffreDuRoiSorcier",
             "CoeurDeDragon",
-            "PotionDAdrenaline",
+            "ShotDAdrenaline",
             "PeigneEnOr",
             "LampeMagique",
             "CanneAChep",
@@ -4127,7 +4120,7 @@ __all__ = [
             "OsseletsDeResurrection",
             "LunettesDuBricoleur",
             "AttrapeReves",
-            "Harpe",
+            "HarpeCinglante",
             "BouclierMagique",
             "ViandeCrue",
             "MailletDuRoiLiche",
@@ -4158,7 +4151,6 @@ __all__ = [
             "CalumetDeLaPaix",
             "Zulfikar",
             "AnneauDeGlace",
-            "Item2PV",
             "GrenadeSinge",
             # --- synchro tableur juin 2026 ---
             "CoeurDeTarasque",
@@ -4233,29 +4225,26 @@ __all__ = [
             "EpeeDeDamocles",
             "VoileDIsis",
             "TambourDeKui",
-            "EplucheDonjon",
             "ParachuteDore",
             "PoigneeDeMain",
             "Paratonnerre",
-            "CrocsEnflamees",
-            "GlandePineale",
-            "OursinDodu",
             "SurinCrasseux",
-            "SceauDeLegalisation",
-            "MiroirDuRised",
             "BottesDePoncage",
-            "MarteauCommuniste",
             "BombeDeMidas",
-            "TogeDuNecromancien",
-            "BouclierDuBerserk",
-            "BarometreDeGloire",
-            "CygneNoir",
             "CouteauQuiTombe",
-            "AvisDeRecherche",
             "CarapaceBleue",
             "JournalDuFutur",
             "BinoclesDeLInventeur",
             "OeilDHorus",
             "OiseauDeMauvaisAugure",
             "FilDuDestin",
-        ]
+        
+            "BourseGarnie",
+            "LanterneChromatique",
+            "CinqPierresDeNuwa",
+
+            "CoupeDesChampions",
+            "ParfumDeScandale",
+            "ParcheminDXP",
+            "PotionDeJouvence",
+]
