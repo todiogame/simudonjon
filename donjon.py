@@ -33,8 +33,8 @@ def _simuler_batch(args):
     with open('priorites_objets.json', 'r') as json_file:
         priorites_objets = json.load(json_file)
 
-    stats_objets = {}      # nom -> [victoires, total]
-    stats_persos = {}      # nom -> [victoires, total]
+    stats_objets = {}      # nom -> [victoires, total, morts, fuites, ponces]
+    stats_persos = {}      # nom -> [victoires, total, morts, fuites, ponces]
     duos_scores = {}       # (objet_a, objet_b) -> [victoires, total]
     duos_perso_item = {}   # (perso, objet) -> [victoires, total]
     scores_objets = {}     # nom -> {score_pose: nb}  (score 0 si le joueur ne compte pas)
@@ -72,20 +72,24 @@ def _simuler_batch(args):
 
         for joueur in joueurs:
             victoire = 1 if joueur is vainqueur else 0
+            mort = 0 if joueur.vivant else 1
+            fuite = 1 if joueur.fuite_reussie else 0
+            ponce = 1 if joueur.dans_le_dj else 0
             # score "pose": le score final si le joueur compte au decompte, sinon 0 (mort/fuyard exclu)
             score_pose = joueur.score_final if getattr(joueur, 'compte_au_score', False) else 0
             compteurs['joueurs'] += 1
-            if not joueur.vivant:
-                compteurs['morts'] += 1
-            elif joueur.fuite_reussie:
-                compteurs['fuites'] += 1
+            compteurs['morts'] += mort
+            compteurs['fuites'] += fuite
+            compteurs['ponces'] = compteurs.get('ponces', 0) + ponce
             h = compteurs['scores']; h[score_pose] = h.get(score_pose, 0) + 1
             perso_nom = joueur.personnage_nom
-            s = stats_persos.setdefault(perso_nom, [0, 0]); s[0] += victoire; s[1] += 1
+            s = stats_persos.setdefault(perso_nom, [0, 0, 0, 0, 0])
+            s[0] += victoire; s[1] += 1; s[2] += mort; s[3] += fuite; s[4] += ponce
             h = scores_persos.setdefault(perso_nom, {}); h[score_pose] = h.get(score_pose, 0) + 1
             noms_objets = sorted(o.nom for o in joueur.objets_initiaux)
             for nom in noms_objets:
-                s = stats_objets.setdefault(nom, [0, 0]); s[0] += victoire; s[1] += 1
+                s = stats_objets.setdefault(nom, [0, 0, 0, 0, 0])
+                s[0] += victoire; s[1] += 1; s[2] += mort; s[3] += fuite; s[4] += ponce
                 s = duos_perso_item.setdefault((perso_nom, nom), [0, 0]); s[0] += victoire; s[1] += 1
                 h = scores_objets.setdefault(nom, {}); h[score_pose] = h.get(score_pose, 0) + 1
             for duo in itertools.combinations(noms_objets, 2):
@@ -98,11 +102,11 @@ def _simuler_batch(args):
 
 
 def _fusionner(dest, src):
-    """Additionne les compteurs [victoires, total] d'un batch dans le total."""
-    for cle, (v, t) in src.items():
-        d = dest.setdefault(cle, [0, 0])
-        d[0] += v
-        d[1] += t
+    """Additionne les listes de compteurs d'un batch dans le total."""
+    for cle, valeurs in src.items():
+        d = dest.setdefault(cle, [0] * len(valeurs))
+        for i, v in enumerate(valeurs):
+            d[i] += v
 
 
 def _fusionner_hist(dest, src):
@@ -137,7 +141,7 @@ def display_simu(r=0, nb_process=None):
     duos_perso_item = {}
     scores_objets = {}
     scores_persos = {}
-    compteurs_globaux = {'joueurs': 0, 'morts': 0, 'fuites': 0, 'scores': {}}
+    compteurs_globaux = {'joueurs': 0, 'morts': 0, 'fuites': 0, 'ponces': 0, 'scores': {}}
     dj_ponces3j = 0
     dj_ponces4j = 0
     highscore_max = 0
@@ -163,6 +167,7 @@ def display_simu(r=0, nb_process=None):
             compteurs_globaux['joueurs'] += cpt['joueurs']
             compteurs_globaux['morts'] += cpt['morts']
             compteurs_globaux['fuites'] += cpt['fuites']
+            compteurs_globaux['ponces'] += cpt.get('ponces', 0)
             for valeur, nb in cpt['scores'].items():
                 compteurs_globaux['scores'][valeur] = compteurs_globaux['scores'].get(valeur, 0) + nb
             dj_ponces3j += ponces[3]
@@ -183,28 +188,43 @@ def display_simu(r=0, nb_process=None):
     # Statistiques par objet (depuis les compteurs fusionnes)
     df_stats_objets = pd.DataFrame(
         [{'Objet': nom, 'Victoires': v, 'Total': t, 'Winrate': (v / t) * 100,
+          'Mort%': m / t * 100, 'Fuite%': f / t * 100, 'Ponce%': p / t * 100,
           'Score médian': _mediane_hist(scores_objets.get(nom, {}))}
-         for nom, (v, t) in stats_objets.items()]
+         for nom, (v, t, m, f, p) in stats_objets.items()]
     ).sort_values(by='Winrate', ascending=False)
     pd.set_option('display.max_rows', None)  # afficher tous les objets (270+ depuis la synchro tableur)
 
     # Afficher les résultats
     print("\nStatistiques par objet:")
-    print(df_stats_objets)
+    print(df_stats_objets.to_string(index=False, float_format=lambda x: f"{x:.2f}"))
     print(f"\nTemps total des simulations : {total_time:.2f} secondes")
-    print(f"Pourcentage de donjons ponces a 3j : {dj_ponces3j / total_simulations* 100:.2f}%")
-    print(f"Pourcentage de donjons ponces a 4j : {dj_ponces4j / total_simulations* 100:.2f}%")
+
+    # --- Résumé global ---
     nb_joueurs_total = max(1, compteurs_globaux['joueurs'])
-    print(f"Score médian posé (toutes parties) : {_mediane_hist(compteurs_globaux['scores'])}")
-    print(f"Pourcentage de joueurs morts : {compteurs_globaux['morts'] / nb_joueurs_total * 100:.2f}%")
-    print(f"Pourcentage de joueurs ayant fui : {compteurs_globaux['fuites'] / nb_joueurs_total * 100:.2f}%")
+    print(f"\n{'=' * 26} RÉSUMÉ GLOBAL {'=' * 26}")
+    print(f"Parties simulées : {total_simulations} ({nb_joueurs_total} joueurs-parties)")
+    print(f"Pourcentage de donjons ponces a 3j : {dj_ponces3j / total_simulations * 100:.2f}%")
+    print(f"Pourcentage de donjons ponces a 4j : {dj_ponces4j / total_simulations * 100:.2f}%")
+    print(f"Joueurs morts : {compteurs_globaux['morts'] / nb_joueurs_total * 100:.2f}%  |  "
+          f"ayant fui : {compteurs_globaux['fuites'] / nb_joueurs_total * 100:.2f}%  |  "
+          f"ponceurs : {compteurs_globaux['ponces'] / nb_joueurs_total * 100:.2f}%")
+    scores_glob = compteurs_globaux['scores']
+    score_moyen = sum(val * nb for val, nb in scores_glob.items()) / nb_joueurs_total
+    print(f"Score posé : médian {_mediane_hist(scores_glob)}, moyen {score_moyen:.2f}, "
+          f"record {highscore_max} (0 = joueur exclu du décompte)")
+    print("Distribution des scores posés :")
+    for valeur in sorted(scores_glob):
+        nb = scores_glob[valeur]
+        barre = '#' * max(1, round(nb / nb_joueurs_total * 100)) if nb else ''
+        print(f"  {valeur:>3} : {nb / nb_joueurs_total * 100:>6.2f}%  {barre}")
 
     # --- Statistiques par Personnage ---
     if stats_persos:
         df_stats_persos = pd.DataFrame(
             [{'Personnage': nom, 'Victoires': v, 'Total_Parties': t, 'Winrate (%)': round(v * 100 / t, 2),
+              'Mort%': round(m / t * 100, 2), 'Fuite%': round(f / t * 100, 2), 'Ponce%': round(p / t * 100, 2),
               'Score médian': _mediane_hist(scores_persos.get(nom, {}))}
-             for nom, (v, t) in stats_persos.items()]
+             for nom, (v, t, m, f, p) in stats_persos.items()]
         ).sort_values(by='Winrate (%)', ascending=False)
 
         print("\nStatistiques par Personnage:")
@@ -221,6 +241,10 @@ def display_simu(r=0, nb_process=None):
         })
 
     df_duos_scores = pd.DataFrame(duos_stats)
+    # filtrer les duos trop rares pour etre significatifs
+    if len(df_duos_scores):
+        minimum_duo = max(20, int(df_duos_scores['Total'].median()) // 10)
+        df_duos_scores = df_duos_scores[df_duos_scores['Total'] >= minimum_duo]
     df_duos_scores.sort_values(by='Winrate', ascending=False, inplace=True)
     
     unique_duos = []

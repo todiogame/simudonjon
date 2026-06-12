@@ -17,6 +17,7 @@ Usage :
   python party.py      Simulation de masse (multiprocess, reprise via party_stats.json)
   python party.py x    Joue x soirées avec les logs complets
 """
+import itertools
 import random
 import os
 import json
@@ -35,7 +36,7 @@ from draft import calculer_priors, _charger_priors, score_pick
 # ==============================================
 # Configuration
 # ==============================================
-NB_SOIREES = 1000000               # nombre total de soirées à simuler
+NB_SOIREES = 2000000               # nombre total de soirées à simuler
 SEUIL_PV_ESSAI_FUITE = 6
 MANCHES_MIN, MANCHES_MAX = 2, 5    # nombre de manches prévues (uniforme)
 MAX_MANCHES_PAR_SOIREE = 30        # garde-fou si le départage s'éternise
@@ -250,6 +251,8 @@ def _soirees_batch(args):
 
     item_stats = {}
     perso_stats = {}
+    duo_stats = {}          # "objet_a||objet_b" -> {'night_win', 'win', 'played'}
+    perso_objet_stats = {}  # "perso||objet" -> {'night_win', 'win', 'played'}
     baseline = {}  # etat -> [night_wins, joueurs-manches, somme delta medailles]
     compteurs = {'soirees': 0, 'manches': 0, 'departages': 0, 'medailles_finales': 0,
                  'hist_manches': {}}
@@ -291,8 +294,19 @@ def _soirees_batch(args):
                     si['fled'] += fui
                     si['cleared'] += ponce
                     _maj_etat(si, etat, night_win, delta)
+                    s = perso_objet_stats.setdefault(f"{perso_nom}||{nom}",
+                                                     {'night_win': 0, 'win': 0, 'played': 0})
+                    s['played'] += 1
+                    s['night_win'] += night_win
+                    s['win'] += win
+                for a, b in itertools.combinations(sorted(objets_noms), 2):
+                    s = duo_stats.setdefault(f"{a}||{b}",
+                                             {'night_win': 0, 'win': 0, 'played': 0})
+                    s['played'] += 1
+                    s['night_win'] += night_win
+                    s['win'] += win
 
-    return item_stats, perso_stats, baseline, compteurs
+    return item_stats, perso_stats, duo_stats, perso_objet_stats, baseline, compteurs
 
 
 # --- Affichage ---
@@ -323,7 +337,8 @@ def _scores_ajustes(stats_entry, base_win, base_delta, p_glob, d_glob):
     return exces_win / n_tot * 100, exces_delta / n_tot
 
 
-def _afficher_stats(item_stats, perso_stats, baseline, compteurs):
+def _afficher_stats(item_stats, perso_stats, baseline, compteurs,
+                    duo_stats=None, perso_objet_stats=None):
     soirees = max(1, compteurs.get('soirees', 0))
     manches = max(1, compteurs.get('manches', 0))
     print(f"\n{'=' * 30} RÉSUMÉ {'=' * 30}")
@@ -361,14 +376,15 @@ def _afficher_stats(item_stats, perso_stats, baseline, compteurs):
         return lignes
 
     def _imprimer(lignes, cle_nom, largeur_nom):
-        sep = "-" * (largeur_nom + 80)
+        sep = "-" * (largeur_nom + 96)
         print(sep)
         print(f"{cle_nom:<{largeur_nom}} {'Played':<8} {'WinAdj':<8} {'MedAdj':<8} {'MedDelta':<9} "
-              f"{'NightWin%':<10} {'GameWin%':<9} {'Death%':<7}")
+              f"{'NightWin%':<10} {'GameWin%':<9} {'Death%':<7} {'Fled%':<7} {'Clear%':<7}")
         print(sep)
         for l in lignes:
             print(f"{l[cle_nom]:<{largeur_nom}} {l['Played']:<8} {l['WinAdj']:<+8.2f} {l['MedAdj']:<+8.3f} "
-                  f"{l['MedDelta']:<+9.3f} {l['NightWin%']:<10.2f} {l['GameWin%']:<9.2f} {l['Death%']:<7.2f}")
+                  f"{l['MedDelta']:<+9.3f} {l['NightWin%']:<10.2f} {l['GameWin%']:<9.2f} {l['Death%']:<7.2f} "
+                  f"{l['Fled%']:<7.2f} {l['Clear%']:<7.2f}")
         print(sep)
 
     print("\n--- Statistiques Objets (classement par WinAdj, corrigé du biais de sélection) ---")
@@ -376,6 +392,39 @@ def _afficher_stats(item_stats, perso_stats, baseline, compteurs):
 
     print("\n--- Statistiques Personnages (classement par WinAdj) ---")
     _imprimer(_lignes(perso_stats, 'Personnage'), 'Personnage', 22)
+
+    # --- Duos (top/flop par NightWin% brut, chaque nom n'apparait qu'une fois) ---
+    def _top_flop_duos(stats, titre, separateur=' & '):
+        lignes = [(cle.split('||'), s['night_win'] / s['played'] * 100,
+                   s['win'] / s['played'] * 100, s['played'])
+                  for cle, s in (stats or {}).items() if s.get('played', 0)]
+        if not lignes:
+            return
+        tailles = sorted(p for _, _, _, p in lignes)
+        minimum = max(200, tailles[len(tailles) // 2] // 10)
+        lignes = [l for l in lignes if l[3] >= minimum]
+        lignes.sort(key=lambda l: l[1], reverse=True)
+
+        def _selection(iterable):
+            retenus, vus = [], set()
+            for noms, nw, gw, played in iterable:
+                if not any(nm in vus for nm in noms):
+                    retenus.append((noms, nw, gw, played))
+                    vus.update(noms)
+                if len(retenus) == 10:
+                    break
+            return retenus
+
+        print(f"\n{titre} (échantillon >= {minimum}, NightWin% brut — biais de sélection non corrigé) :")
+        print(f"  {'-- top 10 --':<70} {'NightWin%':>10} {'GameWin%':>9} {'Played':>8}")
+        for noms, nw, gw, played in _selection(lignes):
+            print(f"  {separateur.join(noms):<70} {nw:>10.2f} {gw:>9.2f} {played:>8}")
+        print(f"  {'-- flop 10 --':<70} {'NightWin%':>10} {'GameWin%':>9} {'Played':>8}")
+        for noms, nw, gw, played in _selection(reversed(lignes)):
+            print(f"  {separateur.join(noms):<70} {nw:>10.2f} {gw:>9.2f} {played:>8}")
+
+    _top_flop_duos(duo_stats, "Duos d'objets")
+    _top_flop_duos(perso_objet_stats, "Duos Héros & Objet", separateur=' + ')
 
     print("\nNB : WinAdj = points de victoire de soirée au-dessus de l'attendu de l'état au moment")
     print("du pick (Médailles des deux camps, manches restantes, niveau du héros, nb joueurs) :")
@@ -391,6 +440,8 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
 
     item_stats = {}
     perso_stats = {}
+    duo_stats = {}
+    perso_objet_stats = {}
     baseline = {}
     compteurs = {}
     start = 0
@@ -399,11 +450,13 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
         try:
             with open(filename, 'r', encoding='utf-8') as f:
                 saved = json.load(f)
-            if saved.get('format') != 2:
-                print(f"{filename} est dans un ancien format (sans stats par état) : redémarrage.")
+            if saved.get('format') != 3:
+                print(f"{filename} est dans un ancien format (sans duos) : redémarrage.")
             else:
                 item_stats = saved.get('item_stats', {})
                 perso_stats = saved.get('perso_stats', {})
+                duo_stats = saved.get('duo_stats', {})
+                perso_objet_stats = saved.get('perso_objet_stats', {})
                 baseline = saved.get('baseline', {})
                 compteurs = saved.get('compteurs', {})
                 # cles d'histogramme: json les stocke en str
@@ -412,7 +465,8 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
                 print(f"Reprise à la soirée {start + 1}/{iter}.")
         except Exception as e:
             print(f"Erreur chargement {filename}: {e}. Redémarrage.")
-            item_stats, perso_stats, baseline, compteurs, start = {}, {}, {}, {}, 0
+            item_stats, perso_stats, duo_stats, perso_objet_stats = {}, {}, {}, {}
+            baseline, compteurs, start = {}, {}, 0
     else:
         print("Démarrage nouvelle simulation.")
 
@@ -432,8 +486,9 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
             attribues += n
 
         def sauvegarder():
-            save = {'format': 2, 'soirees_completed': soirees_completes, 'compteurs': compteurs,
-                    'baseline': baseline, 'item_stats': item_stats, 'perso_stats': perso_stats}
+            save = {'format': 3, 'soirees_completed': soirees_completes, 'compteurs': compteurs,
+                    'baseline': baseline, 'item_stats': item_stats, 'perso_stats': perso_stats,
+                    'duo_stats': duo_stats, 'perso_objet_stats': perso_objet_stats}
             try:
                 with open(filename, 'w', encoding='utf-8') as f:
                     json.dump(save, f, ensure_ascii=False)  # compact: le fichier est volumineux (stats par etat)
@@ -444,9 +499,11 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
 
         def integrer(resultat):
             nonlocal soirees_completes, batchs_depuis_save
-            so, sp, bl, cpt = resultat
+            so, sp, sd, spo, bl, cpt = resultat
             _fusionner_stats(item_stats, so)
             _fusionner_stats(perso_stats, sp)
+            _fusionner_stats(duo_stats, sd)
+            _fusionner_stats(perso_objet_stats, spo)
             _fusionner_baseline(baseline, bl)
             for cle in ('soirees', 'manches', 'departages', 'medailles_finales'):
                 compteurs[cle] = compteurs.get(cle, 0) + cpt[cle]
@@ -470,7 +527,7 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
                 integrer(_soirees_batch(travail))
         sauvegarder()
 
-    _afficher_stats(item_stats, perso_stats, baseline, compteurs)
+    _afficher_stats(item_stats, perso_stats, baseline, compteurs, duo_stats, perso_objet_stats)
     print(f"\nStats basées sur {soirees_completes} soirées. Données sauvegardées dans {filename}")
 
 

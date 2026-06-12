@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import itertools
 import random
 import os
 import json
@@ -417,6 +418,9 @@ def _draft_batch(args):
     _charger_priors()  # depuis le cache disque (calcule par le parent avant le Pool)
     item_stats = {}
     perso_stats = {}
+    duo_stats = {}          # "objet_a||objet_b" -> {'win', 'played'}
+    perso_objet_stats = {}  # "perso||objet" -> {'win', 'played'}
+    compteurs = {'parties': 0, 'joueurs': 0, 'morts': 0, 'fuites': 0, 'ponces': 0, 'scores': {}}
     drafts_faits = 0
 
     for _ in range(nb_drafts):
@@ -441,6 +445,7 @@ def _draft_batch(args):
             vainqueur, joueurs_apres = jouerLaGame(objets_dispo_local, noms, builds, persos, False)
             if joueurs_apres is None:
                 continue
+            compteurs['parties'] += 1
             nom_vainqueur = getattr(vainqueur, 'nom', None)
             for j_final in joueurs_apres:
                 is_win = (j_final.nom == nom_vainqueur)
@@ -448,6 +453,14 @@ def _draft_batch(args):
                 fled = j_final.fuite_reussie
                 cleared = j_final.dans_le_dj
                 perso_nom = getattr(j_final, 'personnage_nom', 'Inconnu')
+
+                # Compteurs globaux (score "pose" = 0 si exclu du decompte)
+                score_pose = j_final.score_final if getattr(j_final, 'compte_au_score', False) else 0
+                compteurs['joueurs'] += 1
+                compteurs['morts'] += is_dead
+                compteurs['fuites'] += fled
+                compteurs['ponces'] += cleared
+                h = compteurs['scores']; h[score_pose] = h.get(score_pose, 0) + 1
 
                 # Stats Perso
                 ensure_perso_stats_entry(perso_nom, perso_stats)
@@ -459,16 +472,27 @@ def _draft_batch(args):
                 if is_win: stats_p['win'] += 1
 
                 # Stats Objets
-                for obj in j_final.objets_initiaux:
-                    ensure_item_stats_entry(obj.nom, item_stats)
-                    stats_i = item_stats[obj.nom]
+                noms_objets = sorted(o.nom for o in j_final.objets_initiaux)
+                for nom_obj in noms_objets:
+                    ensure_item_stats_entry(nom_obj, item_stats)
+                    stats_i = item_stats[nom_obj]
                     stats_i['played'] += 1
                     if is_dead: stats_i['death'] += 1
                     elif fled: stats_i['fled'] += 1
                     elif cleared: stats_i['cleared'] += 1
                     if is_win: stats_i['win'] += 1
+                    # Synergie perso/objet
+                    s = perso_objet_stats.setdefault(f"{perso_nom}||{nom_obj}", {'win': 0, 'played': 0})
+                    s['played'] += 1
+                    s['win'] += is_win
 
-    return item_stats, perso_stats, drafts_faits
+                # Duos d'objets du build
+                for a, b in itertools.combinations(noms_objets, 2):
+                    s = duo_stats.setdefault(f"{a}||{b}", {'win': 0, 'played': 0})
+                    s['played'] += 1
+                    s['win'] += is_win
+
+    return item_stats, perso_stats, duo_stats, perso_objet_stats, compteurs, drafts_faits
 
 
 # --- Fonction Principale ---
@@ -480,6 +504,9 @@ def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_ST
 
     item_stats = {}
     perso_stats = {}
+    duo_stats = {}
+    perso_objet_stats = {}
+    compteurs = {'parties': 0, 'joueurs': 0, 'morts': 0, 'fuites': 0, 'ponces': 0, 'scores': {}}
     start_draft = 0
 
     if os.path.exists(filename):
@@ -487,11 +514,18 @@ def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_ST
             with open(filename, 'r', encoding='utf-8') as f: saved_data = json.load(f)
             item_stats = saved_data.get('item_stats', {})
             perso_stats = saved_data.get('perso_stats', {})
+            duo_stats = saved_data.get('duo_stats', {})
+            perso_objet_stats = saved_data.get('perso_objet_stats', {})
+            compteurs.update(saved_data.get('compteurs', {}))
+            # cles d'histogramme : json les stocke en str
+            compteurs['scores'] = {int(k): v for k, v in compteurs.get('scores', {}).items()}
             start_draft = saved_data.get('drafts_completed', 0)
             print(f"Reprise à draft {start_draft + 1}/{iter}.")
         except Exception as e:
             print(f"Erreur chargement {filename}: {e}. Redémarrage.")
-            item_stats = {}; perso_stats = {}; start_draft = 0
+            item_stats = {}; perso_stats = {}; duo_stats = {}; perso_objet_stats = {}
+            compteurs = {'parties': 0, 'joueurs': 0, 'morts': 0, 'fuites': 0, 'ponces': 0, 'scores': {}}
+            start_draft = 0
     else:
         print("Démarrage nouvelle simulation.")
 
@@ -514,14 +548,23 @@ def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_ST
 
         def integrer(resultat):
             nonlocal drafts_completes
-            so, sp, faits = resultat
+            so, sp, sd, spo, cpt, faits = resultat
             _fusionner_stats(item_stats, so)
             _fusionner_stats(perso_stats, sp)
+            _fusionner_stats(duo_stats, sd)
+            _fusionner_stats(perso_objet_stats, spo)
+            for cle in ('parties', 'joueurs', 'morts', 'fuites', 'ponces'):
+                compteurs[cle] = compteurs.get(cle, 0) + cpt[cle]
+            h = compteurs['scores']
+            for valeur, nb in cpt['scores'].items():
+                h[valeur] = h.get(valeur, 0) + nb
             drafts_completes += faits
-            save_data = {"drafts_completed": drafts_completes, "item_stats": item_stats, "perso_stats": perso_stats}
+            save_data = {"drafts_completed": drafts_completes, "item_stats": item_stats,
+                         "perso_stats": perso_stats, "duo_stats": duo_stats,
+                         "perso_objet_stats": perso_objet_stats, "compteurs": compteurs}
             try:
                 with open(filename, "w", encoding='utf-8') as f:
-                    json.dump(save_data, f, indent=4, ensure_ascii=False)
+                    json.dump(save_data, f, ensure_ascii=False)  # compact : duos volumineux
             except IOError as e:
                 print(f"\nERREUR sauvegarde: {e}")
 
@@ -585,6 +628,63 @@ def simudraftgames(iter=NB_DRAFT_SIMULATIONS, nb_games=NB_GAMES_PER_DRAFT_FOR_ST
     print("-" * 70)
     for s in sorted_persos: print(f"{s['Personnage']:<20} {s['Played']:<10} {s['Win%']:<8.2f} {s['Death%']:<8.2f} {s['Fled%']:<8.2f} {s['Clear%']:<8.2f}")
     print("-" * 70)
+
+    # --- Résumé global ---
+    nb_joueurs_total = max(1, compteurs.get('joueurs', 0))
+    scores_glob = compteurs.get('scores', {})
+    print(f"\n{'=' * 26} RÉSUMÉ GLOBAL {'=' * 26}")
+    print(f"Parties jouées : {compteurs.get('parties', 0)} ({nb_joueurs_total} joueurs-parties)")
+    print(f"Joueurs morts : {compteurs.get('morts', 0) / nb_joueurs_total * 100:.2f}%  |  "
+          f"ayant fui : {compteurs.get('fuites', 0) / nb_joueurs_total * 100:.2f}%  |  "
+          f"ponceurs : {compteurs.get('ponces', 0) / nb_joueurs_total * 100:.2f}%")
+    if scores_glob:
+        score_moyen = sum(val * nb for val, nb in scores_glob.items()) / nb_joueurs_total
+        cumul, mediane = 0, 0
+        for valeur in sorted(scores_glob):
+            cumul += scores_glob[valeur]
+            if cumul >= (nb_joueurs_total + 1) / 2:
+                mediane = valeur
+                break
+        print(f"Score posé : médian {mediane}, moyen {score_moyen:.2f} (0 = joueur exclu du décompte)")
+        print("Distribution des scores posés :")
+        for valeur in sorted(scores_glob):
+            nb = scores_glob[valeur]
+            barre = '#' * max(1, round(nb / nb_joueurs_total * 100)) if nb else ''
+            print(f"  {valeur:>3} : {nb / nb_joueurs_total * 100:>6.2f}%  {barre}")
+
+    # --- Duos (top/flop, chaque objet/perso n'apparait qu'une fois par tableau) ---
+    def _top_flop_duos(stats, titre, separateur=' & ', minimum=None):
+        lignes = [(cle.split('||'), s['win'] / s['played'] * 100, s['played'])
+                  for cle, s in stats.items() if s.get('played', 0)]
+        if not lignes:
+            return
+        if minimum is None:
+            # seuil : un dixieme de l'echantillon median, plancher 200
+            tailles = sorted(p for _, _, p in lignes)
+            minimum = max(200, tailles[len(tailles) // 2] // 10)
+        lignes = [l for l in lignes if l[2] >= minimum]
+        lignes.sort(key=lambda l: l[1], reverse=True)
+
+        def _selection(iterable):
+            retenus, vus = [], set()
+            for noms, wr_duo, played in iterable:
+                if not any(nm in vus for nm in noms):
+                    retenus.append((noms, wr_duo, played))
+                    vus.update(noms)
+                if len(retenus) == 10:
+                    break
+            return retenus
+
+        print(f"\n{titre} (échantillon >= {minimum}) :")
+        print(f"  {'-- top 10 --':<70} {'Win%':>7} {'Played':>9}")
+        for noms, wr_duo, played in _selection(lignes):
+            print(f"  {separateur.join(noms):<70} {wr_duo:>7.2f} {played:>9}")
+        print(f"  {'-- flop 10 --':<70} {'Win%':>7} {'Played':>9}")
+        for noms, wr_duo, played in _selection(reversed(lignes)):
+            print(f"  {separateur.join(noms):<70} {wr_duo:>7.2f} {played:>9}")
+
+    _top_flop_duos(duo_stats, "Duos d'objets")
+    _top_flop_duos(perso_objet_stats, "Duos Personnage & Objet", separateur=' + ')
 
     print(f"\nStats finales basées sur {drafts_completes} drafts complétés.")
     print(f"Données sauvegardées dans {filename}")
