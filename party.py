@@ -67,7 +67,31 @@ def _fusionner_stats(dest, src):
     for nom, valeurs in src.items():
         d = dest.setdefault(nom, {})
         for cle, v in valeurs.items():
-            d[cle] = d.get(cle, 0) + v
+            if cle == 'etats':
+                e = d.setdefault('etats', {})
+                for etat, (nw, n, sd) in v.items():
+                    cur = e.setdefault(etat, [0, 0, 0])
+                    cur[0] += nw; cur[1] += n; cur[2] += sd
+            else:
+                d[cle] = d.get(cle, 0) + v
+
+
+def _fusionner_baseline(dest, src):
+    for etat, (nw, n, sd) in src.items():
+        cur = dest.setdefault(etat, [0, 0, 0])
+        cur[0] += nw; cur[1] += n; cur[2] += sd
+
+
+# --- État d'un joueur avant une manche (pour corriger le biais de sélection) ---
+# Le winrate de soirée brut confond "l'objet aide à gagner" et "l'objet est pické
+# quand on est déjà en train de gagner/perdre" (ex: les objets novice, pickés à
+# 0 Médaille). On stratifie donc chaque observation par l'état au moment du pick,
+# et on compare l'issue à l'attendu des joueurs dans le même état.
+def _cle_etat(nb_joueurs, medailles, i, niveau, manches_prevues, manche):
+    mes = min(medailles[i], 3)
+    adv = min(max(medailles[j] for j in range(nb_joueurs) if j != i), 3)
+    restantes = max(0, min(3, manches_prevues - manche))  # 0 = derniere prevue ou departage
+    return f"{nb_joueurs}|{mes}|{adv}|{restantes}|{niveau}"
 
 
 # --- Pick aux priors, ajusté à l'état des Médailles ---
@@ -128,7 +152,7 @@ def draft_soiree(persos, medailles, log=False):
 def jouer_soiree(log=False):
     """Joue une soirée et retourne (index_vainqueur, historique, infos).
     historique = liste de manches ; une manche = liste par joueur de
-    (nom_perso, [noms objets draftés], win, mort, fui, poncé)."""
+    (nom_perso, [noms objets draftés], win, mort, fui, poncé, etat_avant, delta_medailles)."""
     nb_joueurs = random.choice([3, 4])
     noms = NOMS_JOUEURS[:nb_joueurs]
 
@@ -157,6 +181,11 @@ def jouer_soiree(log=False):
         if log:
             etat = ", ".join(f"{noms[i]}={persos[i].nom}({medailles[i]} med.)" for i in range(nb_joueurs))
             print(f"\n===== Manche {manche}/{manches_prevues} : {etat} =====")
+
+        # etat de chaque joueur AVANT la manche (sert a corriger le biais de selection)
+        etats_avant = [_cle_etat(nb_joueurs, medailles, i, niveaux[i], manches_prevues, manche)
+                       for i in range(nb_joueurs)]
+        medailles_avant = list(medailles)
 
         builds, objets_restants = draft_soiree(persos, medailles, log)
         joueurs = [Joueur(noms[i], persos[i], builds[i], medailles=medailles[i])
@@ -188,7 +217,8 @@ def jouer_soiree(log=False):
                     print(f"{j.nom} est mort : son héros retourne dans le pool, "
                           f"il jouera {nouvelle(1).nom} à la prochaine manche.")
             enregistrement.append((persos[i].nom, [o.nom for o in builds[i]],
-                                   win, not j.vivant, j.fuite_reussie, j.dans_le_dj))
+                                   win, not j.vivant, j.fuite_reussie, j.dans_le_dj,
+                                   etats_avant[i], medailles[i] - medailles_avant[i]))
         historique.append(enregistrement)
 
         if manche >= manches_prevues:
@@ -220,8 +250,14 @@ def _soirees_batch(args):
 
     item_stats = {}
     perso_stats = {}
+    baseline = {}  # etat -> [night_wins, joueurs-manches, somme delta medailles]
     compteurs = {'soirees': 0, 'manches': 0, 'departages': 0, 'medailles_finales': 0,
                  'hist_manches': {}}
+
+    def _maj_etat(stats_entry, etat, night_win, delta):
+        e = stats_entry.setdefault('etats', {})
+        cur = e.setdefault(etat, [0, 0, 0])
+        cur[0] += night_win; cur[1] += 1; cur[2] += delta
 
     for _ in range(nb_soirees):
         vainqueur_idx, historique, infos = jouer_soiree(False)
@@ -233,8 +269,10 @@ def _soirees_batch(args):
         h[infos['manches']] = h.get(infos['manches'], 0) + 1
 
         for manche in historique:
-            for i, (perso_nom, objets_noms, win, mort, fui, ponce) in enumerate(manche):
+            for i, (perso_nom, objets_noms, win, mort, fui, ponce, etat, delta) in enumerate(manche):
                 night_win = (i == vainqueur_idx)
+                cur = baseline.setdefault(etat, [0, 0, 0])
+                cur[0] += night_win; cur[1] += 1; cur[2] += delta
                 sp = _entree_stats(perso_nom, perso_stats)
                 sp['played'] += 1
                 sp['night_win'] += night_win
@@ -242,6 +280,7 @@ def _soirees_batch(args):
                 sp['death'] += mort
                 sp['fled'] += fui
                 sp['cleared'] += ponce
+                _maj_etat(sp, etat, night_win, delta)
                 for nom in objets_noms:
                     si = _entree_stats(nom, item_stats)
                     si['pick'] += 1
@@ -251,12 +290,40 @@ def _soirees_batch(args):
                     si['death'] += mort
                     si['fled'] += fui
                     si['cleared'] += ponce
+                    _maj_etat(si, etat, night_win, delta)
 
-    return item_stats, perso_stats, compteurs
+    return item_stats, perso_stats, baseline, compteurs
 
 
 # --- Affichage ---
-def _afficher_stats(item_stats, perso_stats, compteurs):
+def _tables_baseline(baseline, k_shrink=50):
+    """Attendu par état (winrate de soirée, delta de Médailles), rétréci vers le global
+    pour les états rares. Retourne (base_win, base_delta)."""
+    tot_w = sum(v[0] for v in baseline.values())
+    tot_n = sum(v[1] for v in baseline.values())
+    tot_d = sum(v[2] for v in baseline.values())
+    if not tot_n:
+        return {}, {}, 0.0, 0.0
+    p_glob = tot_w / tot_n
+    d_glob = tot_d / tot_n
+    base_win = {e: (v[0] + k_shrink * p_glob) / (v[1] + k_shrink) for e, v in baseline.items()}
+    base_delta = {e: (v[2] + k_shrink * d_glob) / (v[1] + k_shrink) for e, v in baseline.items()}
+    return base_win, base_delta, p_glob, d_glob
+
+
+def _scores_ajustes(stats_entry, base_win, base_delta, p_glob, d_glob):
+    """(WinAdj, MedAdj) : issue de soirée et delta de Médailles, en écart à l'attendu
+    de l'état au moment du pick (corrige le biais de sélection). En points pour Win."""
+    etats = stats_entry.get('etats', {})
+    n_tot = sum(v[1] for v in etats.values())
+    if not n_tot:
+        return 0.0, 0.0
+    exces_win = sum(v[0] - v[1] * base_win.get(e, p_glob) for e, v in etats.items())
+    exces_delta = sum(v[2] - v[1] * base_delta.get(e, d_glob) for e, v in etats.items())
+    return exces_win / n_tot * 100, exces_delta / n_tot
+
+
+def _afficher_stats(item_stats, perso_stats, baseline, compteurs):
     soirees = max(1, compteurs.get('soirees', 0))
     manches = max(1, compteurs.get('manches', 0))
     print(f"\n{'=' * 30} RÉSUMÉ {'=' * 30}")
@@ -269,53 +336,52 @@ def _afficher_stats(item_stats, perso_stats, compteurs):
         dist = ", ".join(f"{k}: {hist[k] / soirees * 100:.1f}%" for k in sorted(hist, key=int))
         print(f"Distribution du nombre de manches : {dist}")
 
-    lignes = []
-    for nom, s in item_stats.items():
-        played = s.get('played', 0)
-        if not played:
-            continue
-        lignes.append({
-            'Objet': nom, 'Played': played,
-            'NightWin%': s.get('night_win', 0) / played * 100,
-            'GameWin%': s.get('win', 0) / played * 100,
-            'Death%': s.get('death', 0) / played * 100,
-            'Fled%': s.get('fled', 0) / played * 100,
-            'Clear%': s.get('cleared', 0) / played * 100,
-        })
-    lignes.sort(key=lambda x: x['NightWin%'], reverse=True)
-    print("\n--- Statistiques Objets (winrate de soirée) ---")
-    print("-" * 110)
-    print(f"{'Objet':<35} {'Played':<8} {'NightWin%':<10} {'GameWin%':<10} {'Death%':<8} {'Fled%':<8} {'Clear%':<8}")
-    print("-" * 110)
-    for l in lignes:
-        print(f"{l['Objet']:<35} {l['Played']:<8} {l['NightWin%']:<10.2f} {l['GameWin%']:<10.2f} "
-              f"{l['Death%']:<8.2f} {l['Fled%']:<8.2f} {l['Clear%']:<8.2f}")
-    print("-" * 110)
+    base_win, base_delta, p_glob, d_glob = _tables_baseline(baseline)
 
-    lignes_p = []
-    for nom, s in perso_stats.items():
-        played = s.get('played', 0)
-        if not played:
-            continue
-        lignes_p.append({
-            'Personnage': nom, 'Played': played,
-            'NightWin%': s.get('night_win', 0) / played * 100,
-            'GameWin%': s.get('win', 0) / played * 100,
-            'Death%': s.get('death', 0) / played * 100,
-            'Fled%': s.get('fled', 0) / played * 100,
-            'Clear%': s.get('cleared', 0) / played * 100,
-        })
-    lignes_p.sort(key=lambda x: x['NightWin%'], reverse=True)
-    print("\n--- Statistiques Personnages (winrate de soirée) ---")
-    print("-" * 95)
-    print(f"{'Personnage':<22} {'Played':<8} {'NightWin%':<10} {'GameWin%':<10} {'Death%':<8} {'Fled%':<8} {'Clear%':<8}")
-    print("-" * 95)
-    for l in lignes_p:
-        print(f"{l['Personnage']:<22} {l['Played']:<8} {l['NightWin%']:<10.2f} {l['GameWin%']:<10.2f} "
-              f"{l['Death%']:<8.2f} {l['Fled%']:<8.2f} {l['Clear%']:<8.2f}")
-    print("-" * 95)
-    print(f"\nNB : NightWin% = % des manches où ce pick appartenait au futur vainqueur de la soirée.")
-    print(f"Hasard ~{100/3.5:.1f}% (3-4 joueurs). Les héros N2 ne sont joués qu'après une survie.")
+    def _lignes(stats, cle_nom):
+        lignes = []
+        for nom, s in stats.items():
+            played = s.get('played', 0)
+            if not played:
+                continue
+            win_adj, med_adj = _scores_ajustes(s, base_win, base_delta, p_glob, d_glob)
+            delta_total = sum(v[2] for v in s.get('etats', {}).values())
+            lignes.append({
+                cle_nom: nom, 'Played': played,
+                'WinAdj': win_adj,
+                'MedAdj': med_adj,
+                'MedDelta': delta_total / played,
+                'NightWin%': s.get('night_win', 0) / played * 100,
+                'GameWin%': s.get('win', 0) / played * 100,
+                'Death%': s.get('death', 0) / played * 100,
+                'Fled%': s.get('fled', 0) / played * 100,
+                'Clear%': s.get('cleared', 0) / played * 100,
+            })
+        lignes.sort(key=lambda x: x['WinAdj'], reverse=True)
+        return lignes
+
+    def _imprimer(lignes, cle_nom, largeur_nom):
+        sep = "-" * (largeur_nom + 80)
+        print(sep)
+        print(f"{cle_nom:<{largeur_nom}} {'Played':<8} {'WinAdj':<8} {'MedAdj':<8} {'MedDelta':<9} "
+              f"{'NightWin%':<10} {'GameWin%':<9} {'Death%':<7}")
+        print(sep)
+        for l in lignes:
+            print(f"{l[cle_nom]:<{largeur_nom}} {l['Played']:<8} {l['WinAdj']:<+8.2f} {l['MedAdj']:<+8.3f} "
+                  f"{l['MedDelta']:<+9.3f} {l['NightWin%']:<10.2f} {l['GameWin%']:<9.2f} {l['Death%']:<7.2f}")
+        print(sep)
+
+    print("\n--- Statistiques Objets (classement par WinAdj, corrigé du biais de sélection) ---")
+    _imprimer(_lignes(item_stats, 'Objet'), 'Objet', 35)
+
+    print("\n--- Statistiques Personnages (classement par WinAdj) ---")
+    _imprimer(_lignes(perso_stats, 'Personnage'), 'Personnage', 22)
+
+    print("\nNB : WinAdj = points de victoire de soirée au-dessus de l'attendu de l'état au moment")
+    print("du pick (Médailles des deux camps, manches restantes, niveau du héros, nb joueurs) :")
+    print("c'est la contribution propre du pick, débarrassée du biais de sélection. MedAdj = pareil")
+    print("pour le delta de Médailles de la manche ; MedDelta = delta brut (gagnées - perdues).")
+    print(f"NightWin% brut : hasard ~{100/3.5:.1f}% (3-4 joueurs), biaisé par l'état au pick.")
 
 
 # --- Simulation de masse (multiprocess, avec reprise) ---
@@ -325,6 +391,7 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
 
     item_stats = {}
     perso_stats = {}
+    baseline = {}
     compteurs = {}
     start = 0
 
@@ -332,16 +399,20 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
         try:
             with open(filename, 'r', encoding='utf-8') as f:
                 saved = json.load(f)
-            item_stats = saved.get('item_stats', {})
-            perso_stats = saved.get('perso_stats', {})
-            compteurs = saved.get('compteurs', {})
-            # cles d'histogramme: json les stocke en str
-            compteurs['hist_manches'] = {int(k): v for k, v in compteurs.get('hist_manches', {}).items()}
-            start = saved.get('soirees_completed', 0)
-            print(f"Reprise à la soirée {start + 1}/{iter}.")
+            if saved.get('format') != 2:
+                print(f"{filename} est dans un ancien format (sans stats par état) : redémarrage.")
+            else:
+                item_stats = saved.get('item_stats', {})
+                perso_stats = saved.get('perso_stats', {})
+                baseline = saved.get('baseline', {})
+                compteurs = saved.get('compteurs', {})
+                # cles d'histogramme: json les stocke en str
+                compteurs['hist_manches'] = {int(k): v for k, v in compteurs.get('hist_manches', {}).items()}
+                start = saved.get('soirees_completed', 0)
+                print(f"Reprise à la soirée {start + 1}/{iter}.")
         except Exception as e:
             print(f"Erreur chargement {filename}: {e}. Redémarrage.")
-            item_stats, perso_stats, compteurs, start = {}, {}, {}, 0
+            item_stats, perso_stats, baseline, compteurs, start = {}, {}, {}, {}, 0
     else:
         print("Démarrage nouvelle simulation.")
 
@@ -360,24 +431,33 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
             travaux.append((n, random.randrange(2**31)))
             attribues += n
 
+        def sauvegarder():
+            save = {'format': 2, 'soirees_completed': soirees_completes, 'compteurs': compteurs,
+                    'baseline': baseline, 'item_stats': item_stats, 'perso_stats': perso_stats}
+            try:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(save, f, ensure_ascii=False)  # compact: le fichier est volumineux (stats par etat)
+            except IOError as e:
+                print(f"\nERREUR sauvegarde: {e}")
+
+        batchs_depuis_save = 0
+
         def integrer(resultat):
-            nonlocal soirees_completes
-            so, sp, cpt = resultat
+            nonlocal soirees_completes, batchs_depuis_save
+            so, sp, bl, cpt = resultat
             _fusionner_stats(item_stats, so)
             _fusionner_stats(perso_stats, sp)
+            _fusionner_baseline(baseline, bl)
             for cle in ('soirees', 'manches', 'departages', 'medailles_finales'):
                 compteurs[cle] = compteurs.get(cle, 0) + cpt[cle]
             h = compteurs.setdefault('hist_manches', {})
             for k, v in cpt['hist_manches'].items():
                 h[k] = h.get(k, 0) + v
             soirees_completes += cpt['soirees']
-            save = {'soirees_completed': soirees_completes, 'compteurs': compteurs,
-                    'item_stats': item_stats, 'perso_stats': perso_stats}
-            try:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    json.dump(save, f, indent=4, ensure_ascii=False)
-            except IOError as e:
-                print(f"\nERREUR sauvegarde: {e}")
+            batchs_depuis_save += 1
+            if batchs_depuis_save >= 20:  # le fichier est gros, on n'ecrit pas a chaque batch
+                batchs_depuis_save = 0
+                sauvegarder()
 
         print(f"Objectif: {iter} soirées, {nb_process} process. Démarrage à {start + 1}...")
         if nb_process > 1:
@@ -388,8 +468,9 @@ def simuler_soirees(iter=NB_SOIREES, filename=STATS_FILENAME, nb_process=None):
         else:
             for travail in tqdm(travaux, desc="Simulation soirées"):
                 integrer(_soirees_batch(travail))
+        sauvegarder()
 
-    _afficher_stats(item_stats, perso_stats, compteurs)
+    _afficher_stats(item_stats, perso_stats, baseline, compteurs)
     print(f"\nStats basées sur {soirees_completes} soirées. Données sauvegardées dans {filename}")
 
 

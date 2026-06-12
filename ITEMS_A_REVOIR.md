@@ -37,7 +37,12 @@ Defibrilateur en panne.
 draft complet avant chaque manche (picks aux priors de draft.py, ajustés à l'état des
 Médailles), vainqueur de manche +1 Médaille, survivant (fuite incluse) → héros N2,
 mort → perte d'une Médaille et repioche d'un héros N1 (le héros mort retourne dans le
-pool de la soirée). Métrique principale : winrate de soirée par objet/héros.
+pool de la soirée). Métrique principale : **WinAdj** — points de victoire de soirée
+au-dessus de l'attendu de l'état au moment du pick (Médailles des deux camps, manches
+restantes, niveau du héros, nb joueurs). Le winrate de soirée brut est biaisé par la
+sélection (ex: objets novice pickés à 0 Médaille, Totem pické par les leaders) ; la
+stratification par état corrige ça. **MedAdj** = pareil pour le delta de Médailles
+de la manche. Sauvegarde `party_stats.json` au format 2 (stats par état).
 - **Nouveaux objets implémentés** : Coupe des champions (`medailles_victoire = 2`),
   Parfum de Scandale (`vole_medailles_perdues`, lu par `Joueur.perdre_medaille`),
   Parchemin d'XP et Potion de Jouvence (`Joueur.changer_niveau_perso`, instance de
