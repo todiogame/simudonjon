@@ -1,5 +1,7 @@
 import random
 import json
+import numpy as np
+from monstres import CarteMonstre
 # Lire le fichier JSON une fois au début
 with open('priorites_objets.json', 'r') as json_file:
     priorites_objets = json.load(json_file)
@@ -2286,18 +2288,1371 @@ class Zulfikar(Objet):
         else:
             self.executeEtDefausse(joueur, carte, Jeu, log_details)
 
-class BonneVieilleGuinze(Objet):
+# (Bonne vieille guinze: supprimee du jeu, barree dans le tableur)
+
+# =============================================================================
+# Objets ajoutes depuis le tableur (synchro juin 2026)
+# Les objets non simulables sont listes dans ITEMS_A_REVOIR.md
+# =============================================================================
+
+def _peek_prochaine_carte(Jeu):
+    # regarde la prochaine carte du Donjon sans la piocher
+    donjon = Jeu.donjon
+    if donjon.vide:
+        return None
+    return donjon.cartes[donjon.ordre[donjon.index]]
+
+def _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=False):
+    # defausse un monstre de la pile du joueur (jamais le Golem d'or)
+    candidats = [m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet)]
+    if not candidats:
+        return None
+    cle = lambda m: 0 if m.is_X else m.puissance
+    monstre = max(candidats, key=cle) if plus_puissant else min(candidats, key=cle)
+    joueur.pile_monstres_vaincus.remove(monstre)
+    Jeu.defausse.append(monstre)
+    return monstre
+
+def _choisir_objet_a_sacrifier(joueur, exclus):
+    # objet intact le moins precieux, sans tuer le joueur en perdant ses PV bonus
+    candidats = [o for o in joueur.objets if o.intact and o not in exclus and o.pv_bonus < joueur.pv_total]
+    if not candidats:
+        return None
+    return min(candidats, key=lambda o: (o.pv_bonus, o.priorite))
+
+def _execute_carte_suivante(objet, joueur, suivante, Jeu, log_details):
+    # consomme la carte regardee sur le Donjon et l'ajoute executee a la pile
+    Jeu.donjon.prochaine_carte()
+    suivante.executed = True
+    suivante.puissance = suivante.puissance_initiale
+    suivante.types = list(suivante.types_initiaux)
+    joueur.ajouter_monstre_vaincu(suivante)
+    log_details.append(f"{joueur.nom} utilise {objet.nom} pour exécuter aussi {suivante.titre}.")
+
+def _repare_un_objet(joueur, exclus, log_details, source):
+    brises = [o for o in joueur.objets if not o.intact and o not in exclus]
+    if not brises:
+        return None
+    objet_repare = max(brises, key=lambda o: o.pv_bonus)
+    objet_repare.repare()
+    if objet_repare.pv_bonus:
+        joueur.pv_total += objet_repare.pv_bonus
+    log_details.append(f"{joueur.nom} répare {objet_repare.nom} ({source}).")
+    return objet_repare
+
+# --- 1ere edition ---
+
+class CoeurDeTarasque(Objet):
     def __init__(self):
-        super().__init__("Bonne vieille guinze", False)
-    def debut_tour(self, joueur, Jeu, log_details):
-        if self.intact and len(joueur.pile_monstres_vaincus) <=5:
-            self.gagnePV(2, joueur, log_details)
-        if self.intact and len(joueur.pile_monstres_vaincus) >=5:
-            joueur.rejoue = True
-        
+        super().__init__("Coeur de Tarasque", False, 3)
+        self.objectif_multi_kill = 2  # l'IA repioche pour atteindre 2 monstres dans le tour
     def fin_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.monstres_ajoutes_ce_tour >= 2:
+            self.gagnePV(1, joueur, log_details)
+
+class CeintureDuPonceur(Objet):
+    def __init__(self):
+        super().__init__("Ceinture du Ponceur", False, 12)
+        self.bloque_fuite_pv_bas = True  # consulte par Joueur.deciderDeFuir: fuite interdite sous 6 PV
+        self.malus_pv_decision_fuite = 6  # l'IA anticipe: elle evalue la fuite comme si elle avait 6 PV de moins
+
+class LinceulDeResurrection(Objet):
+    def __init__(self):
+        super().__init__("Linceul de Résurrection", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        if _defausse_monstre_de_pile(joueur, Jeu, log_details):
+            self.survit(joueur.pv_base, joueur, carte, log_details)
+            self.destroy(joueur, Jeu, log_details)
+
+class Imprimante(Objet):
+    def __init__(self):
+        super().__init__("Imprimante", False)
+    def debut_tour(self, joueur, Jeu, log_details):
+        # avant d'entrer dans le Donjon: devient la copie d'un autre objet (IA: le plus prioritaire)
+        # garde-fous: elle peut avoir ete brisee ou defaussee (Gants de Gaia...) avant son premier tour
+        if self.compteur or not self.intact or self not in joueur.objets:
+            return
+        self.compteur = 1
+        autres = [o for o in joueur.objets if o is not self and o.intact and type(o) is not Imprimante]
+        if not autres:
+            return
+        modele = max(autres, key=lambda o: o.priorite)
+        copie = type(modele)()
+        joueur.objets.remove(self)
+        joueur.ajouter_objet(copie)
+        log_details.append(f"L'Imprimante de {joueur.nom} devient une copie de {modele.nom}.")
+
+class EpeeVengeresse(Objet):
+    def __init__(self):
+        super().__init__("Epée vengeresse", False, puissance_tags=[5])
+    def rules(self, joueur, carte, Jeu, log_details):
+        # IA: annonce toujours la puissance 5 (la plus representee dans le Donjon)
+        return carte.puissance == 5 and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class DagueVengeresse(Objet):
+    def __init__(self):
+        super().__init__("Dague vengeresse", False, types_tags=["Golem"])
+    def rules(self, joueur, carte, Jeu, log_details):
+        # IA: annonce toujours le type Golem (le plus represente dans le Donjon)
+        return "Golem" in carte.types and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class TotemDImmunite(Objet):
+    def __init__(self):
+        super().__init__("Totem d'immunité", True)
+        self.protege_medailles = True  # consulte par Joueur.mort
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # garder le totem intact protege la Medaille: ne l'utiliser que si necessaire
+        return carte.dommages >= joueur.pv_total or (carte.dommages > (joueur.pv_total / 2) and not joueur.medailles)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class CeintureDuNovice(Objet):
+    def __init__(self):
+        super().__init__("Ceinture du novice", False, 3)
+    def debut_partie(self, joueur, Jeu, log_details):
+        if joueur.medailles == 0:
+            self.gagnePV(3, joueur, log_details)
+
+class AnneauDuNovice(Objet):
+    def __init__(self):
+        super().__init__("Anneau du novice", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        self.survit(joueur.pv_base if joueur.medailles == 0 else 1, joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class CapeDuNovice(Objet):
+    def __init__(self):
+        super().__init__("Cape du novice", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (carte.puissance % 2 == 1 or joueur.medailles == 0) and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class PommeDAdam(Objet):
+    def __init__(self):
+        super().__init__("Pomme d'Adam", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 6
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(3, joueur, log_details)
+        donjon = Jeu.donjon
+        for i in range(donjon.index, min(donjon.index + 3, donjon.nb_cartes)):
+            joueur.cartes_connues.add(donjon.cartes[donjon.ordre[i]])
+        log_details.append(f"{joueur.nom} consulte secrètement les 3 prochaines cartes ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
+
+class BouclierDuPonceur(Objet):
+    def __init__(self):
+        super().__init__("Bouclier du Ponceur", False, 2, types_tags=["Orc"])
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Orc" in carte.types and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class TatouageMaudit(Objet):
+    def __init__(self):
+        super().__init__("Tatouage maudit", False, 6)
+    def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, Jeu, log_details):
+        if self.intact and jet == 1:
+            self.perdPV(1, joueur, log_details)
+        return jet
+
+class PistoletLaser(Objet):
+    def __init__(self):
+        super().__init__("Pistolet Laser", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance % 2 == 1 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        suivante = _peek_prochaine_carte(Jeu)
+        if isinstance(suivante, CarteMonstre) and suivante.puissance_initiale < carte.puissance:
+            _execute_carte_suivante(self, joueur, suivante, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class TrousseDeSecours(Objet):
+    def __init__(self):
+        super().__init__("Trousse de secours", True)
+    def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur and joueur.pv_total > 0 and carte.dommages >= 4:
+            self.gagnePV(carte.dommages, joueur, log_details)
+            self.destroy(joueur, Jeu, log_details)
+
+class ArmureDeMage(Objet):
+    def __init__(self):
+        super().__init__("Armure de mage", False, 0, 0, types_tags=["Liche", "Démon"])
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Liche" in carte.types or "Démon" in carte.types
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > 0
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.reduc_damage(5, joueur, carte, log_details)
+
+class BombePirate(Objet):
+    def __init__(self):
+        super().__init__("Bombe pirate", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and _choisir_objet_a_sacrifier(joueur, [self]) is not None
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total and carte.puissance >= 5
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        sacrifie = _choisir_objet_a_sacrifier(joueur, [self])
+        log_details.append(f"{joueur.nom} brise {sacrifie.nom} avec {self.nom}.")
+        sacrifie.destroy(joueur, Jeu, log_details)
+        joueur._gerer_pv_bonus(sacrifie, log_details)
+        self.execute(joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class AnneauDuVent(Objet):
+    def __init__(self):
+        super().__init__("Anneau du Vent", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # remet le monstre dans le Donjon a la position de son choix (IA: tout en dessous)
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        Jeu.defausse.remove(carte)  # la carte retourne dans le Donjon, pas dans la defausse
+        Jeu.donjon.rajoute_en_bas_de_la_pile(carte)
+        log_details.append(f"{joueur.nom} remet {carte.titre} sous le Donjon grâce à {self.nom}.")
+        self.destroy(joueur, Jeu, log_details)
+
+class BouleDeCristal(Objet):
+    def __init__(self):
+        super().__init__("Boule de cristal", False)
+        self.annonce = None
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.annonce = None
+    def debut_tour(self, joueur, Jeu, log_details):
+        # annonce la puissance la plus representee parmi les cartes restantes du Donjon
+        if not self.intact:
+            return
+        comptes = {}
+        donjon = Jeu.donjon
+        for idx in donjon.ordre[donjon.index:]:
+            c = donjon.cartes[idx]
+            if isinstance(c, CarteMonstre) and not c.is_X:
+                comptes[c.puissance_initiale] = comptes.get(c.puissance_initiale, 0) + 1
+        self.annonce = max(comptes, key=comptes.get) if comptes else None
+        if self.annonce is not None:
+            log_details.append(f"{joueur.nom} annonce la puissance {self.annonce} avec {self.nom}.")
+    def rules(self, joueur, carte, Jeu, log_details):
+        return self.annonce is not None and carte.puissance == self.annonce and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.annonce = None
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(-1, joueur, log_details)
+
+class CraneDuNecromancien(Objet):
+    def __init__(self):
+        super().__init__("Crâne du Nécromancien", False)
+    def _candidats(self, joueur, carte):
+        return [m for m in joueur.pile_monstres_vaincus
+                if (0 if m.is_X else m.puissance) > carte.puissance and not (m.effet and "GOLD" in m.effet)]
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and len(self._candidats(joueur, carte)) > 0
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= 3
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        monstre = min(self._candidats(joueur, carte), key=lambda m: m.puissance)
+        joueur.pile_monstres_vaincus.remove(monstre)
+        Jeu.defausse.append(monstre)
+        log_details.append(f"{joueur.nom} défausse {monstre.titre} pour {self.nom}.")
+        self.execute(joueur, carte, log_details)
+
+class LanceDeSilence(Objet):
+    def __init__(self):
+        super().__init__("Lance de Silence", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        # (simplification: seul le cas "monstre a effet special" est simule, pas les evenements)
+        return carte.is_X and carte.puissance > 0
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(3, joueur, log_details)
+        log_details.append(f"{joueur.nom} utilise {self.nom} pour annuler l'effet de {carte.titre}.")
+        carte.dommages = max(carte.dommages - carte.puissance, 0)
+        carte.puissance = 0
+        self.destroy(joueur, Jeu, log_details)
+
+class HacheMystique(Objet):
+    def __init__(self):
+        super().__init__("Hache Mystique", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance % 2 == 0 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        suivante = _peek_prochaine_carte(Jeu)
+        if isinstance(suivante, CarteMonstre) and suivante.puissance_initiale % 2 == 0:
+            _execute_carte_suivante(self, joueur, suivante, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class ArmureVivante(Objet):
+    def __init__(self):
+        super().__init__("Armure vivante", False, 1)
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.gagnePV(len(Jeu.joueurs), joueur, log_details)
+
+# --- 2eme impression ---
+
+class Donjondex(Objet):
+    def __init__(self):
+        super().__init__("Donjondex", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        meme_type = any(any(t in m.types for t in carte.types) for m in joueur.pile_monstres_vaincus)
+        return not meme_type and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class TapisVolant(Objet):
+    def __init__(self):
+        super().__init__("Tapis volant", True)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        # fuite garantie en defaussant un monstre, quand les PV sont critiques
+        if (self.intact and joueur_proprietaire == joueur and joueur.dans_le_dj
+                and joueur.pv_total <= 4 and joueur.tour >= 2
+                and sum(o.actif and o.intact for o in joueur.objets) <= 1
+                and _defausse_monstre_de_pile(joueur, Jeu, log_details)):
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour fuir le Donjon !\n")
+            joueur.fuite()
+            self.destroy(joueur, Jeu, log_details)
+
+class MasqueMaudit(Objet):
+    def __init__(self):
+        super().__init__("Masque maudit", False, 7)
+    def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, Jeu, log_details):
+        if self.intact:
+            log_details.append(f"{self.nom}: jet de {jet} réduit à {max(1, jet - 1)}.")
+            return max(1, jet - 1)
+        return jet
+
+class ParfumRegenerant(Objet):
+    def __init__(self):
+        super().__init__("Parfum régénérant", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 4
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        log_details.append(f"{joueur.nom} utilise {self.nom}: tous les joueurs remontent à 8 PV maximum.")
+        for j in Jeu.joueurs:
+            if j.dans_le_dj and j.pv_total < 8:
+                j.pv_total = 8
+                log_details.append(f"{j.nom} remonte à 8 PV.")
+        self.destroy(joueur, Jeu, log_details)
+
+class GriffesEclair(Objet):
+    def __init__(self):
+        super().__init__("Griffes éclair", False)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur and carte.executed:
+            suivante = _peek_prochaine_carte(Jeu)
+            if isinstance(suivante, CarteMonstre) and suivante.puissance_initiale <= 5:
+                _execute_carte_suivante(self, joueur, suivante, Jeu, log_details)
+                joueur.doit_passer = True
+                log_details.append(f"{joueur.nom} doit passer son tour ({self.nom}).")
+
+class PerleRare(Objet):
+    def __init__(self):
+        super().__init__("Perle rare", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # garder la perle intacte vaut 2 Points de Victoire: dernier recours seulement
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(2, joueur, log_details)
+
+class PaquetSurprise(Objet):
+    def __init__(self):
+        super().__init__("Paquet surprise", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 4
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(joueur.pv_base, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+        self.piocheItem(joueur, Jeu, log_details)
+        jetable = _choisir_objet_a_sacrifier(joueur, [self])
+        if jetable:
+            joueur.objets.remove(jetable)
+            joueur.pv_total -= jetable.pv_bonus
+            log_details.append(f"{joueur.nom} défausse {jetable.nom} ({self.nom}).")
+
+class BagouzeDuParrain(Objet):
+    def __init__(self):
+        super().__init__("Bagouze du parrain", False, 3)
+    def score_effet(self, joueur, log_details):
+        if sum(1 for o in joueur.objets if o.intact) == 4:
+            self.scoreChange(2, joueur, log_details)
+
+class TaserManuel(Objet):
+    def __init__(self):
+        super().__init__("Taser manuel", True)
+        self.carte_a_defausser = None
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.carte_a_defausser = None
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.carte_a_defausser = carte
+        self.destroy(joueur, Jeu, log_details)
+    def fin_tour(self, joueur, Jeu, log_details):
+        if self.carte_a_defausser and joueur.dans_le_dj:
+            if self.carte_a_defausser in joueur.pile_monstres_vaincus:
+                joueur.pile_monstres_vaincus.remove(self.carte_a_defausser)
+                Jeu.defausse.append(self.carte_a_defausser)
+                log_details.append(f"{joueur.nom} défausse {self.carte_a_defausser.titre} ({self.nom}).")
+            self.carte_a_defausser = None
+
+class BarbecueDuPonceur(Objet):
+    def __init__(self):
+        super().__init__("Barbecue du Ponceur", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 3 and any(
+            not m.is_X and m.puissance >= 4 and not (m.effet and "GOLD" in m.effet)
+            for m in joueur.pile_monstres_vaincus)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        monstre = _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=True)
+        if monstre:
+            log_details.append(f"{joueur.nom} défausse {monstre.titre} ({self.nom}).")
+            self.gagnePV(0 if monstre.is_X else monstre.puissance, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class RoseDOr(Objet):
+    def __init__(self):
+        super().__init__("Rose d'or", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        # garder la rose intacte vaut 2 Points de Victoire
+        return joueur.pv_total <= 2
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(3, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+    def score_effet(self, joueur, log_details):
+        self.scoreChange(2, joueur, log_details)
+
+class PotionDEscampette(Objet):
+    def __init__(self):
+        super().__init__("Potion d'escampette", True)
+    def en_fuite(self, joueur, Jeu, log_details):
+        if self.intact and joueur.jet_fuite <= 5:
+            self.gagnePV(3, joueur, log_details)
+            joueur.jet_fuite += 4
+            log_details.append(f"{joueur.nom} utilise {self.nom}: jet de fuite porté à {joueur.jet_fuite}.")
+            self.destroy(joueur, Jeu, log_details)
+
+class MontreDuLapinBlanc(Objet):
+    def __init__(self):
+        super().__init__("Montre du Lapin blanc", False, 4)
+    def debut_partie(self, joueur, Jeu, log_details):
+        joueur.passe_son_tour = True
+        log_details.append(f"{joueur.nom} sautera son premier tour ({self.nom}).")
+
+# --- 4eme edition ---
+
+class PorteBoulesDuPonceur(Objet):
+    def __init__(self):
+        super().__init__("Porte-Boules du Ponceur", False)
+        self.objectif_multi_kill = 5  # l'IA repioche pour atteindre 5 monstres dans le tour
+    def fin_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.monstres_ajoutes_ce_tour >= 5:
+            self.gagnePV(5, joueur, log_details)
+            self.compteur += 1
+            if self.compteur >= 3:
+                log_details.append(f"{self.nom} a servi 3 fois et se brise.")
+                self.destroy(joueur, Jeu, log_details)
+
+class ChevalierePirate(Objet):
+    def __init__(self):
+        super().__init__("Chevalière Pirate", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.gagnePV(3, joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+    def en_roll(self, joueur, jet, jet_voulu, reversed, rerolled, Jeu, log_details):
+        if not self.intact:
+            return max(1, jet - 1)
+        return jet
+
+class TatouageDuPonceur(Objet):
+    def __init__(self):
+        super().__init__("Tatouage du Ponceur", False, 7)
+    def _plafonne(self, joueur, log_details):
+        if self.intact and joueur.pv_total > 12:
+            joueur.pv_total = 12
+            log_details.append(f"{joueur.nom} est plafonné à 12 PV ({self.nom}).")
+    def debut_tour(self, joueur, Jeu, log_details):
+        self._plafonne(joueur, log_details)
+    def fin_tour(self, joueur, Jeu, log_details):
+        self._plafonne(joueur, log_details)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if joueur_proprietaire == joueur:
+            self._plafonne(joueur, log_details)
+
+class PotageImprovise(Objet):
+    def __init__(self):
+        super().__init__("Potage Improvisé", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return len(joueur.pile_monstres_vaincus) >= 3
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 4
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(len(joueur.pile_monstres_vaincus), joueur, log_details)
+        monstre = _defausse_monstre_de_pile(joueur, Jeu, log_details)
+        if monstre:
+            log_details.append(f"{joueur.nom} défausse {monstre.titre} ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
+
+class ClocheDuDejaVu(Objet):
+    def __init__(self):
+        super().__init__("La Cloche du Déjà-Vu", True)
+    def _fodder(self, Jeu):
+        return [c for c in Jeu.defausse
+                if isinstance(c, CarteMonstre) and not c.is_X and c.puissance_initiale <= 1
+                and not (c.effet and "GOLD" in c.effet)]
+    def debut_tour(self, joueur, Jeu, log_details):
+        # gagne 3 PV et remet un monstre facile de la defausse sur le Donjon (qu'il piochera lui-meme)
+        if self.intact:
+            faciles = self._fodder(Jeu)
+            if faciles:
+                monstre = faciles[0]
+                Jeu.defausse.remove(monstre)
+                Jeu.donjon.rajoute_en_haut_de_la_pile(monstre)
+                self.gagnePV(3, joueur, log_details)
+                log_details.append(f"{joueur.nom} remet {monstre.titre} sur le Donjon avec {self.nom}.")
+                self.destroy(joueur, Jeu, log_details)
+
+class CapeDInvisibilite(Objet):
+    def __init__(self):
+        super().__init__("Cape d'invisibilité", True, puissance_tags=[6, 7, 8, 9, 10])
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance >= 6 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        suivante = _peek_prochaine_carte(Jeu)
+        if isinstance(suivante, CarteMonstre) and suivante.puissance_initiale >= 6:
+            _execute_carte_suivante(self, joueur, suivante, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class SlipDeLaResurgence(Objet):
+    def __init__(self):
+        super().__init__("Slip de la Résurgence", True)
+    def _compte(self, joueur):
+        return sum(1 for o in joueur.objets if o is not self and o.actif and o.intact)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 4 and self._compte(joueur) >= 2
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(2 * self._compte(joueur), joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class LanterneAbsorbante(Objet):
+    def __init__(self):
+        super().__init__("Lanterne Absorbante", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.donjon.vide
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 5
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        suivante = Jeu.donjon.prochaine_carte()
+        Jeu.defausse.append(suivante)
+        if isinstance(suivante, CarteMonstre):
+            log_details.append(f"{joueur.nom} défausse {suivante.titre} avec {self.nom}.")
+            self.gagnePV(suivante.puissance_initiale, joueur, log_details)
+            self.destroy(joueur, Jeu, log_details)
+        else:
+            log_details.append(f"{joueur.nom} défausse {suivante.titre} avec {self.nom} (sans la briser).")
+
+class ArcDuNeant(Objet):
+    def __init__(self):
+        super().__init__("Arc du Néant", False, 7)
+        self.dernier_tour_paye = None
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.dernier_tour_paye = None
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if (self.intact and joueur_proprietaire == joueur and carte.executed
+                and self.dernier_tour_paye != joueur.tour):
+            self.dernier_tour_paye = joueur.tour
+            self.perdPV(1, joueur, log_details)
+
+class ConcoctionInstable(Objet):
+    def __init__(self):
+        super().__init__("Concoction instable", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        if joueur.tour == 3:
+            # fixer ses PV sur la puissance du monstre est obligatoire au tour 3
+            return carte.puissance > joueur.pv_total
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # ne se brise pas a l'utilisation, mais a la fin du 3eme tour
+        self.execute(joueur, carte, log_details)
+        if joueur.tour == 3 and carte.puissance > 0:
+            joueur.pv_total = carte.puissance
+            log_details.append(f"{joueur.nom} fixe ses PV à {carte.puissance} ({self.nom}).")
+    def fin_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.tour >= 3:
+            log_details.append(f"{self.nom} se brise (fin du 3ème tour).")
+            self.destroy(joueur, Jeu, log_details)
+
+class BananeExperimentale(Objet):
+    def __init__(self):
+        super().__init__("Banane expérimentale", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        if joueur.pile_monstres_vaincus:
+            monstre = random.choice(joueur.pile_monstres_vaincus)
+            joueur.pile_monstres_vaincus.remove(monstre)
+            Jeu.donjon.rajoute_en_haut_de_la_pile(monstre)
+            log_details.append(f"{monstre.titre} retourne sur le Donjon ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
+
+class KitDeSoin(Objet):
+    def __init__(self):
+        super().__init__("Kit de Soin", True)
+    def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if (self.intact and joueur_proprietaire == joueur and joueur.pv_total > 0
+                and joueur.pv_total <= 5 and carte.dommages > 0):
+            self.gagnePV(5, joueur, log_details)
+            self.destroy(joueur, Jeu, log_details)
+
+class CompasDuCapitaine(Objet):
+    def __init__(self):
+        super().__init__("Compas du Capitaine", True, puissance_tags=[6, 7])
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance <= 7 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        prochaine = _peek_prochaine_carte(Jeu)
+        if prochaine is not None:
+            joueur.cartes_connues.add(prochaine)
+            log_details.append(f"{joueur.nom} regarde secrètement la carte du dessus ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
+
+class PotionAuTheVert(Objet):
+    def __init__(self):
+        super().__init__("Potion au Thé Vert", True)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.pv_total <= 3 and joueur.tour >= 2:
+            self.gagnePV(4, joueur, log_details)
+            joueur.passe_son_tour = True
+            log_details.append(f"{joueur.nom} passe son tour ({self.nom}).")
+            self.destroy(joueur, Jeu, log_details)
+
+class UrneEnsorcelee(Objet):
+    def __init__(self):
+        super().__init__("Urne Ensorcelée", False)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur and carte.executed and joueur.pv_total <= 3:
+            self.gagnePV(1, joueur, log_details)
+            joueur.doit_passer = True
+
+# --- v4b ---
+
+class MainDuCreateur(Objet):
+    def __init__(self):
+        super().__init__("Main du Créateur", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        # (la defausse d'un theme de Donjon n'est pas simulee)
+        self.survit(2, joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class BotteDePandore(Objet):
+    def __init__(self):
+        super().__init__("Botte de Pandore", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 3
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        log_details.append(f"{joueur.nom} utilise {self.nom}: tous les joueurs gagnent 5 PV.")
+        for j in Jeu.joueurs:
+            if j.dans_le_dj:
+                j.pv_total += 5
+        for j in Jeu.joueurs:
+            if j is not joueur and j.dans_le_dj:
+                j.decideBriseObjet(Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class ScotchDuSilencieux(Objet):
+    def __init__(self):
+        super().__init__("Scotch du Silencieux", False)
+    def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if (self.intact and joueur_proprietaire == joueur and isinstance(carte, CarteMonstre)
+                and carte.is_X and carte.puissance > 0):
+            log_details.append(f"{carte.titre} passe à puissance 0 ({self.nom}).")
+            carte.dommages = max(carte.dommages - carte.puissance, 0)
+            carte.puissance = 0
+# --- v5 ---
+
+class CouteauxDeLancer(Objet):
+    def __init__(self):
+        super().__init__("Couteaux de lancer", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        # defausse les 3 monstres restants les plus dangereux du Donjon, puis melange
+        donjon = Jeu.donjon
+        restants = list(donjon.ordre[donjon.index:])
+        monstres = [(pos, donjon.cartes[idx]) for pos, idx in enumerate(restants)
+                    if isinstance(donjon.cartes[idx], CarteMonstre)]
+        cibles = sorted(monstres, key=lambda pc: pc[1].puissance_initiale, reverse=True)[:3]
+        for pos in sorted([pos for pos, c in cibles], reverse=True):
+            idx = restants.pop(pos)
+            Jeu.defausse.append(donjon.cartes[idx])
+            log_details.append(f"{donjon.cartes[idx].titre} est défaussé du Donjon ({self.nom}).")
+        donjon.ordre = np.concatenate((donjon.ordre[:donjon.index],
+                                       np.array(restants, dtype=donjon.ordre.dtype)))
+        donjon.nb_cartes = len(donjon.ordre)
+        donjon.remelange()
+        self.destroy(joueur, Jeu, log_details)
+
+class PierreDePressentiment(Objet):
+    def __init__(self):
+        super().__init__("Pierre de Pressentiment", True)
+        self.en_attente = False
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.en_attente = False
+    def debut_tour(self, joueur, Jeu, log_details):
+        # utilisation avant de piocher: 3 PV, et le prochain monstre pioche est execute
+        if self.intact and joueur.pv_total <= 5 and not Jeu.traquenard_actif:
+            log_details.append(f"{joueur.nom} utilise {self.nom} avant de piocher.")
+            self.gagnePV(3, joueur, log_details)
+            self.en_attente = True
+            Jeu.execute_next_monster = True
+            self.destroy(joueur, Jeu, log_details)
+    def rencontre_event_effet(self, joueur_proprietaire, joueur_actif, carte, Jeu, log_details):
+        if self.en_attente and joueur_proprietaire == joueur_actif:
+            self.en_attente = False
+            log_details.append(f"{self.nom} se répare (la carte piochée n'était pas un monstre).")
+            self.repare()
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.en_attente and joueur_proprietaire == joueur:
+            self.en_attente = False
+
+class ToupieDuChaos(Objet):
+    # (le melange du Donjon n'a pas d'effet mesurable en simulation)
+    def __init__(self):
+        super().__init__("Toupie du Chaos", False, 4)
+
+# (Cerveau auxiliaire et Implant cérébral: supprimes du jeu, barres dans le tableur)
+
+# --- fournee janvier 2025 ---
+
+class CoursierVolant(Objet):
+    def __init__(self):
+        super().__init__("Coursier volant", False, 2)
+    def fin_tour(self, joueur, Jeu, log_details):
+        if self.intact and Jeu.objets_dispo:
+            inutiles = [o for o in joueur.objets
+                        if o.intact and o is not self and not o.actif and o.pv_bonus == 0 and o.priorite < 40]
+            if inutiles:
+                jete = min(inutiles, key=lambda o: o.priorite)
+                joueur.objets.remove(jete)
+                log_details.append(f"{joueur.nom} défausse {jete.nom} pour piocher ({self.nom}).")
+                self.piocheItem(joueur, Jeu, log_details)
+
+class SiegeDeTroie(Objet):
+    def __init__(self):
+        super().__init__("Siège de Troie", True)
+        self.tour_activation = None
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.tour_activation = None
+    def rules(self, joueur, carte, Jeu, log_details):
+        return any(j is not joueur and j.dans_le_dj for j in Jeu.joueurs)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return sum(1 for j in Jeu.joueurs if j is not joueur and j.dans_le_dj) >= 2
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.tour_activation = Jeu.tour
+        log_details.append(f"{joueur.nom} active {self.nom} !")
+        self.destroy(joueur, Jeu, log_details)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.tour_activation is None:
+            return
+        if Jeu.tour > self.tour_activation + len(Jeu.joueurs):
+            self.tour_activation = None
+            return
+        if joueur is not joueur_proprietaire and carte in joueur.pile_monstres_vaincus:
+            joueur.pile_monstres_vaincus.remove(carte)
+            Jeu.defausse.append(carte)
+            self.gagnePV(1, joueur_proprietaire, log_details)
+            log_details.append(f"{carte.titre} de {joueur.nom} est défaussé ({self.nom}).")
+
+class MiroirDeYata(Objet):
+    def __init__(self):
+        super().__init__("Miroir de Yata", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        # montre les 3 prochaines cartes a TOUS les joueurs
+        donjon = Jeu.donjon
+        for i in range(donjon.index, min(donjon.index + 3, donjon.nb_cartes)):
+            for j in Jeu.joueurs:
+                j.cartes_connues.add(donjon.cartes[donjon.ordre[i]])
+        log_details.append(f"{joueur.nom} montre les 3 prochaines cartes à tous ({self.nom}).")
+        joueur.doit_passer = True
+        self.destroy(joueur, Jeu, log_details)
+
+class SceptreDuMaharal(Objet):
+    def __init__(self):
+        super().__init__("Sceptre du Maharal", False, types_tags=["Golem"])
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Golem" in carte.types and joueur.pv_total > 1 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > 1
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # (IA: garde le Golem dans sa pile plutot que de le remettre sur le Donjon)
+        self.perdPV(1, joueur, log_details)
+        self.execute(joueur, carte, log_details)
+
+class CleAmulette(Objet):
+    def __init__(self):
+        super().__init__("Clé Amulette", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        repare_perso = any(not o.intact for o in joueur.objets if o is not self)
+        return carte.dommages > (joueur.pv_total / 2) and repare_perso
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        for j in Jeu.joueurs:
+            if j.dans_le_dj:
+                _repare_un_objet(j, [self], log_details, self.nom)
+        # la Cle Amulette est defaussee apres usage
+        self.destroy(joueur, Jeu, log_details)
+        if self in joueur.objets:
+            joueur.objets.remove(self)
+
+class CleDeSalomon(Objet):
+    def __init__(self):
+        super().__init__("Clé de Salomon", False, types_tags=["Démon"])
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Démon" in carte.types and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        # apres un monstre de puissance 6+, regarde la prochaine carte du Donjon
+        if self.intact and joueur_proprietaire == joueur and carte.puissance >= 6:
+            prochaine = _peek_prochaine_carte(Jeu)
+            if prochaine is not None:
+                joueur.cartes_connues.add(prochaine)
+
+class DagueDeBrutus(Objet):
+    def __init__(self):
+        super().__init__("Dague de Brutus", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        carte.executed = True
+        self.gagnePV(2, joueur, log_details)
+        adversaires = [j for j in Jeu.joueurs if j is not joueur and j.dans_le_dj]
+        if adversaires:
+            beneficiaire = min(adversaires, key=lambda j: len(j.pile_monstres_vaincus))
+            beneficiaire.ajouter_monstre_vaincu(carte)
+            log_details.append(f"{joueur.nom} exécute {carte.titre} avec {self.nom} et l'offre à {beneficiaire.nom}.")
+        else:
+            joueur.ajouter_monstre_vaincu(carte)
+            log_details.append(f"{joueur.nom} exécute {carte.titre} avec {self.nom}.")
+        self.destroy(joueur, Jeu, log_details)
+
+class RouletteInfernale(Objet):
+    def __init__(self):
+        super().__init__("Roulette infernale", False, 2)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.pv_total >= 7:
+            jet = joueur.rollDice(Jeu, log_details)
+            if jet % 2 == 0:
+                self.gagnePV(jet, joueur, log_details)
+            else:
+                self.perdPV(jet, joueur, log_details)
+            if jet == 6:
+                log_details.append(f"{self.nom} se brise sur un 6.")
+                self.destroy(joueur, Jeu, log_details)
+                joueur._gerer_pv_bonus(self, log_details)
+
+class DisqueDeVishnu(Objet):
+    def __init__(self):
+        super().__init__("Disque de Vishnu", True)
+        self.carte_defaussee = None
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.carte_defaussee = None
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        self.carte_defaussee = carte
+        self.destroy(joueur, Jeu, log_details)
+    def fin_tour(self, joueur, Jeu, log_details):
+        if self.carte_defaussee and Jeu.defausse and Jeu.defausse[-1] is self.carte_defaussee:
+            self.gagnePV(1, joueur, log_details)
+
+class MasqueDeFer(Objet):
+    def __init__(self):
+        super().__init__("Masque de Fer", False, 6)
+    def debut_partie(self, joueur, Jeu, log_details):
+        # le heros perd sa capacite speciale (remplace par un perso neutre, memes PV)
+        from heros import Perso
+        if type(joueur.perso_obj) is not Perso:
+            joueur.perso_obj = Perso(joueur.perso_obj.nom + " (muselé)", joueur.perso_obj.pv_bonus)
+            log_details.append(f"{joueur.nom} ne peut plus utiliser la capacité de son héros ({self.nom}).")
+
+class MainInvisible(Objet):
+    GROS_TYPES = ("Liche", "Démon", "Dragon")
+    def __init__(self):
+        super().__init__("Main invisible", False)
+    def _compte(self, joueur):
+        return sum(1 for m in joueur.pile_monstres_vaincus
+                   if any(t in m.types for t in MainInvisible.GROS_TYPES))
+    def debut_tour(self, joueur, Jeu, log_details):
+        self.modificateur_de = self._compte(joueur) if self.intact else 0
+    def score_effet(self, joueur, log_details):
+        compte = self._compte(joueur)
+        if compte:
+            self.scoreChange(compte, joueur, log_details)
+
+class EventailMaudit(Objet):
+    def __init__(self):
+        super().__init__("Eventail Maudit", False, 2)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact and any(j is not joueur and j.dans_le_dj for j in Jeu.joueurs):
+            jet = joueur.rollDice(Jeu, log_details)
+            if jet == 6:
+                for j in Jeu.joueurs:
+                    if j is not joueur and j.dans_le_dj and j.pv_total >= 2:
+                        j.pv_total -= 1
+                        log_details.append(f"{j.nom} perd 1 PV ({self.nom}).")
+
+class EpeeDeDamocles(Objet):
+    def __init__(self):
+        super().__init__("Epée de Damocles", False, 9)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur and carte.executed:
+            jet = joueur.rollDice(Jeu, log_details)
+            if jet == 1:
+                log_details.append(f"{self.nom} se brise !")
+                self.destroy(joueur, Jeu, log_details)
+                joueur._gerer_pv_bonus(self, log_details)
+
+class VoileDIsis(Objet):
+    def __init__(self):
+        super().__init__("Voile d'Isis", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 5
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.gagnePV(3, joueur, log_details)
+        donjon = Jeu.donjon
+        restantes = donjon.ordre[donjon.index:]
+        if len(restantes) > 10:
+            fond = np.array(restantes[-10:], copy=True)
+            np.random.shuffle(fond)
+            donjon.ordre = np.concatenate((donjon.ordre[:donjon.index], fond, restantes[:-10]))
+            log_details.append(f"{joueur.nom} remet les 10 cartes du fond sur le Donjon ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
+
+class TambourDeKui(Objet):
+    def __init__(self):
+        super().__init__("Tambour de Kui", True)
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 5
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # regarde les 4 premieres cartes, defausse les monstres trop dangereux, gagne 1 PV par carte gardee
+        donjon = Jeu.donjon
+        nb = min(4, donjon.nb_cartes - donjon.index)
+        positions_a_defausser = []
+        for i in range(nb):
+            c = donjon.cartes[donjon.ordre[donjon.index + i]]
+            if isinstance(c, CarteMonstre) and c.puissance_initiale >= joueur.pv_total + 3:
+                positions_a_defausser.append(donjon.index + i)
+                Jeu.defausse.append(c)
+                log_details.append(f"{c.titre} est défaussé du Donjon ({self.nom}).")
+        if positions_a_defausser:
+            donjon.ordre = np.delete(donjon.ordre, positions_a_defausser)
+            donjon.nb_cartes = len(donjon.ordre)
+        self.gagnePV(nb - len(positions_a_defausser), joueur, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+# --- fournee novembre 2025 ---
+
+class EplucheDonjon(Objet):
+    def __init__(self):
+        super().__init__("Épluche-Donjon", False, 3)
+    def debut_tour(self, joueur, Jeu, log_details):
+        # IA: en PV critiques, ecarte la carte du dessus (a l'aveugle) plutot que de la piocher
+        if self.intact and joueur.pv_total <= 4 and not Jeu.donjon.vide:
+            carte = Jeu.donjon.prochaine_carte()
+            Jeu.defausse.append(carte)
+            log_details.append(f"{joueur.nom} défausse {carte.titre} du Donjon ({self.nom}).")
+
+class ParachuteDore(Objet):
+    def __init__(self):
+        super().__init__("Parachute doré", True)
+    def en_fuite(self, joueur, Jeu, log_details):
+        if self.intact:
+            self.gagnePV(4, joueur, log_details)
+            self.piocheItem(joueur, Jeu, log_details)
+            self.destroy(joueur, Jeu, log_details)
+
+class PoigneeDeMain(Objet):
+    def __init__(self):
+        super().__init__("Poignée de main", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        nb = sum(1 for j in Jeu.joueurs if j.dans_le_dj)
+        self.survit(max(1, nb), joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class Paratonnerre(Objet):
+    def __init__(self):
+        super().__init__("Paratonnerre", True)
+    def survie_effet(self, joueur, carte, Jeu, log_details):
+        self.survit(1, joueur, carte, log_details)
+        self.destroy(joueur, Jeu, log_details)
+        if carte.puissance >= 7:
+            _repare_un_objet(joueur, [self], log_details, self.nom)
+
+class CrocsEnflamees(Objet):
+    def __init__(self):
+        super().__init__("Crocs enflamées", False, 7)
+    def en_fuite(self, joueur, Jeu, log_details):
         if self.intact:
             self.perdPV(1, joueur, log_details)
+
+class GlandePineale(Objet):
+    def __init__(self):
+        super().__init__("Glande pinéale", False)
+    def debut_tour(self, joueur, Jeu, log_details):
+        self.modificateur_de = sum(1 for j in Jeu.joueurs if j.dans_le_dj) if self.intact else 0
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == joueur.pv_base and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class OursinDodu(Objet):
+    # (la perte volontaire de PV n'est pas utilisee par l'IA)
+    def __init__(self):
+        super().__init__("Oursin dodu", False, 4)
+
+class SurinCrasseux(Objet):
+    def __init__(self):
+        super().__init__("Surin crasseux", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance % 2 == 1 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return "Gobelin" in carte.types or carte.dommages > (joueur.pv_total / 2)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        if "Gobelin" in carte.types:
+            self.piocheItem(joueur, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class SceauDeLegalisation(Objet):
+    def __init__(self):
+        super().__init__("Sceau de Légalisation", False, 6)
+    def fin_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.pv_total % 2 == 1:
+            self.perdPV(1, joueur, log_details)
+
+class MiroirDuRised(Objet):
+    def __init__(self):
+        super().__init__("Miroir du Riséd", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        if not joueur.pile_monstres_vaincus or Jeu.traquenard_actif:
+            return False
+        sommet = joueur.pile_monstres_vaincus[-1]
+        return any(t in sommet.types for t in carte.types)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.gagnePV(2, joueur, log_details)
+
+class BottesDePoncage(Objet):
+    def __init__(self):
+        super().__init__("Bottes de Ponçage", False, 6)
+    def en_fuite(self, joueur, Jeu, log_details):
+        if self.intact:
+            for _ in range(3):
+                if Jeu.donjon.vide:
+                    break
+                c = Jeu.donjon.prochaine_carte()
+                Jeu.defausse.append(c)
+                log_details.append(f"{c.titre} est défaussé du Donjon ({self.nom}).")
+
+class MarteauCommuniste(Objet):
+    def __init__(self):
+        super().__init__("Marteau Communiste", False, types_tags=["Golem"])
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Golem" in carte.types
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= 2 and any(
+            j is not joueur and j.dans_le_dj and j.pv_total > 1 for j in Jeu.joueurs)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        # repartit les dommages du Golem 1 par 1 entre les joueurs (en ignorant ceux a 1 PV)
+        # le proprietaire est toujours inclus, meme si un autre objet l'a tue/fait fuir plus tot dans ce combat
+        participants = [j for j in Jeu.joueurs if j.dans_le_dj or j is joueur]
+        parts = {id(j): 0 for j in participants}
+        reste = carte.dommages
+        i = participants.index(joueur)
+        refus_consecutifs = 0
+        while reste > 0 and refus_consecutifs < len(participants):
+            j = participants[i % len(participants)]
+            if j is joueur or j.pv_total - parts[id(j)] > 1:
+                parts[id(j)] += 1
+                reste -= 1
+                refus_consecutifs = 0
+            else:
+                refus_consecutifs += 1
+            i += 1
+        for j in participants:
+            if j is not joueur and parts[id(j)]:
+                j.pv_total -= parts[id(j)]
+                log_details.append(f"{j.nom} perd {parts[id(j)]} PV ({self.nom}).")
+        carte.dommages = parts[id(joueur)] + reste
+        log_details.append(f"{joueur.nom} ne subit que {carte.dommages} dommages ({self.nom}).")
+
+class BombeDeMidas(Objet):
+    def __init__(self):
+        super().__init__("Bombe de Midas", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif and _choisir_objet_a_sacrifier(joueur, [self]) is not None
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= joueur.pv_total and carte.puissance >= 5
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        sacrifie = _choisir_objet_a_sacrifier(joueur, [self])
+        log_details.append(f"{joueur.nom} brise {sacrifie.nom} avec {self.nom}.")
+        sacrifie.destroy(joueur, Jeu, log_details)
+        joueur._gerer_pv_bonus(sacrifie, log_details)
+        self.gagnePV(carte.puissance, joueur, log_details)
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        self.destroy(joueur, Jeu, log_details)
+
+class TogeDuNecromancien(Objet):
+    # (la remise volontaire de son dernier monstre sur le Donjon n'est pas utilisee par l'IA)
+    def __init__(self):
+        super().__init__("Toge du Nécromancien", False, 2)
+
+class BouclierDuBerserk(Objet):
+    def __init__(self):
+        super().__init__("Bouclier du Berserk", True)
+        self.carte_utilisee = None
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.carte_utilisee = None
+    def rules(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total > 1
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages >= 3
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.perdPV(1, joueur, log_details)
+        self.reduc_damage(3, joueur, carte, log_details)
+        self.carte_utilisee = carte
+        self.destroy(joueur, Jeu, log_details)
+    def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if (not self.intact and joueur_proprietaire == joueur and carte.dommages > 0
+                and carte is not self.carte_utilisee):
+            log_details.append(f"{self.nom} de {joueur.nom} se répare.")
+            self.repare()
+
+class BarometreDeGloire(Objet):
+    def __init__(self):
+        super().__init__("Baromètre de Gloire", False)
+    def decompte_effet(self, joueur, joueurs_final, log_details):
+        if joueur in joueurs_final and joueur.pv_total == max(j.pv_total for j in joueurs_final):
+            log_details.append(f"{self.nom} de {joueur.nom}: chacun ajoute ses PV restants à son score !")
+            for j in joueurs_final:
+                j.score_final += max(0, j.pv_total)
+
+class CygneNoir(Objet):
+    def __init__(self):
+        super().__init__("Cygne Noir", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return joueur.tour >= 3
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return max(1, len(joueur.pile_monstres_vaincus)) >= joueur.pv_total + 3
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        log_details.append(f"{joueur.nom} utilise {self.nom}: les PV de chacun = ses monstres vaincus (min 1).")
+        for j in Jeu.joueurs:
+            if j.dans_le_dj:
+                j.pv_total = max(1, len(j.pile_monstres_vaincus))
+                log_details.append(f"{j.nom} passe à {j.pv_total} PV.")
+        self.destroy(joueur, Jeu, log_details)
+
+class CouteauQuiTombe(Objet):
+    def __init__(self):
+        super().__init__("Couteau qui Tombe", True)
+        self.cartes_obligatoires = 0
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.cartes_obligatoires = 0
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > (joueur.pv_total / 2) and joueur.pv_total >= 6
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        # 4 car le vaincu de cette carte decremente immediatement: 3 cartes supplementaires net
+        self.cartes_obligatoires = 4
+        log_details.append(f"{joueur.nom} devra piocher encore 3 cartes ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.cartes_obligatoires > 0 and joueur_proprietaire == joueur:
+            self.cartes_obligatoires -= 1
+            if self.cartes_obligatoires > 0:
+                joueur.rejoue = True
+
+class AvisDeRecherche(Objet):
+    def __init__(self):
+        super().__init__("Avis de recherche", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (carte.puissance >= 4 and len(carte.types) > 0 and carte.effet is not None
+                and not Jeu.traquenard_actif)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class CarapaceBleue(Objet):
+    def __init__(self):
+        super().__init__("Carapace Bleue", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        compte = {j: len(j.pile_monstres_vaincus) for j in Jeu.joueurs}
+        leaders = [j for j in Jeu.joueurs if compte[j] == max(compte.values())]
+        bon_moment = len(leaders) == 1 and leaders[0] is not joueur
+        return carte.dommages > (joueur.pv_total / 2) and (bon_moment or carte.dommages >= joueur.pv_total)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        compte = {j: len(j.pile_monstres_vaincus) for j in Jeu.joueurs}
+        leaders = [j for j in Jeu.joueurs if compte[j] == max(compte.values()) and compte[j] > 0]
+        if len(leaders) == 1:
+            monstre = _defausse_monstre_de_pile(leaders[0], Jeu, log_details)
+            if monstre:
+                log_details.append(f"{leaders[0].nom} défausse {monstre.titre} ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
+
+# --- objets de divination (utilisent joueur.cartes_connues, lu par l'IA de fuite/repioche) ---
+
+class JournalDuFutur(Objet):
+    def __init__(self):
+        super().__init__("Journal du futur", False)
+    def debut_tour(self, joueur, Jeu, log_details):
+        # regarde secretement la 3eme carte du Donjon (memorisee jusqu'a ce qu'elle surface)
+        donjon = Jeu.donjon
+        if self.intact and donjon.index + 2 < donjon.nb_cartes:
+            joueur.cartes_connues.add(donjon.cartes[donjon.ordre[donjon.index + 2]])
+
+class BinoclesDeLInventeur(Objet):
+    def __init__(self):
+        super().__init__("Binocles de l'inventeur", False)
+    def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur and carte.dommages > 0:
+            prochaine = _peek_prochaine_carte(Jeu)
+            if prochaine is not None:
+                joueur.cartes_connues.add(prochaine)
+                log_details.append(f"{joueur.nom} regarde la prochaine carte ({self.nom}).")
+
+class OeilDHorus(Objet):
+    def __init__(self):
+        super().__init__("Œil d'Horus", False)
+        self.dernier_tour_utilise = None
+    def debut_partie(self, joueur, Jeu, log_details):
+        self.dernier_tour_utilise = None
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        # une fois par tour apres un monstre vaincu: regarde la 1ere carte et la remet
+        # sous le Donjon si elle est dangereuse (sinon la memorise)
+        if (self.intact and joueur_proprietaire == joueur
+                and self.dernier_tour_utilise != joueur.tour):
+            self.dernier_tour_utilise = joueur.tour
+            prochaine = _peek_prochaine_carte(Jeu)
+            if prochaine is None:
+                return
+            if (isinstance(prochaine, CarteMonstre) and not prochaine.is_X
+                    and prochaine.puissance_initiale >= max(4, joueur.pv_total)):
+                Jeu.donjon.prochaine_carte()
+                Jeu.donjon.rajoute_en_bas_de_la_pile(prochaine)
+                log_details.append(f"{joueur.nom} remet {prochaine.titre} sous le Donjon ({self.nom}).")
+            else:
+                joueur.cartes_connues.add(prochaine)
+
+class OiseauDeMauvaisAugure(Objet):
+    def __init__(self):
+        super().__init__("Oiseau de Mauvais Augure", False)
+    def fin_tour(self, joueur, Jeu, log_details):
+        # regarde la 1ere carte: envoie les bonnes cartes sous le Donjon (deni aux adversaires),
+        # laisse les dangereuses sur le dessus pour le prochain joueur
+        if self.intact and any(j is not joueur and j.dans_le_dj for j in Jeu.joueurs):
+            prochaine = _peek_prochaine_carte(Jeu)
+            if prochaine is None:
+                return
+            bonne_carte = getattr(prochaine, 'event', False) or (
+                isinstance(prochaine, CarteMonstre) and not prochaine.is_X
+                and prochaine.puissance_initiale <= 2)
+            if bonne_carte:
+                Jeu.donjon.prochaine_carte()
+                Jeu.donjon.rajoute_en_bas_de_la_pile(prochaine)
+                log_details.append(f"{joueur.nom} envoie {prochaine.titre} sous le Donjon ({self.nom}).")
+            else:
+                joueur.cartes_connues.add(prochaine)
+
+class FilDuDestin(Objet):
+    def __init__(self):
+        super().__init__("Fil du destin", True)
+    def debut_tour(self, joueur, Jeu, log_details):
+        # regarde les 4 prochaines cartes et les reordonne: la plus simple pour soi d'abord,
+        # les plus dangereuses ensuite (pour les adversaires)
+        donjon = Jeu.donjon
+        if not self.intact or joueur.tour < 2 or donjon.nb_cartes - donjon.index < 4:
+            return
+        positions = list(range(donjon.index, donjon.index + 4))
+        cartes = [donjon.cartes[donjon.ordre[p]] for p in positions]
+        def danger(c):
+            if getattr(c, 'event', False):
+                return -1
+            if joueur.peut_executer_facilement(c):
+                return 0
+            return 4 if c.is_X else c.puissance_initiale
+        tri = sorted(range(4), key=lambda i: danger(cartes[i]))
+        nouvel_ordre = [tri[0]] + sorted(tri[1:], key=lambda i: -danger(cartes[i]))
+        anciens = [donjon.ordre[p] for p in positions]
+        for p, i in zip(positions, nouvel_ordre):
+            donjon.ordre[p] = anciens[i]
+        for c in cartes:
+            joueur.cartes_connues.add(c)
+        log_details.append(f"{joueur.nom} réordonne les 4 prochaines cartes du Donjon ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
 
 # --- Table de dispatch des hooks (optimisation) ------------------------------
 # Pour chaque hook, l'ensemble des CLASSES qui ne l'implementent PAS (ni le
@@ -2518,10 +3873,107 @@ objets_disponibles = [
     TrouNoirPortatif(),
     CalumetDeLaPaix(),
     Zulfikar(),
-    BonneVieilleGuinze(),
     AnneauDeGlace(),
     Item2PV(),
     GrenadeSinge(),
+    # --- synchro tableur juin 2026 ---
+    CoeurDeTarasque(),
+    CeintureDuPonceur(),
+    LinceulDeResurrection(),
+    Imprimante(),
+    EpeeVengeresse(),
+    DagueVengeresse(),
+    TotemDImmunite(),
+    CeintureDuNovice(),
+    AnneauDuNovice(),
+    CapeDuNovice(),
+    PommeDAdam(),
+    BouclierDuPonceur(),
+    TatouageMaudit(),
+    PistoletLaser(),
+    TrousseDeSecours(),
+    ArmureDeMage(),
+    BombePirate(),
+    AnneauDuVent(),
+    BouleDeCristal(),
+    CraneDuNecromancien(),
+    LanceDeSilence(),
+    HacheMystique(),
+    ArmureVivante(),
+    Donjondex(),
+    TapisVolant(),
+    MasqueMaudit(),
+    ParfumRegenerant(),
+    GriffesEclair(),
+    PerleRare(),
+    PaquetSurprise(),
+    BagouzeDuParrain(),
+    TaserManuel(),
+    BarbecueDuPonceur(),
+    RoseDOr(),
+    PotionDEscampette(),
+    MontreDuLapinBlanc(),
+    PorteBoulesDuPonceur(),
+    ChevalierePirate(),
+    TatouageDuPonceur(),
+    PotageImprovise(),
+    ClocheDuDejaVu(),
+    CapeDInvisibilite(),
+    SlipDeLaResurgence(),
+    LanterneAbsorbante(),
+    ArcDuNeant(),
+    ConcoctionInstable(),
+    BananeExperimentale(),
+    KitDeSoin(),
+    CompasDuCapitaine(),
+    PotionAuTheVert(),
+    UrneEnsorcelee(),
+    MainDuCreateur(),
+    BotteDePandore(),
+    ScotchDuSilencieux(),
+    CouteauxDeLancer(),
+    PierreDePressentiment(),
+    ToupieDuChaos(),
+    CoursierVolant(),
+    SiegeDeTroie(),
+    MiroirDeYata(),
+    SceptreDuMaharal(),
+    CleAmulette(),
+    CleDeSalomon(),
+    DagueDeBrutus(),
+    RouletteInfernale(),
+    DisqueDeVishnu(),
+    MasqueDeFer(),
+    MainInvisible(),
+    EventailMaudit(),
+    EpeeDeDamocles(),
+    VoileDIsis(),
+    TambourDeKui(),
+    EplucheDonjon(),
+    ParachuteDore(),
+    PoigneeDeMain(),
+    Paratonnerre(),
+    CrocsEnflamees(),
+    GlandePineale(),
+    OursinDodu(),
+    SurinCrasseux(),
+    SceauDeLegalisation(),
+    MiroirDuRised(),
+    BottesDePoncage(),
+    MarteauCommuniste(),
+    BombeDeMidas(),
+    TogeDuNecromancien(),
+    BouclierDuBerserk(),
+    BarometreDeGloire(),
+    CygneNoir(),
+    CouteauQuiTombe(),
+    AvisDeRecherche(),
+    CarapaceBleue(),
+    JournalDuFutur(),
+    BinoclesDeLInventeur(),
+    OeilDHorus(),
+    OiseauDeMauvaisAugure(),
+    FilDuDestin(),
 ]
 
 
@@ -2705,8 +4157,105 @@ __all__ = [
             "TrouNoirPortatif",
             "CalumetDeLaPaix",
             "Zulfikar",
-            "BonneVieilleGuinze",
             "AnneauDeGlace",
             "Item2PV",
             "GrenadeSinge",
+            # --- synchro tableur juin 2026 ---
+            "CoeurDeTarasque",
+            "CeintureDuPonceur",
+            "LinceulDeResurrection",
+            "Imprimante",
+            "EpeeVengeresse",
+            "DagueVengeresse",
+            "TotemDImmunite",
+            "CeintureDuNovice",
+            "AnneauDuNovice",
+            "CapeDuNovice",
+            "PommeDAdam",
+            "BouclierDuPonceur",
+            "TatouageMaudit",
+            "PistoletLaser",
+            "TrousseDeSecours",
+            "ArmureDeMage",
+            "BombePirate",
+            "AnneauDuVent",
+            "BouleDeCristal",
+            "CraneDuNecromancien",
+            "LanceDeSilence",
+            "HacheMystique",
+            "ArmureVivante",
+            "Donjondex",
+            "TapisVolant",
+            "MasqueMaudit",
+            "ParfumRegenerant",
+            "GriffesEclair",
+            "PerleRare",
+            "PaquetSurprise",
+            "BagouzeDuParrain",
+            "TaserManuel",
+            "BarbecueDuPonceur",
+            "RoseDOr",
+            "PotionDEscampette",
+            "MontreDuLapinBlanc",
+            "PorteBoulesDuPonceur",
+            "ChevalierePirate",
+            "TatouageDuPonceur",
+            "PotageImprovise",
+            "ClocheDuDejaVu",
+            "CapeDInvisibilite",
+            "SlipDeLaResurgence",
+            "LanterneAbsorbante",
+            "ArcDuNeant",
+            "ConcoctionInstable",
+            "BananeExperimentale",
+            "KitDeSoin",
+            "CompasDuCapitaine",
+            "PotionAuTheVert",
+            "UrneEnsorcelee",
+            "MainDuCreateur",
+            "BotteDePandore",
+            "ScotchDuSilencieux",
+            "CouteauxDeLancer",
+            "PierreDePressentiment",
+            "ToupieDuChaos",
+            "CoursierVolant",
+            "SiegeDeTroie",
+            "MiroirDeYata",
+            "SceptreDuMaharal",
+            "CleAmulette",
+            "CleDeSalomon",
+            "DagueDeBrutus",
+            "RouletteInfernale",
+            "DisqueDeVishnu",
+            "MasqueDeFer",
+            "MainInvisible",
+            "EventailMaudit",
+            "EpeeDeDamocles",
+            "VoileDIsis",
+            "TambourDeKui",
+            "EplucheDonjon",
+            "ParachuteDore",
+            "PoigneeDeMain",
+            "Paratonnerre",
+            "CrocsEnflamees",
+            "GlandePineale",
+            "OursinDodu",
+            "SurinCrasseux",
+            "SceauDeLegalisation",
+            "MiroirDuRised",
+            "BottesDePoncage",
+            "MarteauCommuniste",
+            "BombeDeMidas",
+            "TogeDuNecromancien",
+            "BouclierDuBerserk",
+            "BarometreDeGloire",
+            "CygneNoir",
+            "CouteauQuiTombe",
+            "AvisDeRecherche",
+            "CarapaceBleue",
+            "JournalDuFutur",
+            "BinoclesDeLInventeur",
+            "OeilDHorus",
+            "OiseauDeMauvaisAugure",
+            "FilDuDestin",
         ]

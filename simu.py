@@ -567,6 +567,12 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             if joueur.rejoue or joueur.doit_passer:
                 log_details.append(f"{joueur.nom} {'doit' if joueur.rejoue else 'ne doit pas'} rejouer et {'doit' if joueur.doit_passer else 'ne doit pas'} passer")
 
+            # repioche volontaire (IA): poncer quand on est en forme, chasser un combo multi-kill,
+            # ou exploiter la connaissance de la prochaine carte (objets de divination)
+            if (joueur.dans_le_dj and not joueur.rejoue and not Jeu.execute_next_monster
+                    and not joueur.doit_passer and joueur.deciderDeRejouer(Jeu, log_details)):
+                joueur.rejoue = True
+
             # si le joueur est toujours la, et que soit il doit passer, soit il ne doit pas rejouer et il ne peut pas executer le prochain monstre
             #TODO: forcer la passe avec joueur.doit_passer, actuellement tlm passe sans se poser de question
             #probleme avec le scaphandre qui spam passe
@@ -615,6 +621,10 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     for j in joueurs:
         for objet in j.objets:
             objet.en_decompte(j, joueurs_final, log_details)
+
+    # marquage pour les stats externes (donjon.py): ce joueur pose-t-il son score ?
+    for j in joueurs:
+        j.compte_au_score = j in joueurs_final
 
     # Loguer les joueurs exclus et inclus
     for j in joueurs:

@@ -383,8 +383,6 @@ class Prophete(Perso):
     def __init__(self, level=1):
         super().__init__("Prophète" + _suffixe(level), 2)
         self.level = level
-    # N1: capacite d'information pure (regarder les prochaines cartes), non exploitable par l'IA: passif
-
     def debut_tour(self, joueur, Jeu, log_details):
         # N2: deux fois par partie, regarde les 2 prochaines cartes et peut les defausser ou les reposer.
         # IA: utilise quand ses PV sont bas, defausse les monstres qui le tueraient.
@@ -403,6 +401,15 @@ class Prophete(Perso):
                     a_reposer.append(c)
             for c in reversed(a_reposer):
                 Jeu.donjon.rajoute_en_haut_de_la_pile(c)
+                joueur.cartes_connues.add(c)  # il sait ce qui arrive (exploite par l'IA de fuite/repioche)
+        elif self.level == 1 and self.compteur < 2 and joueur.pv_total <= 6 and not Jeu.donjon.vide:
+            # N1: deux fois par partie, regarde secretement les 2 prochaines cartes
+            # (memorisees dans cartes_connues, exploitees par l'IA de fuite/repioche)
+            self.compteur += 1
+            donjon = Jeu.donjon
+            for i in range(donjon.index, min(donjon.index + 2, donjon.nb_cartes)):
+                joueur.cartes_connues.add(donjon.cartes[donjon.ordre[i]])
+            log_details.append(f"{joueur.nom} ({self.nom}) consulte secrètement les 2 prochaines cartes ({self.compteur}/2).")
 
 class Shaman(Perso):
     def __init__(self, level=1):

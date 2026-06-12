@@ -37,6 +37,9 @@ def _simuler_batch(args):
     stats_persos = {}      # nom -> [victoires, total]
     duos_scores = {}       # (objet_a, objet_b) -> [victoires, total]
     duos_perso_item = {}   # (perso, objet) -> [victoires, total]
+    scores_objets = {}     # nom -> {score_pose: nb}  (score 0 si le joueur ne compte pas)
+    scores_persos = {}     # nom -> {score_pose: nb}
+    compteurs = {'joueurs': 0, 'morts': 0, 'fuites': 0, 'scores': {}}  # scores: histogramme global
     ponces = {3: 0, 4: 0}
     highscore = 0
 
@@ -69,19 +72,29 @@ def _simuler_batch(args):
 
         for joueur in joueurs:
             victoire = 1 if joueur is vainqueur else 0
+            # score "pose": le score final si le joueur compte au decompte, sinon 0 (mort/fuyard exclu)
+            score_pose = joueur.score_final if getattr(joueur, 'compte_au_score', False) else 0
+            compteurs['joueurs'] += 1
+            if not joueur.vivant:
+                compteurs['morts'] += 1
+            elif joueur.fuite_reussie:
+                compteurs['fuites'] += 1
+            h = compteurs['scores']; h[score_pose] = h.get(score_pose, 0) + 1
             perso_nom = joueur.personnage_nom
             s = stats_persos.setdefault(perso_nom, [0, 0]); s[0] += victoire; s[1] += 1
+            h = scores_persos.setdefault(perso_nom, {}); h[score_pose] = h.get(score_pose, 0) + 1
             noms_objets = sorted(o.nom for o in joueur.objets_initiaux)
             for nom in noms_objets:
                 s = stats_objets.setdefault(nom, [0, 0]); s[0] += victoire; s[1] += 1
                 s = duos_perso_item.setdefault((perso_nom, nom), [0, 0]); s[0] += victoire; s[1] += 1
+                h = scores_objets.setdefault(nom, {}); h[score_pose] = h.get(score_pose, 0) + 1
             for duo in itertools.combinations(noms_objets, 2):
                 s = duos_scores.setdefault(duo, [0, 0]); s[0] += victoire; s[1] += 1
 
         if any(joueur.dans_le_dj for joueur in joueurs):
             ponces[nb_joueurs] += 1
 
-    return stats_objets, stats_persos, duos_scores, duos_perso_item, ponces, highscore
+    return stats_objets, stats_persos, duos_scores, duos_perso_item, ponces, highscore, scores_objets, scores_persos, compteurs
 
 
 def _fusionner(dest, src):
@@ -92,6 +105,28 @@ def _fusionner(dest, src):
         d[1] += t
 
 
+def _fusionner_hist(dest, src):
+    """Additionne des histogrammes {valeur: nb} indexes par cle."""
+    for cle, hist in src.items():
+        d = dest.setdefault(cle, {})
+        for valeur, nb in hist.items():
+            d[valeur] = d.get(valeur, 0) + nb
+
+
+def _mediane_hist(hist):
+    """Mediane d'un histogramme {valeur: nb}."""
+    total = sum(hist.values())
+    if not total:
+        return 0
+    cible = (total + 1) / 2
+    cumul = 0
+    for valeur in sorted(hist):
+        cumul += hist[valeur]
+        if cumul >= cible:
+            return valeur
+    return 0
+
+
 def display_simu(r=0, nb_process=None):
     if nb_process is None:
         nb_process = max(1, (os.cpu_count() or 2) - 1)
@@ -100,6 +135,9 @@ def display_simu(r=0, nb_process=None):
     stats_persos = {}
     duos_scores = {}
     duos_perso_item = {}
+    scores_objets = {}
+    scores_persos = {}
+    compteurs_globaux = {'joueurs': 0, 'morts': 0, 'fuites': 0, 'scores': {}}
     dj_ponces3j = 0
     dj_ponces4j = 0
     highscore_max = 0
@@ -115,11 +153,18 @@ def display_simu(r=0, nb_process=None):
 
     def consommer(resultats_batches):
         nonlocal dj_ponces3j, dj_ponces4j, highscore_max
-        for so, sp, ds, dpi, ponces, hs in resultats_batches:
+        for so, sp, ds, dpi, ponces, hs, sco, scp, cpt in resultats_batches:
             _fusionner(stats_objets, so)
             _fusionner(stats_persos, sp)
             _fusionner(duos_scores, ds)
             _fusionner(duos_perso_item, dpi)
+            _fusionner_hist(scores_objets, sco)
+            _fusionner_hist(scores_persos, scp)
+            compteurs_globaux['joueurs'] += cpt['joueurs']
+            compteurs_globaux['morts'] += cpt['morts']
+            compteurs_globaux['fuites'] += cpt['fuites']
+            for valeur, nb in cpt['scores'].items():
+                compteurs_globaux['scores'][valeur] = compteurs_globaux['scores'].get(valeur, 0) + nb
             dj_ponces3j += ponces[3]
             dj_ponces4j += ponces[4]
             highscore_max = max(highscore_max, hs)
@@ -137,10 +182,11 @@ def display_simu(r=0, nb_process=None):
 
     # Statistiques par objet (depuis les compteurs fusionnes)
     df_stats_objets = pd.DataFrame(
-        [{'Objet': nom, 'Victoires': v, 'Total': t, 'Winrate': (v / t) * 100}
+        [{'Objet': nom, 'Victoires': v, 'Total': t, 'Winrate': (v / t) * 100,
+          'Score médian': _mediane_hist(scores_objets.get(nom, {}))}
          for nom, (v, t) in stats_objets.items()]
     ).sort_values(by='Winrate', ascending=False)
-    pd.set_option('display.max_rows', 200)
+    pd.set_option('display.max_rows', None)  # afficher tous les objets (270+ depuis la synchro tableur)
 
     # Afficher les résultats
     print("\nStatistiques par objet:")
@@ -148,11 +194,16 @@ def display_simu(r=0, nb_process=None):
     print(f"\nTemps total des simulations : {total_time:.2f} secondes")
     print(f"Pourcentage de donjons ponces a 3j : {dj_ponces3j / total_simulations* 100:.2f}%")
     print(f"Pourcentage de donjons ponces a 4j : {dj_ponces4j / total_simulations* 100:.2f}%")
+    nb_joueurs_total = max(1, compteurs_globaux['joueurs'])
+    print(f"Score médian posé (toutes parties) : {_mediane_hist(compteurs_globaux['scores'])}")
+    print(f"Pourcentage de joueurs morts : {compteurs_globaux['morts'] / nb_joueurs_total * 100:.2f}%")
+    print(f"Pourcentage de joueurs ayant fui : {compteurs_globaux['fuites'] / nb_joueurs_total * 100:.2f}%")
 
     # --- Statistiques par Personnage ---
     if stats_persos:
         df_stats_persos = pd.DataFrame(
-            [{'Personnage': nom, 'Victoires': v, 'Total_Parties': t, 'Winrate (%)': round(v * 100 / t, 2)}
+            [{'Personnage': nom, 'Victoires': v, 'Total_Parties': t, 'Winrate (%)': round(v * 100 / t, 2),
+              'Score médian': _mediane_hist(scores_persos.get(nom, {}))}
              for nom, (v, t) in stats_persos.items()]
         ).sort_values(by='Winrate (%)', ascending=False)
 

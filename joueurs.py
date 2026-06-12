@@ -27,6 +27,7 @@ class Joueur:
         self.passe_son_tour = False # saute completement son tour sans piocher (Lapin Blanc)
         self.monstres_ajoutes_ce_tour = 0
         self.tiebreaker = False
+        self.cartes_connues = set()  # cartes du Donjon vues via les objets de divination
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)
@@ -50,8 +51,11 @@ class Joueur:
         self.vivant = False
         self.dans_le_dj = False
         if self.medailles > 0:
-            log_details.append(f"{self.nom} a perdu une medaille !")
-            self.medailles -= 1
+            if any(getattr(objet, 'protege_medailles', False) and objet.intact for objet in self.objets):
+                log_details.append(f"{self.nom} garde sa medaille (Totem d'immunité) !")
+            else:
+                log_details.append(f"{self.nom} a perdu une medaille !")
+                self.medailles -= 1
             
     
     def calculScoreFinal(self, log_details):
@@ -115,6 +119,82 @@ class Joueur:
         
 
 
+    def connait_prochaine_carte(self, Jeu):
+        """Retourne la prochaine carte du Donjon si le joueur l'a deja vue (Journal du futur,
+        Binocles, Pomme d'Adam...), sinon None. L'identite de l'objet carte suffit: si la carte
+        vue a ete piochee ou deplacee entre-temps, elle n'est plus 'la prochaine' et on retombe sur None."""
+        donjon = Jeu.donjon
+        if donjon.vide or not self.cartes_connues:
+            return None
+        prochaine = donjon.cartes[donjon.ordre[donjon.index]]
+        return prochaine if prochaine in self.cartes_connues else None
+
+    def _couverture_objets(self):
+        """Types et puissances que les objets intacts du joueur savent gerer (tags)."""
+        types_couverts = set()
+        puissances_couvertes = set()
+        for objet in self.objets:
+            if objet.intact:
+                types_couverts.update(objet.types_tags)
+                puissances_couvertes.update(objet.puissance_tags)
+        return types_couverts, puissances_couvertes
+
+    def peut_executer_facilement(self, carte, couverture=None):
+        """Heuristique: un objet intact tague pour ce type ou cette puissance peut gerer la carte."""
+        types = getattr(carte, 'types', None)
+        if types is None:
+            return False
+        types_couverts, puissances_couvertes = couverture if couverture is not None else self._couverture_objets()
+        return carte.puissance in puissances_couvertes or any(t in types_couverts for t in types)
+
+    def deciderDeRejouer(self, Jeu, log_details):
+        """IA: decide de repiocher volontairement au lieu de passer son tour."""
+        if not self.dans_le_dj or Jeu.donjon.vide or Jeu.traquenard_actif or self.doit_passer:
+            return False
+
+        # 1) la prochaine carte est connue (objets de divination): decision informee
+        carte_connue = self.connait_prochaine_carte(Jeu)
+        if carte_connue is not None:
+            if getattr(carte_connue, 'event', False):
+                log_details.append(f"{self.nom} sait qu'un évènement arrive et continue de piocher.")
+                return True
+            if not getattr(carte_connue, 'is_X', False):
+                if self.peut_executer_facilement(carte_connue):
+                    log_details.append(f"{self.nom} sait que {carte_connue.titre} arrive et peut le gérer: il continue.")
+                    return True
+                if carte_connue.puissance <= 1 and self.pv_total >= 4:
+                    return True
+            return False  # la suite est connue et mauvaise: on passe
+
+        # Repioche a l'aveugle: seulement si la pioche est quasi gratuite (aucune carte
+        # restante ne fait plus de 2 degats). Encaisser des degats pour du tempo declenche
+        # la fuite anticipee et fait perdre plus de points qu'il n'en rapporte.
+        # Early-exit: on s'arrete a la premiere carte dangereuse (cas ultra-majoritaire).
+        couverture = self._couverture_objets()
+        donjon = Jeu.donjon
+        for i in donjon.ordre[donjon.index:]:
+            c = donjon.cartes[i]
+            if getattr(c, 'event', False):
+                continue
+            d = 10 if c.is_X else c.puissance_initiale
+            if c.effet and "ADD_2_DOM" in c.effet:
+                d += 2
+            if d > 2 and not self.peut_executer_facilement(c, couverture):
+                return False
+
+        # 2) objets qui recompensent plusieurs monstres vaincus dans le meme tour
+        for objet in self.objets:
+            objectif = getattr(objet, 'objectif_multi_kill', 0)
+            if objet.intact and objectif:
+                besoin = objectif - self.monstres_ajoutes_ce_tour
+                if 0 < besoin <= 2 and self.monstres_ajoutes_ce_tour >= 1:
+                    log_details.append(f"{self.nom} continue de piocher pour activer {objet.nom}.")
+                    return True
+
+        # 3) la pioche est quasi gratuite pour nous: continuer a poncer le Donjon
+        log_details.append(f"{self.nom} ne risque plus rien et continue de poncer le Donjon.")
+        return True
+
     def deciderDeFuir(self, Jeu, log_details):
         # --- NOUVELLE Condition : Interdiction de fuir au Tour 1 ---
         # On vérifie l'attribut 'tour' du joueur lui-même
@@ -124,12 +204,50 @@ class Joueur:
             return False # On ne fuit jamais au premier tour
         # --- Fin Nouvelle Condition ---
 
+        # Certains objets (Ceinture du Ponceur) interdisent de tenter la fuite avec moins de 6 PV
+        if self.pv_total < 6 and any(getattr(objet, 'bloque_fuite_pv_bas', False) and objet.intact for objet in self.objets):
+            return False
+
+        # La prochaine carte est connue (objets de divination): decision informee
+        carte_connue = self.connait_prochaine_carte(Jeu)
+        if carte_connue is not None and not getattr(carte_connue, 'is_X', False):
+            if getattr(carte_connue, 'event', False):
+                return False  # un evenement nous attend: aucune raison de fuir
+            if self.peut_executer_facilement(carte_connue) or carte_connue.puissance <= 2:
+                return False  # la prochaine carte est gerable
+            if (carte_connue.puissance >= self.pv_total
+                    and sum(getattr(o, 'actif', False) and o.intact for o in self.objets) <= 1):
+                log_details.append(f"==> {self.nom} sait que {carte_connue.titre} arrive et TENTE LA FUITE.")
+                return True
+
         # Si on est au tour 2 ou plus, on applique la logique précédente :
 
         # Condition 1: PV faibles et peu d'options actives restantes
-        pv_faible_et_peu_options = (self.pv_total <= self.pv_min_fuite
-                                 and sum(getattr(objet, 'actif', False) and getattr(objet, 'intact', False)
-                                         for objet in self.objets) <= 1)
+        # Certains objets (Ceinture du Ponceur) doivent anticiper la fuite: leurs PV "de decision"
+        # sont reduits pour fuir a temps (avant que la fuite ne devienne interdite)
+        pv_decision = self.pv_total - sum(getattr(objet, 'malus_pv_decision_fuite', 0)
+                                          for objet in self.objets if objet.intact)
+        peu_options = sum(getattr(objet, 'actif', False) and getattr(objet, 'intact', False)
+                          for objet in self.objets) <= 1
+        pv_faible_et_peu_options = peu_options and pv_decision <= self.pv_min_fuite
+        if peu_options and not pv_faible_et_peu_options:
+            # Risque concret: proportion des cartes restantes du Donjon qui nous tueraient.
+            # Seuil 0.25 choisi par balayage: meilleur score moyen/median pose, morts 42% -> 32%
+            donjon = Jeu.donjon
+            restantes = donjon.ordre[donjon.index:]
+            if len(restantes):
+                couverture = self._couverture_objets()
+                mortelles = 0
+                for i in restantes:
+                    c = donjon.cartes[i]
+                    if getattr(c, 'event', False):
+                        continue
+                    d = 10 if c.is_X else c.puissance_initiale
+                    if c.effet and "ADD_2_DOM" in c.effet:
+                        d += 2
+                    if d >= self.pv_total and not self.peut_executer_facilement(c, couverture):
+                        mortelles += 1
+                pv_faible_et_peu_options = mortelles / len(restantes) >= 0.25
         # if pv_faible_et_peu_options:
             #  log_details.append(f"--> {self.nom} Condition Fuite 1 (PV Faible/Opt): VRAI (PV {self.pv_total} <= Seuil {self.pv_min_fuite})")
 
