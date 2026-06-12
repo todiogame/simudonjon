@@ -603,21 +603,30 @@ class Joueur:
             log_details.append(f"L'objet casse {objet.nom} donnait {objet.pv_bonus}PV ca fait ca de moins. PV restant {self.pv_total}PV")
 
     def decideBriseObjet(self, jeu, log_details):
-        """Décide quel objet briser en évitant de se tuer si possible."""
-        # On ne garde que les objets intacts
-        objets_intacts = [objet for objet in reversed(self.objets) if objet.intact]
+        """Brise l'objet le moins utile, sans se tuer si possible.
+
+        La valeur d'un objet cibleur (types_tags/puissance_tags) fond avec le
+        nombre de proies restantes au Donjon : un Glaive d'argent sans Vampire
+        restant ne vaut plus rien, quelle que soit sa priorite. Valide par A/B
+        en self-play contre les formes additives et les malus mousse/PV,
+        qui n'apportent rien."""
+        objets_intacts = [o for o in self.objets if o.intact]
         if not objets_intacts:
             return None
 
-        # On cherche un objet qui ne nous tue pas
-        for objet in objets_intacts:
-            if objet.pv_bonus < self.pv_total:
-                objet.destroy(self, jeu, log_details)
-                self._gerer_pv_bonus(objet, log_details)
-                return objet
+        donjon = jeu.donjon
+        restants = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
 
-        # Si aucun ne convient, on prend le premier (qui est le dernier de la liste originale)
-        objets_intacts[0].destroy(self, jeu, log_details)
-        self._gerer_pv_bonus(objets_intacts[0], log_details)
-        return objets_intacts[0]
+        def valeur(o):
+            if not (o.types_tags or o.puissance_tags):
+                return o.priorite
+            cibles = sum(1 for c in restants
+                         if any(t in getattr(c, 'types_initiaux', ()) for t in o.types_tags)
+                         or getattr(c, 'puissance_initiale', None) in o.puissance_tags)
+            return o.priorite * cibles / (1 + cibles)
+
+        objet = min(objets_intacts, key=lambda o: (o.pv_bonus >= self.pv_total, valeur(o)))
+        objet.destroy(self, jeu, log_details)
+        self._gerer_pv_bonus(objet, log_details)
+        return objet
         
