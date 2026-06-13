@@ -64,6 +64,10 @@ class Joueur:
         self.tiebreaker = False
         self.cartes_connues = set()  # cartes du Donjon vues via les objets de divination
         self.partie_joueurs = None   # tous les joueurs de la partie (pose par l'ordonnanceur, pour le Parfum de Scandale)
+        self.strategie_traquenard = 'net_gain'
+        self.traquenard_opportunites = 0
+        self.traquenard_payes = 0
+        self.traquenard_execs = 0
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)
@@ -85,7 +89,7 @@ class Joueur:
 
     def calculer_modificateurs(self):
         modificateur_perso = getattr(self.perso_obj, 'modificateur_de', 0)
-        modificateur_de = sum(objet.modificateur_de for objet in self.objets)
+        modificateur_de = sum(objet.modificateur_de for objet in self.objets if objet.intact)
         return modificateur_de + modificateur_perso
     
     def reset_objets_intacts(self):

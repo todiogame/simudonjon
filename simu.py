@@ -7,6 +7,204 @@ from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
 from heros import *
 from heros import persos_disponibles, SANS_HOOK_PERSO
+
+TRAQUENARD_STRATEGIES = ('baseline', 'degats_purs', 'net_gain', 'net_gain_prudent')
+
+_TRAQ_ACTION_KIND_OVERRIDES = {
+    DagueDeBrutus: 'execute',
+    Zulfikar: 'execute',
+}
+
+_TRAQ_HP_GAIN_OVERRIDES = {
+    FleauDesLiches: lambda src, joueur, carte, jeu: 6,
+    AnneauDesSurmulots: lambda src, joueur, carte, jeu: 3,
+    GriffesDeLArracheur: lambda src, joueur, carte, jeu: 3,
+    RobeDeMage: lambda src, joueur, carte, jeu: 5,
+    AnneauDuFeu: lambda src, joueur, carte, jeu: 2,
+    Flutiste: lambda src, joueur, carte, jeu: 1,
+    GlaiveDArgent: lambda src, joueur, carte, jeu: 4 if any("Vampire" in m.types for m in joueur.pile_monstres_vaincus) else 0,
+    PendentifDuNovice: lambda src, joueur, carte, jeu: 1,
+    AnneauDesSquelettes: lambda src, joueur, carte, jeu: 1,
+    MailletDuRoiLiche: lambda src, joueur, carte, jeu: 3,
+    AspisHeracles: lambda src, joueur, carte, jeu: 3 if carte.puissance >= 7 else 0,
+    DagueDeBrutus: lambda src, joueur, carte, jeu: 2,
+    TentaculeDuKraken: lambda src, joueur, carte, jeu: carte.puissance,
+    ChevalierePirate: lambda src, joueur, carte, jeu: 3,
+    MiroirDuRised: lambda src, joueur, carte, jeu: 2,
+    BombeDeMidas: lambda src, joueur, carte, jeu: carte.puissance,
+}
+
+_TRAQ_HP_COST_OVERRIDES = {
+    Barde: lambda src, joueur, carte, jeu: src.pv_bonus,
+    TronconneuseEnflammee: lambda src, joueur, carte, jeu: 3,
+    MasqueAGaz: lambda src, joueur, carte, jeu: src.pv_bonus,
+    BouclierCameleon: lambda src, joueur, carte, jeu: 2,
+    ChampignonVeneneux: lambda src, joueur, carte, jeu: 1,
+    FeuilleEternelle: lambda src, joueur, carte, jeu: 1,
+    CorneDAbordage: lambda src, joueur, carte, jeu: 2,
+    SceptreDuMaharal: lambda src, joueur, carte, jeu: 1,
+    HarpeCinglante: lambda src, joueur, carte, jeu: 2 - (carte.puissance % 2),
+}
+
+_TRAQ_RESOURCE_COST_OVERRIDES = {
+    Katana: 3.0,
+    DagueDeBrutus: 3.0,
+    BombePirate: 3.0,
+    BombeDeMidas: 3.0,
+    PerleRare: 3.0,
+    TotemDImmunite: 2.0,
+    CleAmulette: 2.0,
+    BouillonDAmes: 2.0,
+    CouteauxDeLancer: 2.0,
+    Katana: 3.0,
+    Avatar: 1.0,
+    Zulfikar: 2.0,
+}
+
+_TRAQ_SUCCESS_PROB_OVERRIDES = {
+    CaisseEnchantee: lambda src, joueur, carte, jeu: max(0.0, min(1.0, (6 - carte.puissance) / 6.0)),
+    ChampDeForceEnMousse: lambda src, joueur, carte, jeu: 2.0 / 6.0,
+    TalismanIncertain: lambda src, joueur, carte, jeu: 1.0 / 6.0,
+}
+
+
+def _traq_method(source, late=False):
+    return type(source).combat_effet_late if late else type(source).combat_effet
+
+
+def _traq_action_kind(source, late=False):
+    cls = type(source)
+    if cls in _TRAQ_ACTION_KIND_OVERRIDES:
+        return _TRAQ_ACTION_KIND_OVERRIDES[cls]
+    names = _traq_method(source, late).__code__.co_names
+    if 'absorbe' in names:
+        return 'absorbe'
+    if 'executeEtDefausse' in names:
+        return 'execute_defausse'
+    if 'execute' in names or 'executed' in names:
+        return 'execute'
+    return None
+
+
+def _traq_condition(source, joueur, carte, Jeu, late=False):
+    try:
+        return source.condition(joueur, carte, Jeu, [])
+    except Exception:
+        return False
+
+
+def _traq_hp_gain(source, joueur, carte, Jeu, action_kind):
+    cls = type(source)
+    if cls in _TRAQ_HP_GAIN_OVERRIDES:
+        return _TRAQ_HP_GAIN_OVERRIDES[cls](source, joueur, carte, Jeu)
+    if action_kind == 'absorbe':
+        return carte.puissance
+    return 0
+
+
+def _traq_hp_cost(source, joueur, carte, Jeu):
+    cls = type(source)
+    if cls in _TRAQ_HP_COST_OVERRIDES:
+        return _TRAQ_HP_COST_OVERRIDES[cls](source, joueur, carte, Jeu)
+    return 0
+
+
+def _traq_resource_cost(source, action_kind):
+    cls = type(source)
+    if cls in _TRAQ_RESOURCE_COST_OVERRIDES:
+        return _TRAQ_RESOURCE_COST_OVERRIDES[cls]
+    base = 1.0 if getattr(source, 'actif', False) else 0.0
+    if action_kind == 'execute_defausse':
+        base += 1.0
+    return base
+
+
+def _traq_success_prob(source, joueur, carte, Jeu):
+    cls = type(source)
+    if cls in _TRAQ_SUCCESS_PROB_OVERRIDES:
+        return _TRAQ_SUCCESS_PROB_OVERRIDES[cls](source, joueur, carte, Jeu)
+    return 1.0
+
+
+def _traq_candidate(source, joueur, carte, Jeu, late=False):
+    action_kind = _traq_action_kind(source, late)
+    if action_kind is None:
+        return None
+    trap_actif = Jeu.traquenard_actif
+    now_ok = _traq_condition(source, joueur, carte, Jeu, late)
+    Jeu.traquenard_actif = False
+    try:
+        off_ok = _traq_condition(source, joueur, carte, Jeu, late)
+    finally:
+        Jeu.traquenard_actif = trap_actif
+    if now_ok or not off_ok:
+        return None
+    return {
+        'source': source,
+        'late': late,
+        'action_kind': action_kind,
+        'hp_gain': _traq_hp_gain(source, joueur, carte, Jeu, action_kind),
+        'hp_cost': _traq_hp_cost(source, joueur, carte, Jeu),
+        'resource_cost': _traq_resource_cost(source, action_kind),
+        'success_prob': _traq_success_prob(source, joueur, carte, Jeu),
+    }
+
+
+def _premier_candidat_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE):
+    if type(joueur.perso_obj) not in P_COMBAT:
+        candidat = _traq_candidate(joueur.perso_obj, joueur, carte, Jeu, late=False)
+        if candidat is not None:
+            return candidat
+    for objet in [o for o in joueur.objets if type(o) not in O_COMBAT]:
+        candidat = _traq_candidate(objet, joueur, carte, Jeu, late=False)
+        if candidat is not None:
+            return candidat
+    if type(joueur.perso_obj) not in P_COMBAT_LATE:
+        candidat = _traq_candidate(joueur.perso_obj, joueur, carte, Jeu, late=True)
+        if candidat is not None:
+            return candidat
+    return None
+
+
+def _decision_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, log_details):
+    candidat = _premier_candidat_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE)
+    if candidat is None:
+        return False
+
+    joueur.traquenard_opportunites += 1
+    hp_gain = candidat['hp_gain']
+    hp_cost = candidat['hp_cost']
+    resource_cost = candidat['resource_cost']
+    success_prob = candidat['success_prob']
+    pv_depart = joueur.pv_total
+    pv_succes = pv_depart - hp_cost + hp_gain - 3
+    pv_echec = pv_depart - hp_cost - carte.dommages
+
+    if pv_succes <= 0 or (success_prob < 1.0 and pv_echec <= 0):
+        log_details.append(f"{joueur.nom} refuse de payer Traquenard: ligne suicidaire via {type(candidat['source']).__name__}.")
+        return False
+
+    gain_net = success_prob * (carte.dommages + hp_gain - 3) - hp_cost - resource_cost
+    strategie = getattr(joueur, 'strategie_traquenard', 'baseline')
+    if strategie == 'baseline':
+        decision = pv_depart > 4 and carte.dommages > 3
+    elif strategie == 'degats_purs':
+        decision = carte.dommages >= 3
+    elif strategie == 'net_gain':
+        decision = gain_net > 0
+    elif strategie == 'net_gain_prudent':
+        seuil = 1.0 if resource_cost <= 1.0 else 2.0
+        decision = carte.dommages >= 3 and gain_net >= seuil
+    else:
+        decision = pv_depart > 4 and carte.dommages > 3
+
+    if decision:
+        log_details.append(
+            f"{joueur.nom} paie Traquenard via {type(candidat['source']).__name__} "
+            f"[{strategie}] gain_net={gain_net:.2f}, PV succes={pv_succes:.1f}."
+        )
+    return decision
+
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     # arreter la simulation si on a un objet casse dans une main
     for j in joueurs:
@@ -454,13 +652,12 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 
                 #use items
                 if not carte_ignoree:
-                    # Traquenard rework: on PEUT executer le monstre, mais ca coute 3 PV.
-                    # L'IA accepte de payer si le monstre fait assez mal et qu'elle survivra au cout.
                     Jeu.traquenard_paye = False
-                    if Jeu.traquenard_actif and joueur.pv_total > 4 and carte.dommages > 3:
+                    if Jeu.traquenard_actif and _decision_traquenard(
+                            joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, log_details):
                         Jeu.traquenard_actif = False
                         Jeu.traquenard_paye = True
-                        log_details.append(f"{joueur.nom} est prêt à payer 3 PV pour exécuter {carte.titre} malgré le Traquenard.")
+                        joueur.traquenard_payes += 1
                     if type(joueur.perso_obj) not in P_COMBAT:
                         joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
                     # comprehension = copie filtree: certains objets se retirent de la liste (Hache de Glace).
@@ -482,6 +679,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     if Jeu.traquenard_paye:
                         if carte.executed:
                             joueur.pv_total -= 3
+                            joueur.traquenard_execs += 1
                             log_details.append(f"{joueur.nom} perd 3 PV pour avoir exécuté {carte.titre} malgré le Traquenard. PV restant: {joueur.pv_total}")
                         Jeu.traquenard_paye = False
                 

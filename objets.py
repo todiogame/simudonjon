@@ -727,7 +727,7 @@ class PatinsAGlace(Objet):
     def __init__(self):
         super().__init__("Patins à Glace", False, 3, 3)
     def en_fuite(self, joueur, Jeu, log_details):
-        if joueur.jet_fuite >= 7:
+        if self.intact and joueur.jet_fuite >= 7:
             self.perdPV(1, joueur, log_details)
 
 
@@ -3469,6 +3469,55 @@ class Paratonnerre(Objet):
         if carte.puissance >= 7:
             _repare_un_objet(joueur, [self], log_details, self.nom)
 
+class EplucheDonjon(Objet):
+    def __init__(self):
+        super().__init__("Épluche-Donjon", False, 3)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if self.intact and not Jeu.donjon.vide:
+            carte = Jeu.donjon.prochaine_carte()
+            Jeu.defausse.append(carte)
+            log_details.append(f"{joueur.nom} défausse {carte.titre} du Donjon ({self.nom}).")
+
+class CrocsEnflamees(Objet):
+    def __init__(self):
+        super().__init__("Crocs enflamées", False, 7)
+    def en_fuite(self, joueur, Jeu, log_details):
+        if self.intact:
+            self.perdPV(1, joueur, log_details)
+
+class GlandePineale(Objet):
+    def __init__(self):
+        super().__init__("Glande pinéale", False)
+    def debut_tour(self, joueur, Jeu, log_details):
+        self.modificateur_de = sum(1 for j in Jeu.joueurs if j.dans_le_dj) if self.intact else 0
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance == joueur.pv_base and not Jeu.traquenard_actif
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+
+class OursinDodu(Objet):
+    def __init__(self):
+        super().__init__("Oursin dodu", False, 4)
+
+class SceauDeLegalisation(Objet):
+    def __init__(self):
+        super().__init__("Sceau de Légalisation", False, 6)
+    def fin_tour(self, joueur, Jeu, log_details):
+        if self.intact and joueur.pv_total % 2 == 1:
+            self.perdPV(1, joueur, log_details)
+
+class MiroirDuRised(Objet):
+    def __init__(self):
+        super().__init__("Miroir du Riséd", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        if not joueur.pile_monstres_vaincus or Jeu.traquenard_actif:
+            return False
+        sommet = joueur.pile_monstres_vaincus[-1]
+        return any(t in sommet.types for t in carte.types)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
+        self.gagnePV(2, joueur, log_details)
+
 class SurinCrasseux(Objet):
     def __init__(self):
         super().__init__("Surin crasseux", True)
@@ -3531,6 +3580,15 @@ class CouteauQuiTombe(Objet):
             self.cartes_obligatoires -= 1
             if self.cartes_obligatoires > 0:
                 joueur.rejoue = True
+
+class AvisDeRecherche(Objet):
+    def __init__(self):
+        super().__init__("Avis de recherche", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (carte.puissance >= 4 and len(carte.types) > 0 and carte.effet is not None
+                and not Jeu.traquenard_actif)
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.execute(joueur, carte, log_details)
 
 class CarapaceBleue(Objet):
     def __init__(self):
@@ -3972,10 +4030,17 @@ objets_disponibles = [
     ParachuteDore(),
     PoigneeDeMain(),
     Paratonnerre(),
+    EplucheDonjon(),
+    CrocsEnflamees(),
+    GlandePineale(),
+    OursinDodu(),
+    SceauDeLegalisation(),
+    MiroirDuRised(),
     SurinCrasseux(),
     BottesDePoncage(),
     BombeDeMidas(),
     CouteauQuiTombe(),
+    AvisDeRecherche(),
     CarapaceBleue(),
     JournalDuFutur(),
     BinoclesDeLInventeur(),
@@ -4247,10 +4312,17 @@ __all__ = [
             "ParachuteDore",
             "PoigneeDeMain",
             "Paratonnerre",
+            "EplucheDonjon",
+            "CrocsEnflamees",
+            "GlandePineale",
+            "OursinDodu",
+            "SceauDeLegalisation",
+            "MiroirDuRised",
             "SurinCrasseux",
             "BottesDePoncage",
             "BombeDeMidas",
             "CouteauQuiTombe",
+            "AvisDeRecherche",
             "CarapaceBleue",
             "JournalDuFutur",
             "BinoclesDeLInventeur",

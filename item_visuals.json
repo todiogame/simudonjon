@@ -1135,4 +1135,33 @@
   "color_code": 3,
   "description": "<b>Exécutez</b> et <b>défaussez</b> un monstre.\\nSi un joueur a vaincu plus de monstres que les autres,\\nil doit en défausser un."
  }
+ ,
+ "Épluche-Donjon": {
+  "color_code": 1,
+  "description": "<b>PV + 3</b>\\nAu début de votre tour, vous pouvez <b>défausser</b> la carte du <b>dessus</b> du Donjon."
+ },
+ "Crocs enflamées": {
+  "color_code": 1,
+  "description": "<b>PV + 7</b>\\nQuand vous tentez de fuir, <b>perdez 1 PV</b>."
+ },
+ "Glande pinéale": {
+  "color_code": 3,
+  "description": "<b>Jet de fuite + X</b>, avec X = nombre de joueurs dans le Donjon.\\n<b>Exécutez</b> un monstre de puissance égale à vos <b>PV de héros</b>."
+ },
+ "Oursin dodu": {
+  "color_code": 4,
+  "description": "<b>PV + 4</b>"
+ },
+ "Sceau de Légalisation": {
+  "color_code": 4,
+  "description": "<b>PV + 6</b>\\nA la fin de votre tour, si vous avez un nombre impair de PV, <b>perdez 1 PV</b>."
+ },
+ "Miroir du Riséd": {
+  "color_code": 5,
+  "description": "<b>Exécutez</b> un monstre s'il partage un <b>type</b> avec le dernier monstre de votre pile, puis <b>gagnez 2 PV</b>."
+ },
+ "Avis de recherche": {
+  "color_code": null,
+  "description": "<b>Exécutez</b> un monstre de puissance <b>4 ou plus</b> qui a au moins un <b>type</b> et un <b>effet spécial</b>."
+ }
 }
