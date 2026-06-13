@@ -253,6 +253,8 @@ class Joueur:
         types = getattr(carte, 'types', None)
         if types is None:
             return False
+        if not types and any(o.intact and o.nom == "Attrape-Rêves" for o in self.objets):
+            return True
         types_couverts, puissances_couvertes = couverture if couverture is not None else self._couverture_objets()
         return carte.puissance in puissances_couvertes or any(t in types_couverts for t in types)
 
@@ -341,7 +343,8 @@ class Joueur:
         cartes = donjon.cartes
         restantes = donjon.ordre[donjon.index:].tolist()  # ints natifs (boucle chaude)
         kraken_refusable = not Jeu.kraken_vu and 10 not in puissances_couvertes
-        ange_refusable = 8 not in puissances_couvertes
+        a_attrape_reves = any(o.intact and o.nom == "Attrape-Rêves" for o in self.objets)
+        ange_refusable = 8 not in puissances_couvertes and not a_attrape_reves
 
         for i in restantes:
             c = cartes[i]

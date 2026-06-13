@@ -1733,6 +1733,28 @@ class GrenadeSinge(Objet):
         log_details.append(f"{joueur.nom} remet {carte.titre} dans le Donjon grâce à {self.nom}.")
         self.destroy(joueur, Jeu, log_details)
 
+class SceptreChangeur(Objet):
+    def __init__(self):
+        super().__init__("Sceptre Changeur", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (not Jeu.traquenard_actif
+                and any(isinstance(Jeu.donjon.cartes[idx], CarteMonstre)
+                        for idx in Jeu.donjon.ordre[Jeu.donjon.index:]))
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return _choisir_cible_sceptre_changeur(joueur, carte, Jeu) is not None
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        cible = _choisir_cible_sceptre_changeur(joueur, carte, Jeu)
+        if cible is None:
+            return
+        Jeu.defausse.append(carte)
+        _retire_du_donjon_et_melange(Jeu, cible)
+        Jeu.carte_forcee = cible
+        log_details.append(
+            f"{joueur.nom} utilise {self.nom} : {carte.titre} est défaussé, "
+            f"puis {cible.titre} est choisi dans le Donjon pour être combattu à la place."
+        )
+        self.destroy(joueur, Jeu, log_details)
+
 
 # class HamacReposant(Objet):
 #     def __init__(self):
@@ -1782,10 +1804,9 @@ class AttrapeReves(Objet):
     def __init__(self):
         super().__init__("Attrape-Rêves", False, 2)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif
+        return not Jeu.traquenard_actif and not carte.types
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if carte.is_X:
-            self.execute(joueur, carte, log_details)
+        self.execute(joueur, carte, log_details)
 
 class DeMaudit(Objet):
     def __init__(self):
@@ -2379,6 +2400,139 @@ def _repare_un_objet(joueur, exclus, log_details, source):
     log_details.append(f"{joueur.nom} répare {objet_repare.nom} ({source}).")
     return objet_repare
 
+
+def _estime_puissance_sceptre_changeur(carte, joueur, Jeu):
+    if getattr(carte, 'event', False):
+        return float('inf')
+    effet = getattr(carte, 'effet', None)
+    if effet == "SLEEPING":
+        return 4.5
+    if effet == "MIMIC":
+        return sum(1 for objet in joueur.objets if objet.intact)
+    if effet == "MONKEY_TEAM":
+        return 2 * sum(1 for j in Jeu.joueurs if j.dans_le_dj)
+    if effet == "REAPER":
+        return joueur.pv_total // 2
+    if effet == "MEDAIL":
+        return sum(j.medailles for j in Jeu.joueurs)
+    if effet == "SCAVENGER":
+        return len(joueur.pile_monstres_vaincus)
+    if effet == "MIROIR":
+        return joueur.pile_monstres_vaincus[-1].puissance if joueur.pile_monstres_vaincus else 0
+    if effet == "TROLL":
+        return joueur.pile_monstres_vaincus[0].puissance if joueur.pile_monstres_vaincus else 0
+    if getattr(carte, 'is_X', False):
+        return 10
+    return carte.puissance_initiale
+
+
+def _a_ligne_ange_gardien(joueur):
+    for objet in joueur.objets:
+        if not objet.intact:
+            continue
+        if 8 in getattr(objet, 'puissance_tags', ()):
+            return True
+        if objet.nom == "Attrape-Rêves":
+            return True
+    return False
+
+
+def _a_ligne_absorption(objet, joueur, carte, Jeu):
+    if not objet.intact:
+        return False
+    if 'absorbe' not in type(objet).combat_effet.__code__.co_names:
+        return False
+    try:
+        return objet.rules(joueur, carte, Jeu, [])
+    except Exception:
+        return False
+
+
+def _score_sceptre_changeur(carte, joueur, Jeu):
+    # Heuristique IA, pas regle brute: ordre de priorite pour choisir la cible
+    # quand l'objet permet de choisir n'importe quel monstre du Donjon.
+    puissance = _estime_puissance_sceptre_changeur(carte, joueur, Jeu)
+    if carte.effet == "GUARDIAN_ANGEL" and _a_ligne_ange_gardien(joueur):
+        return (0, 0, carte.titre)
+    if any(_a_ligne_absorption(objet, joueur, carte, Jeu) for objet in joueur.objets):
+        return (1, -puissance, carte.titre)
+    if carte.titre == "Fée":
+        return (2, 0, carte.titre)
+    if joueur.peut_executer_facilement(carte):
+        return (3, puissance, carte.titre)
+    return (4, puissance, carte.titre)
+
+
+def _choisir_cible_sceptre_changeur(joueur, carte_courante, Jeu):
+    donjon = Jeu.donjon
+    restants = [
+        donjon.cartes[idx]
+        for idx in donjon.ordre[donjon.index:]
+        if isinstance(donjon.cartes[idx], CarteMonstre)
+    ]
+    if not restants:
+        return None
+    meilleure = min(restants, key=lambda c: _score_sceptre_changeur(c, joueur, Jeu))
+    if _score_sceptre_changeur(meilleure, joueur, Jeu) < _score_sceptre_changeur(carte_courante, joueur, Jeu):
+        return meilleure
+    return None
+
+
+def _retire_du_donjon_et_melange(Jeu, carte):
+    donjon = Jeu.donjon
+    prefixe = donjon.ordre[:donjon.index]
+    suffixe = [idx for idx in donjon.ordre[donjon.index:] if idx != carte.index]
+    suffixe = np.random.permutation(np.array(suffixe, dtype=donjon.ordre.dtype))
+    donjon.ordre = np.concatenate((prefixe, suffixe))
+    donjon.nb_cartes = len(donjon.ordre)
+
+
+def _couverture_sans_objet(joueur, objet_exclu):
+    types_couverts = set()
+    puissances_couvertes = set()
+    for objet in joueur.objets:
+        if objet is objet_exclu or not objet.intact:
+            continue
+        types_couverts.update(getattr(objet, 'types_tags', ()))
+        puissances_couvertes.update(getattr(objet, 'puissance_tags', ()))
+    return types_couverts, puissances_couvertes
+
+
+def _choisir_puissance_epee_vengeresse(joueur, Jeu, objet_exclu):
+    # Heuristique IA, pas regle: choisit une ligne "rentable" non deja couverte
+    # par le reste de la main, au lieu d'un vrai choix intelligent de long terme.
+    _, puissances_couvertes = _couverture_sans_objet(joueur, objet_exclu)
+    scores = {}
+    comptes = {}
+    for carte in Jeu.donjon.cartes:
+        if not isinstance(carte, CarteMonstre) or carte.is_X:
+            continue
+        p = carte.puissance_initiale
+        scores[p] = scores.get(p, 0) + joueur._degats_attendus(carte, Jeu)
+        comptes[p] = comptes.get(p, 0) + 1
+    if not scores:
+        return 5
+    candidates = [p for p in scores if p not in puissances_couvertes] or list(scores)
+    return max(candidates, key=lambda p: (scores[p], p, comptes[p]))
+
+
+def _choisir_type_dague_vengeresse(joueur, Jeu, objet_exclu):
+    # Heuristique IA, pas regle: meme idee que l'Epee vengeresse mais par type.
+    types_couverts, _ = _couverture_sans_objet(joueur, objet_exclu)
+    scores = {}
+    comptes = {}
+    for carte in Jeu.donjon.cartes:
+        if not isinstance(carte, CarteMonstre):
+            continue
+        danger = joueur._degats_attendus(carte, Jeu)
+        for t in carte.types_initiaux:
+            scores[t] = scores.get(t, 0) + danger
+            comptes[t] = comptes.get(t, 0) + 1
+    if not scores:
+        return "Golem"
+    candidates = [t for t in scores if t not in types_couverts] or list(scores)
+    return max(candidates, key=lambda t: (scores[t], comptes[t], t == "Golem", t))
+
 # --- 1ere edition ---
 
 class CoeurDeTarasque(Objet):
@@ -2424,18 +2578,24 @@ class Imprimante(Objet):
 class EpeeVengeresse(Objet):
     def __init__(self):
         super().__init__("Epée vengeresse", False, puissance_tags=[5])
+    def debut_partie(self, joueur, Jeu, log_details):
+        puissance = _choisir_puissance_epee_vengeresse(joueur, Jeu, self)
+        self.puissance_tags = [puissance]
+        log_details.append(f"{joueur.nom} prépare {self.nom} sur la puissance {puissance}.")
     def rules(self, joueur, carte, Jeu, log_details):
-        # IA: annonce toujours la puissance 5 (la plus representee dans le Donjon)
-        return carte.puissance == 5 and not Jeu.traquenard_actif
+        return carte.puissance in self.puissance_tags and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
 class DagueVengeresse(Objet):
     def __init__(self):
         super().__init__("Dague vengeresse", False, types_tags=["Golem"])
+    def debut_partie(self, joueur, Jeu, log_details):
+        monster_type = _choisir_type_dague_vengeresse(joueur, Jeu, self)
+        self.types_tags = [monster_type]
+        log_details.append(f"{joueur.nom} prépare {self.nom} sur le type {monster_type}.")
     def rules(self, joueur, carte, Jeu, log_details):
-        # IA: annonce toujours le type Golem (le plus represente dans le Donjon)
-        return "Golem" in carte.types and not Jeu.traquenard_actif
+        return any(t in self.types_tags for t in carte.types) and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
 
@@ -2623,7 +2783,9 @@ class BouleDeCristal(Objet):
     def debut_partie(self, joueur, Jeu, log_details):
         self.annonce = None
     def debut_tour(self, joueur, Jeu, log_details):
-        # annonce la puissance la plus representee parmi les cartes restantes du Donjon
+        # Heuristique IA, pas regle: annonce la puissance au plus gros "poids de
+        # danger" parmi les cartes restantes (frequence * puissance), avec
+        # tie-break sur la puissance brute.
         if not self.intact:
             return
         comptes = {}
@@ -2632,7 +2794,7 @@ class BouleDeCristal(Objet):
             c = donjon.cartes[idx]
             if isinstance(c, CarteMonstre) and not c.is_X:
                 comptes[c.puissance_initiale] = comptes.get(c.puissance_initiale, 0) + 1
-        self.annonce = max(comptes, key=comptes.get) if comptes else None
+        self.annonce = max(comptes, key=lambda p: (comptes[p] * p, p, comptes[p])) if comptes else None
         if self.annonce is not None:
             log_details.append(f"{joueur.nom} annonce la puissance {self.annonce} avec {self.nom}.")
     def rules(self, joueur, carte, Jeu, log_details):
@@ -3041,11 +3203,12 @@ class ConcoctionInstable(Objet):
             return carte.puissance > joueur.pv_total
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        # ne se brise pas a l'utilisation, mais a la fin du 3eme tour
+        # consommable: se brise a l'utilisation, ou en fin de 3eme tour si inutilisee
         self.execute(joueur, carte, log_details)
         if joueur.tour == 3 and carte.puissance > 0:
             joueur.pv_total = carte.puissance
             log_details.append(f"{joueur.nom} fixe ses PV à {carte.puissance} ({self.nom}).")
+        self.destroy(joueur, Jeu, log_details)
     def fin_tour(self, joueur, Jeu, log_details):
         if self.intact and joueur.tour >= 3:
             log_details.append(f"{self.nom} se brise (fin du 3ème tour).")
@@ -3954,6 +4117,7 @@ objets_disponibles = [
     Zulfikar(),
     AnneauDeGlace(),
     GrenadeSinge(),
+    SceptreChangeur(),
     # --- synchro tableur juin 2026 ---
     CoeurDeTarasque(),
     CeintureDuPonceur(),
@@ -4236,6 +4400,7 @@ __all__ = [
             "Zulfikar",
             "AnneauDeGlace",
             "GrenadeSinge",
+            "SceptreChangeur",
             # --- synchro tableur juin 2026 ---
             "CoeurDeTarasque",
             "CeintureDuPonceur",

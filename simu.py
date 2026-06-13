@@ -205,6 +205,134 @@ def _decision_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, 
         )
     return decision
 
+
+def _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC):
+    effet_carte = carte.effet
+    carte.executed = False
+    carte.puissance = carte.puissance_initiale
+    carte.types = list(carte.types_initiaux)
+
+    if effet_carte == "MIROIR":
+        if joueur.pile_monstres_vaincus:
+            carte_copiee = joueur.pile_monstres_vaincus[-1]
+            carte.puissance = carte_copiee.puissance
+            carte.types = list(carte_copiee.types)
+            effet_carte = carte_copiee.effet
+            log_details.append(f"Le {carte.titre} copie {carte_copiee.titre} avec une puissance de {carte.puissance}.")
+        else:
+            carte.puissance = 0
+            carte.types = []
+            log_details.append(f"Le {carte.titre} n'a pas de carte a copier, puissance zero.")
+
+    if effet_carte == "TROLL":
+        if joueur.pile_monstres_vaincus:
+            carte_copiee = joueur.pile_monstres_vaincus[0]
+            carte.puissance = carte_copiee.puissance
+            carte.types = list(carte_copiee.types)
+            effet_carte = carte_copiee.effet
+            log_details.append(f"Le {carte.titre} copie {carte_copiee.titre} (dessous de la pile) avec une puissance de {carte.puissance}.")
+        else:
+            carte.puissance = 0
+            carte.types = []
+            log_details.append(f"Le {carte.titre} n'a pas de carte a copier, puissance zero.")
+
+    if effet_carte == "SHAPESHIFTER":
+        for objet in joueur.objets:
+            if objet.intact and objet.types_tags:
+                carte.types = [objet.types_tags[0]]
+                log_details.append(f"Le {carte.titre} devient un {carte.types[0]} (car {joueur.nom} a {objet.nom}.).")
+                break
+
+    if effet_carte == "SLEEPING":
+        jet_dragon = joueur.rollDice(Jeu, log_details)
+        carte.puissance = 9 if jet_dragon <= 3 else 0
+        log_details.append(f"Rencontré {carte.titre}, jet de {jet_dragon}, puissance déterminée à {carte.puissance}.")
+
+    if effet_carte == "MIMIC":
+        carte.puissance = sum(1 for objet in joueur.objets if objet.intact)
+        log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (égale au nombre d'objets possédés).")
+
+    if effet_carte == "MONKEY_TEAM":
+        carte.puissance = 2 * sum(1 for j in Jeu.joueurs if j.dans_le_dj)
+        log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (2x le nombre de joueurs dans le donjon).")
+
+    if effet_carte == "REAPER":
+        carte.puissance = joueur.pv_total // 2
+        log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (la moitie des PV (arrondi inferieur)).")
+
+    if effet_carte == "MEDAIL":
+        carte.puissance = sum(j.medailles for j in Jeu.joueurs)
+        log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (égale au nombre de médailles).")
+
+    if effet_carte == "SCAVENGER":
+        carte.puissance = len(joueur.pile_monstres_vaincus)
+        log_details.append(f"Rencontré {carte.titre}, puissance déterminée à {carte.puissance} (égale au nombre de monstres vaincus).")
+
+    carte.dommages = carte.puissance
+
+    if effet_carte == "NOOB" and joueur.medailles > 0:
+        carte.dommages = 2
+        log_details.append(f"Rencontré {carte.titre}, il n'inflige que 2 dommages grâce aux médailles.")
+    if effet_carte and "ADD_2_DOM" in effet_carte:
+        carte.dommages += 2
+        log_details.append(f"{carte.titre} inflige 2 dommages supplémentaires.")
+    if effet_carte == "LORD" and joueur.medailles > 0:
+        carte.dommages += 2 * joueur.medailles
+        log_details.append(f"Rencontré {carte.titre}, inflige +2 dommages par médaille, total {carte.dommages}.")
+
+    for joueur_proprietaire in Jeu.joueurs:
+        if type(joueur_proprietaire.perso_obj) not in P_RENC:
+            joueur_proprietaire.perso_obj.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
+        for objet in joueur_proprietaire.objets:
+            if type(objet) not in O_RENC:
+                objet.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
+
+    return effet_carte
+
+
+def _ligne_passive_couvre_carte(joueur, carte):
+    if getattr(carte, 'non_executable', False):
+        return False
+    types = getattr(carte, 'types_initiaux', getattr(carte, 'types', None))
+    puissance = getattr(carte, 'puissance_initiale', getattr(carte, 'puissance', None))
+    if types is None:
+        return False
+    for objet in joueur.objets:
+        if not objet.intact or objet.actif:
+            continue
+        if not types and objet.nom == "Attrape-Rêves":
+            return True
+        if puissance in getattr(objet, 'puissance_tags', ()):
+            return True
+        if any(t in getattr(objet, 'types_tags', ()) for t in types):
+            return True
+    return False
+
+
+def _choisir_monstre_tempete_des_ames(joueur, Jeu):
+    # Heuristique IA, pas regle: si une ligne passive intacte couvre deja un monstre
+    # de la pile, on rend le plus gros de ces monstres; sinon on rend le plus petit.
+    if not joueur.pile_monstres_vaincus:
+        return None
+    couverts = [m for m in joueur.pile_monstres_vaincus if _ligne_passive_couvre_carte(joueur, m)]
+    if couverts:
+        return max(
+            couverts,
+            key=lambda m: (
+                joueur._degats_attendus(m, Jeu),
+                getattr(m, 'puissance_initiale', getattr(m, 'puissance', 0)),
+                len(getattr(m, 'types_initiaux', getattr(m, 'types', ()))),
+            ),
+        )
+    return min(
+        joueur.pile_monstres_vaincus,
+        key=lambda m: (
+            joueur._degats_attendus(m, Jeu),
+            getattr(m, 'puissance_initiale', getattr(m, 'puissance', 0)),
+            len(getattr(m, 'types_initiaux', getattr(m, 'types', ()))),
+        ),
+    )
+
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     # arreter la simulation si on a un objet casse dans une main
     for j in joueurs:
@@ -434,7 +562,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 for autre_joueur in joueurs:
                     if autre_joueur.dans_le_dj:
                         if autre_joueur.pile_monstres_vaincus:
-                            monstre_remis = autre_joueur.pile_monstres_vaincus.pop()
+                            monstre_remis = _choisir_monstre_tempete_des_ames(autre_joueur, Jeu)
+                            autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
                             donjon.ajouter_monstre(monstre_remis)
                             log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
                         else:
@@ -641,7 +770,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                     # Vérifier si le joueur a un objet intact avec puissance 8
                     has_power_8 = False
                     for objet in joueur.objets:
-                        if objet.intact and 8 in objet.puissance_tags:
+                        if objet.intact and (8 in objet.puissance_tags or objet.nom == "Attrape-Rêves"):
                             log_details.append(f"{joueur.nom} decide d'affronter {carte.titre} confiant avec ({objet.nom})")
                             has_power_8 = True
                             break
@@ -658,16 +787,32 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         Jeu.traquenard_actif = False
                         Jeu.traquenard_paye = True
                         joueur.traquenard_payes += 1
-                    if type(joueur.perso_obj) not in P_COMBAT:
-                        joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
-                    # comprehension = copie filtree: certains objets se retirent de la liste (Hache de Glace).
-                    # Chaque objet decide via ses rules/worthit ; on ne s'arrete que si le monstre
-                    # est execute ou si le joueur a fui (l'ancien break a dommages<=0 empechait
-                    # d'executer les monstres a 0 dommages comme la Fee des que le 1er objet etait inerte).
-                    for objet in [o for o in joueur.objets if type(o) not in O_COMBAT]:
-                        if carte.executed or joueur.fuite_reussie:
+                    while True:
+                        remplacement = False
+                        if type(joueur.perso_obj) not in P_COMBAT:
+                            joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
+                        if getattr(Jeu, 'carte_forcee', None) is not None:
+                            carte = Jeu.carte_forcee
+                            del Jeu.carte_forcee
+                            effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
+                            remplacement = True
+                        else:
+                            # comprehension = copie filtree: certains objets se retirent de la liste (Hache de Glace).
+                            # Chaque objet decide via ses rules/worthit ; on ne s'arrete que si le monstre
+                            # est execute ou si le joueur a fui (l'ancien break a dommages<=0 empechait
+                            # d'executer les monstres a 0 dommages comme la Fee des que le 1er objet etait inerte).
+                            for objet in [o for o in joueur.objets if type(o) not in O_COMBAT]:
+                                if carte.executed or joueur.fuite_reussie:
+                                    break
+                                objet.en_combat(joueur, carte, Jeu, log_details)
+                                if getattr(Jeu, 'carte_forcee', None) is not None:
+                                    carte = Jeu.carte_forcee
+                                    del Jeu.carte_forcee
+                                    effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
+                                    remplacement = True
+                                    break
+                        if not remplacement or carte.executed or joueur.fuite_reussie:
                             break
-                        objet.en_combat(joueur, carte, Jeu, log_details)
                     if(not joueur.dans_le_dj):
                         # mort/fuite en plein combat : la carte ne retourne sur le Donjon
                         # que si elle n'a pas deja ete executee (sinon elle est deja dans une pile/defausse)
