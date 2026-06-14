@@ -208,9 +208,13 @@ def _decision_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, 
 
 def _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC):
     effet_carte = carte.effet
+    Jeu.carte_ignoree = False
     carte.executed = False
     carte.puissance = carte.puissance_initiale
     carte.types = list(carte.types_initiaux)
+    carte.dommages_reference = 0
+    carte.dommages_minimum = 0
+    carte.reduction_dommages_bloquee = False
 
     if effet_carte == "MIROIR":
         if joueur.pile_monstres_vaincus:
@@ -286,6 +290,7 @@ def _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_REN
         for objet in joueur_proprietaire.objets:
             if type(objet) not in O_RENC:
                 objet.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
+    carte.dommages_reference = carte.dommages
 
     return effet_carte
 
@@ -333,6 +338,19 @@ def _choisir_monstre_tempete_des_ames(joueur, Jeu):
         ),
     )
 
+
+def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT):
+    joueur.mort(log_details)
+    log_details.append(f"OUPS!! Mort de {joueur.nom}, a court de PV.\n")
+    for joueur_proprietaire in Jeu.joueurs:
+        for objet in joueur_proprietaire.objets:
+            if type(objet) not in O_MORT:
+                objet.en_mort(joueur_proprietaire, joueur, carte, Jeu, log_details)
+    if (isinstance(carte, CarteMonstre) and not carte.executed and not carte_ignoree
+            and effet_carte != "MAUDIT" and carte not in joueur.pile_monstres_vaincus
+            and carte not in Jeu.defausse and carte.index not in Jeu.donjon.ordre[Jeu.donjon.index:]):
+        donjon.rajoute_en_haut_de_la_pile(carte)
+
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
     # arreter la simulation si on a un objet casse dans une main
     for j in joueurs:
@@ -364,6 +382,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
         execute_next_monster = False
         traquenard_actif = False
         traquenard_paye = False
+        carte_ignoree = False
         kraken_vu = False
         donjon
     Jeu.joueurs = joueurs
@@ -449,10 +468,17 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             log_details.append("Le Donjon est vide. Fin de la partie.")
             break
         if isinstance(carte, CarteMonstre):
+            # reset l'etat transient du combat precedent: certains objets posent un
+            # flag global pour ignorer le monstre courant (ex: remetDansDonjon).
+            # Ce flag ne doit jamais fuiter vers le monstre suivant.
+            Jeu.carte_ignoree = False
             carte.executed = False
             # reset l'etat de la carte partagee (Potion de Glace, MIROIR, SHAPESHIFTER...)
             carte.puissance = carte.puissance_initiale
             carte.types = list(carte.types_initiaux)
+            carte.dommages_reference = 0
+            carte.dommages_minimum = 0
+            carte.reduction_dommages_bloquee = False
 
         joueur.jet_fuite_lance = False
 
@@ -487,8 +513,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             if effet_carte == "INCEPTION":
                 event_defausse = [c for c in Jeu.defausse if getattr(c, 'event', False)]
                 if(event_defausse):
-                    effet_carte = event_defausse[0].effet
-                    log_details.append(f"{carte.titre} copie la dernière carte événement dans la défausse: {event_defausse[0].titre}.")
+                    dernier_event = event_defausse[-1]
+                    effet_carte = dernier_event.effet
+                    log_details.append(f"{carte.titre} copie la dernière carte événement dans la défausse: {dernier_event.titre}.")
                 else:
                     log_details.append(f"Pas de carte événement dans la défausse.") 
             if effet_carte == "HEAL":
@@ -561,7 +588,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
             if effet_carte == "SOULSTORM":
                 for autre_joueur in joueurs:
                     if autre_joueur.dans_le_dj:
-                        if autre_joueur.pile_monstres_vaincus:
+                        if getattr(autre_joueur.perso_obj, 'ignore_cout_evenements', False):
+                            log_details.append(f"{autre_joueur.nom} ({autre_joueur.perso_obj.nom}) ignore {carte.titre}.")
+                        elif autre_joueur.pile_monstres_vaincus:
                             monstre_remis = _choisir_monstre_tempete_des_ames(autre_joueur, Jeu)
                             autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
                             donjon.ajouter_monstre(monstre_remis)
@@ -724,7 +753,14 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                 for objet in joueur_proprietaire.objets:
                     if type(objet) not in O_RENC:
                         objet.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
-                
+            carte.dommages_reference = carte.dommages
+
+            if not joueur.vivant or joueur.pv_total <= 0:
+                _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT)
+                index_joueur += 1
+                if index_joueur >= nb_joueurs:
+                    index_joueur = 0
+                continue
 
             if joueur.jet_fuite_lance: 
                 if joueur.jet_fuite >= carte.puissance:
@@ -791,6 +827,10 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         remplacement = False
                         if type(joueur.perso_obj) not in P_COMBAT:
                             joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
+                        if getattr(Jeu, 'carte_ignoree', False):
+                            carte_ignoree = True
+                        if not joueur.vivant or joueur.pv_total <= 0:
+                            break
                         if getattr(Jeu, 'carte_forcee', None) is not None:
                             carte = Jeu.carte_forcee
                             del Jeu.carte_forcee
@@ -802,30 +842,44 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                             # est execute ou si le joueur a fui (l'ancien break a dommages<=0 empechait
                             # d'executer les monstres a 0 dommages comme la Fee des que le 1er objet etait inerte).
                             for objet in [o for o in joueur.objets if type(o) not in O_COMBAT]:
-                                if carte.executed or joueur.fuite_reussie:
+                                if carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
                                     break
                                 objet.en_combat(joueur, carte, Jeu, log_details)
+                                if getattr(Jeu, 'carte_ignoree', False):
+                                    carte_ignoree = True
+                                if not joueur.vivant or joueur.pv_total <= 0:
+                                    break
                                 if getattr(Jeu, 'carte_forcee', None) is not None:
                                     carte = Jeu.carte_forcee
                                     del Jeu.carte_forcee
                                     effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
                                     remplacement = True
                                     break
-                        if not remplacement or carte.executed or joueur.fuite_reussie:
+                        if not remplacement or carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
                             break
+                    if not joueur.vivant or joueur.pv_total <= 0:
+                        _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT)
+                        index_joueur += 1
+                        if index_joueur >= nb_joueurs:
+                            index_joueur = 0
+                        continue
                     if(not joueur.dans_le_dj):
-                        # mort/fuite en plein combat : la carte ne retourne sur le Donjon
+                        # fuite en plein combat : la carte ne retourne sur le Donjon
                         # que si elle n'a pas deja ete executee (sinon elle est deja dans une pile/defausse)
                         if not carte.executed:
                             donjon.rajoute_en_haut_de_la_pile(carte)
                         continue
-                    if type(joueur.perso_obj) not in P_COMBAT_LATE:
-                        joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
-                    if Jeu.traquenard_paye:
-                        if carte.executed:
-                            joueur.pv_total -= 3
-                            joueur.traquenard_execs += 1
-                            log_details.append(f"{joueur.nom} perd 3 PV pour avoir exécuté {carte.titre} malgré le Traquenard. PV restant: {joueur.pv_total}")
+                    if not carte_ignoree:
+                        if type(joueur.perso_obj) not in P_COMBAT_LATE:
+                            joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
+                        if Jeu.traquenard_paye:
+                            if carte.executed:
+                                joueur.pv_total -= 3
+                                joueur.traquenard_execs += 1
+                                log_details.append(f"{joueur.nom} perd 3 PV pour avoir exécuté {carte.titre} malgré le Traquenard. PV restant: {joueur.pv_total}")
+                            Jeu.traquenard_paye = False
+                    else:
+                        Jeu.traquenard_actif = False
                         Jeu.traquenard_paye = False
                 
             if not carte_ignoree and not carte.executed:
@@ -857,8 +911,15 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True):
                         if type(objet) not in O_SUBIT:
                             objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
                         
-                if effet_carte and "ARRA" in effet_carte and carte.effet and "ARRA" in carte.effet and len(joueur.pile_monstres_vaincus) > 1 and carte.dommages > 0 and joueur.pv_total > 0:
-                    # fix hard du miroir il ne copie pas l'arracheur sinon ca boucle infinie...
+                if (
+                    effet_carte and "ARRA" in effet_carte
+                    and carte.effet != "MIROIR"
+                    and len(joueur.pile_monstres_vaincus) > 1
+                    and carte.dommages > 0
+                    and joueur.pv_total > 0
+                ):
+                    # Le Troll doit copier aussi l'effet post-combat de l'Arracheur.
+                    # On garde en revanche l'exclusion du Miroir pour eviter la boucle historique.
                     monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
                     donjon.rajoute_en_haut_de_la_pile(monstre_remis)
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")

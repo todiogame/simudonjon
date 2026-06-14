@@ -5,7 +5,9 @@ class CarteMonstre:
                  non_executable=False):
         self.titre = titre
         self.puissance = puissance
-        self.types = types if types else [titre]
+        # `types=None` means "use the title as the default type".
+        # An explicit empty list means "this monster has no type".
+        self.types = [titre] if types is None else list(types)
         self.description = description
         self.effet = effet
         self.executed = False
@@ -16,6 +18,9 @@ class CarteMonstre:
         # MIROIR ou SHAPESHIFTER mutent la carte partagee du deck)
         self.puissance_initiale = puissance
         self.types_initiaux = list(self.types)
+        self.dommages_reference = 0
+        self.dommages_minimum = 0
+        self.reduction_dommages_bloquee = False
 
 class CarteEvent:
     def __init__(self, titre, description, effet=None):

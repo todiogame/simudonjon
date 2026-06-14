@@ -192,6 +192,7 @@ class Princesse(Perso):
             self.capacite_utilisee = True
             if self.level == 2 and len(Jeu.objets_dispo) >= 2:
                 choix = random.sample(Jeu.objets_dispo, 2)
+                # TODO: heuristique moteur temporaire; la politique IA devra choisir quel objet garder.
                 garde = max(choix, key=lambda o: o.priorite)
                 jete = choix[0] if garde is choix[1] else choix[1]
                 Jeu.objets_dispo.remove(garde)
@@ -469,17 +470,40 @@ class BeteDeLEvenement(Perso):
     def __init__(self, level=1):
         super().__init__("Bête de l'Evénement" + _suffixe(level), 3)
         self.level = level
-        self.ignore_cout_evenements = True  # ne defausse pas de monstre a cause des evenements
+        self.ignore_cout_evenements = True  # ne paie pas les coûts en monstres imposés par les événements
+
+    def _ordre_evenements_benefiques(self, joueur):
+        # TODO: heuristique moteur temporaire; la priorité devra idéalement être portée par la politique IA.
+        ordre = []
+        objets_brises = any(not objet.intact for objet in joueur.objets)
+        objets_intacts = sum(1 for objet in joueur.objets if objet.intact)
+        nb_golems = sum(1 for monstre in joueur.pile_monstres_vaincus if "Golem" in monstre.types)
+
+        if objets_brises:
+            ordre.append("REPAIR")
+        if objets_intacts < 4:
+            ordre.append("SHOP")
+
+        ordre.append("FORTUNE_WHEEL")
+        if nb_golems >= 2:
+            ordre.extend(("INJECTION", "HEAL"))
+        else:
+            ordre.extend(("HEAL", "INJECTION"))
+        return ordre
 
     def debut_tour(self, joueur, Jeu, log_details):
         # Une fois par partie, remet le dernier evenement de la defausse sur le Donjon (N2: au choix)
         # IA : seulement si cet evenement est benefique
         if not self.capacite_utilisee:
-            bons = ("HEAL", "SHOP", "INJECTION", "REPAIR", "FORTUNE_WHEEL")
+            bons = self._ordre_evenements_benefiques(joueur)
             events = [c for c in Jeu.defausse if getattr(c, 'event', False)]
             if self.level == 2:
-                candidats = [c for c in events if c.effet in bons]
-                cible = min(candidats, key=lambda c: bons.index(c.effet)) if candidats else None
+                cible = None
+                for effet in bons:
+                    candidats = [c for c in events if c.effet == effet]
+                    if candidats:
+                        cible = candidats[-1]
+                        break
             else:
                 cible = events[-1] if events and events[-1].effet in bons else None
             if cible:

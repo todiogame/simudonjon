@@ -172,6 +172,20 @@ class Objet:
         Jeu.defausse.append(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter et défausser {carte.titre}")
 
+    def remetDansDonjon(self, joueur, carte, Jeu, log_details, en_bas=False, melange=False):
+        # La carte quitte le combat sans etre executee: pas de combo execute,
+        # pas de penalite Traquenard, et l'effet marche contre Troll.
+        Jeu.carte_ignoree = True
+        if en_bas:
+            Jeu.donjon.rajoute_en_bas_de_la_pile(carte)
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour remettre {carte.titre} sous le Donjon.")
+        else:
+            Jeu.donjon.rajoute_en_haut_de_la_pile(carte)
+            log_details.append(f"{joueur.nom} utilise {self.nom} pour remettre {carte.titre} sur le Donjon.")
+        if melange:
+            Jeu.donjon.remelange()
+            log_details.append(f"Le Donjon est remélangé ({self.nom}).")
+
     def absorbe(self, joueur, carte, log_details, value=None):
         if getattr(carte, 'non_executable', False):
             raise ExecutionImpossible(carte.titre)  # Troll
@@ -182,13 +196,62 @@ class Objet:
         log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour absorber {carte.puissance} PV. Total {joueur.pv_total} PV.")
 
     def reduc_damage(self, value, joueur, carte, log_details):
-        carte.dommages = max(carte.dommages - value, 0)
-        if(value):
-            log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {value}.")
+        if value <= 0:
+            return
+        if getattr(carte, 'reduction_dommages_bloquee', False):
+            log_details.append(f"{joueur.nom} ne peut pas réduire davantage les dommages de {carte.titre} ({self.nom}).")
+            return
+        dommages_reference = max(getattr(carte, 'dommages_reference', carte.dommages), carte.dommages)
+        dommages_minimum = max(0, getattr(carte, 'dommages_minimum', 0))
+        dommages_avant = carte.dommages
+        carte.dommages = max(dommages_avant - value, dommages_minimum)
+        reduction_reelle = dommages_avant - carte.dommages
+        carte.dommages_reference = dommages_reference
+        if reduction_reelle:
+            log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {reduction_reelle}.")
 
     def add_damage(self, value, joueur, carte, log_details):
         carte.dommages = carte.dommages + value
+        carte.dommages_reference = getattr(carte, 'dommages_reference', carte.dommages) + value
         log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour augmenter les dommages de {value}.")
+
+    def fixe_dommages_minimum(self, value, carte):
+        carte.dommages_minimum = max(getattr(carte, 'dommages_minimum', 0), value)
+
+    def bloque_reduction_dommages(self, carte):
+        carte.reduction_dommages_bloquee = True
+
+    def fixe_reduction_totale(self, value, joueur, carte, log_details):
+        if value <= 0:
+            return
+        if getattr(carte, 'reduction_dommages_bloquee', False):
+            log_details.append(f"{joueur.nom} ne peut pas réduire davantage les dommages de {carte.titre} ({self.nom}).")
+            return
+        dommages_reference = max(getattr(carte, 'dommages_reference', carte.dommages), carte.dommages)
+        dommages_minimum = max(0, getattr(carte, 'dommages_minimum', 0))
+        dommages_avant = carte.dommages
+        dommages_cibles = max(dommages_reference - value, dommages_minimum)
+        if dommages_cibles >= dommages_avant:
+            carte.dommages_reference = dommages_reference
+            return
+        carte.dommages = dommages_cibles
+        carte.dommages_reference = dommages_reference
+        log_details.append(f"{joueur.nom} utilise {self.nom} sur {carte.titre} pour réduire les dommages de {dommages_avant - carte.dommages}.")
+
+    def degats_apres_reduction(self, value, carte, dommages_minimum=None):
+        dommages_minimum = max(
+            getattr(carte, 'dommages_minimum', 0),
+            0 if dommages_minimum is None else dommages_minimum,
+        )
+        return max(carte.dommages - value, dommages_minimum)
+
+    def degats_apres_reduction_totale(self, value, carte, dommages_minimum=None):
+        dommages_reference = max(getattr(carte, 'dommages_reference', carte.dommages), carte.dommages)
+        dommages_minimum = max(
+            getattr(carte, 'dommages_minimum', 0),
+            0 if dommages_minimum is None else dommages_minimum,
+        )
+        return max(dommages_reference - value, dommages_minimum)
 
     def gagnePV(self, value, joueur, log_details):
         joueur.pv_total += value
@@ -210,7 +273,11 @@ class Objet:
             nouvel_objet = random.choice(Jeu.objets_dispo)
             Jeu.objets_dispo.remove(nouvel_objet)
             joueur.ajouter_objet(nouvel_objet)
-            log_details.append(f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: {nouvel_objet.nom},")
+            log_details.append(
+                f"{joueur.nom} utilise {self.nom} pour piocher un nouvel objet: "
+                f"{nouvel_objet.nom}, PV bonus: {nouvel_objet.pv_bonus}, "
+                f"Jet de fuite: {nouvel_objet.modificateur_de}. Nouveau PV {joueur.nom}: {joueur.pv_total} PV."
+            )
             
     def scoreChange(self, value, joueur, log_details):
         if value > 0:
@@ -371,6 +438,10 @@ class CaisseEnchantee(Objet):
         super().__init__("Caisse enchantée", False)
     def rules(self, joueur, carte, Jeu, log_details):
         return carte.puissance < 6 and not Jeu.traquenard_actif
+    def worthit(self, joueur, carte, Jeu, log_details):
+        if carte.dommages != 0:
+            return True
+        return carte.effet not in (None, "FAIRY", "MEDAIL", "ARRA")
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet_caisse = joueur.rollDice(Jeu, log_details, carte.puissance+1)
         log_details.append(f"{joueur.nom} utilise Caisse enchantée sur {carte.titre}, jet de {jet_caisse}")
@@ -591,7 +662,7 @@ class CoeurDeGolem(Objet):
     def __init__(self):
         super().__init__("Cœur de Golem", False, 3)
     def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages > 0
+        return carte.dommages > 0 and any("Golem" in monstre.types for monstre in joueur.pile_monstres_vaincus)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if any("Golem" in monstre.types for monstre in joueur.pile_monstres_vaincus):    
             self.reduc_damage(1, joueur, carte, log_details)
@@ -600,12 +671,20 @@ class CouronneDEpines(Objet):
     def __init__(self):
         super().__init__("Couronne d'épines", False)
     def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages > 2
+        if carte.dommages <= 2:
+            return False
+        degats_couronne = self.degats_apres_reduction(2, carte, dommages_minimum=2)
+        for objet in joueur.objets:
+            if objet is self or not objet.intact or objet.nom != "Scaphandre":
+                continue
+            if objet.rules(joueur, carte, Jeu, log_details) and objet.worthit(joueur, carte, Jeu, log_details):
+                if objet.degats_apres_reduction_totale(2, carte) <= degats_couronne:
+                    return False
+        return True
     def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.fixe_dommages_minimum(2, carte)
         self.reduc_damage(2, joueur, carte, log_details)
-        if carte.dommages <= 0:
-            self.add_damage(2, joueur, carte, log_details)
-#note la courronne peut etre reduite encore par un item reduc dommage utilise en suivant => prio 0
+# note: le minimum de 2 persiste jusqu'a la resolution finale des degats.
 
 class MasqueAGaz(Objet):
     def __init__(self):
@@ -741,14 +820,14 @@ class CoquillageMagique(Objet):
 
 class MasqueDragon(Objet):
     def __init__(self):
-        super().__init__("Masque Dragon", False, types_tags=["Dragon"])
+        super().__init__("Masque Dragon", True, types_tags=["Dragon"])
     
     def rules(self, joueur, carte, Jeu, log_details):
         return "Dragon" in carte.types and not Jeu.traquenard_actif
     
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
-        self.piocheItem(joueur,Jeu,log_details)
+        _pioche_deux_objets_garde_le_meilleur(joueur, Jeu, log_details, self.nom)
         self.destroy(joueur, Jeu, log_details)
 
 class PiedDeBiche(Objet):
@@ -923,22 +1002,19 @@ class EnclumeInstable(Objet):
 
 class CoffreAnime(Objet):
     def __init__(self):
-        super().__init__("Coffre animé", False)
+        super().__init__("Coffre animé", False, 2)
 
     def activated_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         if self.intact:
-            if objet in joueur.objets and not objet.intact:
+            if joueur_proprietaire != joueur and objet in joueur.objets and not objet.intact:
                 jet_de = joueur_proprietaire.rollDice(Jeu, log_details, 6)
                 if jet_de == 6:
-                    if joueur_proprietaire.nom != joueur.nom:
-                        joueur.objets.remove(objet)
-                        objet.repare()
-                        joueur_proprietaire.ajouter_objet(objet)
-                        log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour voler et réparer {objet.nom} de {joueur.nom}")
-                    else:
-                        objet.repare()
-                        log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour réparer son {objet.nom}")
-            else:log_details.append(f" {joueur_proprietaire.nom} utilise {self.nom} pour essayer de voler et réparer {objet.nom} de {joueur.nom} MAIS cela ECHOUE!")
+                    joueur.objets.remove(objet)
+                    objet.repare()
+                    joueur_proprietaire.ajouter_objet(objet)
+                    log_details.append(f"{joueur_proprietaire.nom} utilise {self.nom} pour voler et réparer {objet.nom} de {joueur.nom}")
+            elif joueur_proprietaire != joueur:
+                log_details.append(f" {joueur_proprietaire.nom} utilise {self.nom} pour essayer de voler et réparer {objet.nom} de {joueur.nom} MAIS cela ECHOUE!")
                             
 class AnneauDeVie(Objet):
     def __init__(self):
@@ -950,7 +1026,14 @@ class AnneauDeVie(Objet):
 
 class BottesDeVitesse(Objet):
     def __init__(self):
-        super().__init__("Bottes de Vitesse", False, 2, 7)
+        super().__init__("Bottes de Vitesse", False, 2)
+    def _maj_bonus_fuite(self, joueur):
+        self.modificateur_de = len(joueur.pile_monstres_vaincus) if self.intact else 0
+    def debut_tour(self, joueur, Jeu, log_details):
+        self._maj_bonus_fuite(joueur)
+    def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if joueur_proprietaire == joueur:
+            self._maj_bonus_fuite(joueur)
 
 class Randotion(Objet):
     def __init__(self):
@@ -1037,7 +1120,8 @@ class LameDraconique(Objet):
     def __init__(self):
         super().__init__("Lame Draconique", False, types_tags=["Dragon"])
     def worthit(self, joueur, carte, Jeu, log_details):
-        return carte.dommages > 0
+        return carte.dommages > 0 and ("Dragon" in carte.types
+                or any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus))
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if "Dragon" in carte.types and not Jeu.traquenard_actif:
             self.execute(joueur, carte, log_details)
@@ -1284,12 +1368,13 @@ class Scaphandre(Objet):
     def __init__(self):
         super().__init__("Scaphandre", False, 0, -3)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= carte.puissance
+        return getattr(carte, 'dommages_reference', carte.dommages) >= carte.puissance
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > 0
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.reduc_damage(2, joueur, carte, log_details)
-#note pour empecher d etre reduit encore par un item reduc dommage utilise en suivant => prio -1
+        self.fixe_reduction_totale(2, joueur, carte, log_details)
+        self.bloque_reduction_dommages(carte)
+# note: verrouille toute reduction supplementaire sur ce combat.
 
 class AnneauDeGlace(Objet):
     def __init__(self):
@@ -1413,7 +1498,7 @@ class ElixirDeChance(Objet):
 
 class ChapeauStyle(Objet):
     def __init__(self):
-        super().__init__("Chapeau stylé", False, 2)
+        super().__init__("Chapeau stylé", False, 3)
     def decompte_effet(self, joueur, joueurs_final, log_details):
         joueur.tiebreaker = True
         
@@ -1672,12 +1757,12 @@ class MailletDArgile(Objet):
 
 class AllianceSanguine(Objet):
     def __init__(self):
-        super().__init__("Alliance Sanguine", False, 1)
+        super().__init__("Alliance Sanguine", False, 2)
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > 0
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if joueur.pv_total <= 2:
-            self.reduc_damage(3, joueur, carte, log_details)
+        if joueur.pv_total <= 4:
+            self.reduc_damage(2, joueur, carte, log_details)
 
 class FauxDeLaMort(Objet):
     def __init__(self):
@@ -1698,9 +1783,9 @@ class QueueDuCharognard(Objet):
 class CasqueBerserk(Objet):
     def __init__(self):
         super().__init__("CasqueBerserk", False, 7)
-    def combat_effet(self, joueur, carte, Jeu, log_details):
-        if self.intact and (carte.puissance <= 2) and (carte.dommages > 0) :
-            self.add_damage(1, joueur, carte, log_details)
+    def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        if self.intact and joueur_proprietaire == joueur and carte.puissance <= 2 and carte.dommages > 0:
+            self.perdPV(1, joueur, log_details)
         
 # 2025
 
@@ -1713,11 +1798,7 @@ class TentaculeDuKraken(Objet):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.gagnePV(carte.puissance, joueur, log_details)
-        self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        Jeu.defausse.remove(carte)  # la carte retourne dans le Donjon, pas dans la defausse
-        Jeu.donjon.rajoute_en_haut_de_la_pile(carte)
-        Jeu.donjon.remelange()
-        log_details.append(f"{joueur.nom} remet {carte.titre} dans le Donjon grâce à {self.nom}.")
+        self.remetDansDonjon(joueur, carte, Jeu, log_details, melange=True)
         self.destroy(joueur, Jeu, log_details)
 
 class GrenadeSinge(Objet):
@@ -1726,11 +1807,7 @@ class GrenadeSinge(Objet):
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        Jeu.defausse.remove(carte)  # la carte retourne dans le Donjon, pas dans la defausse
-        Jeu.donjon.rajoute_en_haut_de_la_pile(carte)
-        Jeu.donjon.remelange()
-        log_details.append(f"{joueur.nom} remet {carte.titre} dans le Donjon grâce à {self.nom}.")
+        self.remetDansDonjon(joueur, carte, Jeu, log_details, melange=True)
         self.destroy(joueur, Jeu, log_details)
 
 class SceptreChangeur(Objet):
@@ -1802,7 +1879,7 @@ class LunettesDuBricoleur(Objet):
 
 class AttrapeReves(Objet):
     def __init__(self):
-        super().__init__("Attrape-Rêves", False, 2)
+        super().__init__("Attrape-Rêves", False)
     def rules(self, joueur, carte, Jeu, log_details):
         return not Jeu.traquenard_actif and not carte.types
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -1810,9 +1887,9 @@ class AttrapeReves(Objet):
 
 class DeMaudit(Objet):
     def __init__(self):
-        super().__init__("Dé Maudit", False, 3)
+        super().__init__("Dé Maudit", False, 2)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.puissance <= 6 and not Jeu.traquenard_actif
+        return 1 <= carte.puissance <= 6 and not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         jet = joueur.rollDice(Jeu, log_details, carte.puissance)
         log_details.append(f"{joueur.nom} utilise De maudit sur {carte.titre}, jet de {jet}")
@@ -2029,7 +2106,7 @@ class SetDeCoeurs(Objet):
 
 class GrelotDuBouffon(Objet):
     def __init__(self):
-        super().__init__("Grelot du Bouffon", False, 0)
+        super().__init__("Grelot du Bouffon", False, 1)
     def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if(joueur_proprietaire.dans_le_dj):
             self.gagnePV(1, joueur_proprietaire, log_details)
@@ -2112,8 +2189,14 @@ class ParcheminDePoncage(Objet):
 
 class AraigneeDomestique(Objet):
     def __init__(self):
-        super().__init__("Araignée domestique", False)
-    def steal_monsters(self,  owner,target, Jeu, log_details):
+        super().__init__("Araignée domestique", False, 0, -1)
+        self.deja_vole_sur_mort = False
+        self.deja_vole_sur_fuite = False
+    def repare(self):
+        super().repare()
+        self.deja_vole_sur_mort = False
+        self.deja_vole_sur_fuite = False
+    def steal_monsters(self, owner, target, log_details):
         stolen = 0
         for _ in range(2):
             if target.pile_monstres_vaincus:
@@ -2125,15 +2208,17 @@ class AraigneeDomestique(Objet):
                 break
         if stolen == 0:
             log_details.append(f"{owner.nom} n'a pas pu voler de monstres dans la pile de {target.nom}.")
-        self.destroy(owner, Jeu, log_details)
-# attention l'araignee n'est pas a jour. elle vole tous les joueurs au lieu de juste le premier
     def en_mort(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
-        if joueur != joueur_proprietaire and joueur_proprietaire.dans_le_dj:
-            self.steal_monsters(joueur_proprietaire, joueur, Jeu, log_details)
+        if (self.intact and not self.deja_vole_sur_mort
+                and joueur != joueur_proprietaire and joueur_proprietaire.dans_le_dj):
+            self.deja_vole_sur_mort = True
+            self.steal_monsters(joueur_proprietaire, joueur, log_details)
     
     def en_fuite_definitive(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
-        if joueur != joueur_proprietaire and joueur_proprietaire.dans_le_dj:
-            self.steal_monsters(joueur_proprietaire, joueur, Jeu, log_details)
+        if (self.intact and not self.deja_vole_sur_fuite
+                and joueur != joueur_proprietaire and joueur_proprietaire.dans_le_dj):
+            self.deja_vole_sur_fuite = True
+            self.steal_monsters(joueur_proprietaire, joueur, log_details)
 
 
 class Exterminator(Objet):
@@ -2376,6 +2461,47 @@ def _choisir_objet_a_sacrifier(joueur, exclus):
     if not candidats:
         return None
     return min(candidats, key=lambda o: (o.pv_bonus, o.priorite))
+
+
+def _valeur_objet_sacrifie_comme_limon(joueur, objet, Jeu):
+    # Meme heuristique que Joueur.decideBriseObjet / Limon glouton:
+    # un objet de ligne perd de la valeur si ses cibles ont presque disparu.
+    if not (objet.types_tags or objet.puissance_tags):
+        return objet.priorite
+    donjon = Jeu.donjon
+    restants = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
+    cibles = sum(
+        1
+        for carte in restants
+        if any(t in getattr(carte, 'types_initiaux', ()) for t in objet.types_tags)
+        or getattr(carte, 'puissance_initiale', None) in objet.puissance_tags
+    )
+    return objet.priorite * cibles / (1 + cibles)
+
+
+def _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, exclus):
+    # Meme ordre de preference que le Limon glouton, mais on n'autorise pas
+    # un sacrifice qui tuerait le joueur avant la resolution de l'objet.
+    candidats = [o for o in joueur.objets if o.intact and o not in exclus and o.pv_bonus < joueur.pv_total]
+    if not candidats:
+        return None
+    return min(candidats, key=lambda o: _valeur_objet_sacrifie_comme_limon(joueur, o, Jeu))
+
+
+def _pioche_deux_objets_garde_le_meilleur(joueur, Jeu, log_details, source):
+    if len(Jeu.objets_dispo) >= 2:
+        choix = random.sample(Jeu.objets_dispo, 2)
+        garde = max(choix, key=lambda o: o.priorite)
+        jete = choix[0] if garde is choix[1] else choix[1]
+        Jeu.objets_dispo.remove(garde)
+        Jeu.objets_dispo.remove(jete)
+        joueur.ajouter_objet(garde)
+        log_details.append(f"{joueur.nom} utilise {source} pour piocher 2 objets, garde {garde.nom} et défausse {jete.nom}.")
+    elif len(Jeu.objets_dispo):
+        nouvel_objet = random.choice(Jeu.objets_dispo)
+        Jeu.objets_dispo.remove(nouvel_objet)
+        joueur.ajouter_objet(nouvel_objet)
+        log_details.append(f"{joueur.nom} utilise {source} pour piocher un nouvel objet: {nouvel_objet.nom}.")
 
 def _execute_carte_suivante(objet, joueur, suivante, Jeu, log_details):
     # consomme la carte regardee sur le Donjon et l'ajoute executee a la pile
@@ -2750,18 +2876,17 @@ class ArmureDeMage(Objet):
 
 class BombePirate(Objet):
     def __init__(self):
-        super().__init__("Bombe pirate", True)
+        super().__init__("Bombe pirate", False)
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and _choisir_objet_a_sacrifier(joueur, [self]) is not None
+        return not Jeu.traquenard_actif and _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, [self]) is not None
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= joueur.pv_total and carte.puissance >= 5
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        sacrifie = _choisir_objet_a_sacrifier(joueur, [self])
+        sacrifie = _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, [self])
         log_details.append(f"{joueur.nom} brise {sacrifie.nom} avec {self.nom}.")
         sacrifie.destroy(joueur, Jeu, log_details)
         joueur._gerer_pv_bonus(sacrifie, log_details)
         self.execute(joueur, carte, log_details)
-        self.destroy(joueur, Jeu, log_details)
 
 class AnneauDuVent(Objet):
     def __init__(self):
@@ -2770,10 +2895,7 @@ class AnneauDuVent(Objet):
         return carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):
         # remet le monstre dans le Donjon a la position de son choix (IA: tout en dessous)
-        self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        Jeu.defausse.remove(carte)  # la carte retourne dans le Donjon, pas dans la defausse
-        Jeu.donjon.rajoute_en_bas_de_la_pile(carte)
-        log_details.append(f"{joueur.nom} remet {carte.titre} sous le Donjon grâce à {self.nom}.")
+        self.remetDansDonjon(joueur, carte, Jeu, log_details, en_bas=True)
         self.destroy(joueur, Jeu, log_details)
 
 class BouleDeCristal(Objet):
@@ -2785,7 +2907,8 @@ class BouleDeCristal(Objet):
     def debut_tour(self, joueur, Jeu, log_details):
         # Heuristique IA, pas regle: annonce la puissance au plus gros "poids de
         # danger" parmi les cartes restantes (frequence * puissance), avec
-        # tie-break sur la puissance brute.
+        # tie-break sur la puissance brute, en evitant si possible une ligne
+        # deja couverte par le reste de la main.
         if not self.intact:
             return
         comptes = {}
@@ -2794,7 +2917,9 @@ class BouleDeCristal(Objet):
             c = donjon.cartes[idx]
             if isinstance(c, CarteMonstre) and not c.is_X:
                 comptes[c.puissance_initiale] = comptes.get(c.puissance_initiale, 0) + 1
-        self.annonce = max(comptes, key=lambda p: (comptes[p] * p, p, comptes[p])) if comptes else None
+        _, puissances_couvertes = _couverture_sans_objet(joueur, self)
+        candidates = [p for p in comptes if p not in puissances_couvertes] or list(comptes)
+        self.annonce = max(candidates, key=lambda p: (comptes[p] * p, p, comptes[p])) if comptes else None
         if self.annonce is not None:
             log_details.append(f"{joueur.nom} annonce la puissance {self.annonce} avec {self.nom}.")
     def rules(self, joueur, carte, Jeu, log_details):
@@ -2953,11 +3078,14 @@ class PaquetSurprise(Objet):
         self.gagnePV(joueur.pv_base, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
         self.piocheItem(joueur, Jeu, log_details)
-        jetable = _choisir_objet_a_sacrifier(joueur, [self])
+        jetable = _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, [self])
         if jetable:
             joueur.objets.remove(jetable)
             joueur.pv_total -= jetable.pv_bonus
-            log_details.append(f"{joueur.nom} défausse {jetable.nom} ({self.nom}).")
+            log_details.append(
+                f"{joueur.nom} défausse {jetable.nom} ({self.nom}), "
+                f"perd {jetable.pv_bonus} PV bonus et retombe à {joueur.pv_total} PV."
+            )
 
 class BagouzeDuParrain(Objet):
     def __init__(self):

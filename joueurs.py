@@ -97,11 +97,16 @@ class Joueur:
             objet.repare()
 
     def fuite(self):
+        if not self.vivant or self.pv_total <= 0:
+            return
         self.fuite_reussie = True
         self.dans_le_dj = False
 
     def mort(self, log_details):
+        if not self.vivant:
+            return
         self.vivant = False
+        self.fuite_reussie = False
         self.dans_le_dj = False
         self.perdre_medaille(log_details, mort=True)
 
