@@ -47,6 +47,17 @@ class Perso:
         pass
     def combat_effet_late(self, joueur, carte, Jeu, log_details):
         pass
+
+    def can_use_in_combat(self, joueur, carte, Jeu, log_details):
+        """Pure legality check: can this hero be used against this card?
+        Does NOT ask the policy. Does NOT mutate state.
+        Override in subclasses when combat_effet() embeds legality checks."""
+        return self.condition(joueur, carte, Jeu, log_details)
+
+    def can_use_in_combat_late(self, joueur, carte, Jeu, log_details):
+        """Pure legality check: can this hero's late effect be used against this card?
+        Does NOT ask the policy. Does NOT mutate state."""
+        return self.condition(joueur, carte, Jeu, log_details)
     def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         pass
     def rencontre_event_effet(self, joueur_proprietaire, joueur_actif, carte, Jeu, log_details):
@@ -202,7 +213,7 @@ class Ninja(Perso):
         self.capacite_utilisee = True
         bonus = 5 if self.level == 2 else 3
         joueur.jet_fuite += bonus
-        log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacit?: jet de fuite +{bonus} => {joueur.jet_fuite}.")
+        log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité: jet de fuite +{bonus} => {joueur.jet_fuite}.")
 
 class Princesse(Perso):
     def __init__(self, level=1):
@@ -226,9 +237,9 @@ class Princesse(Perso):
             Jeu.objets_dispo.remove(garde)
             Jeu.objets_dispo.remove(jete)
             joueur.ajouter_objet(garde)
-            log_details.append(f"{joueur.nom} ({self.nom}) pioche 2 objets, garde {garde.nom} et d?fausse {jete.nom}.")
+            log_details.append(f"{joueur.nom} ({self.nom}) pioche 2 objets, garde {garde.nom} et défausse {jete.nom}.")
         else:
-            log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacit? pour piocher un objet")
+            log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité pour piocher un objet")
             self.piocheItem(joueur, Jeu, log_details)
 
 class MercenaireOrc(Perso):
@@ -242,6 +253,13 @@ class ChevalierDragon(Perso):
     def __init__(self, level=1):
         super().__init__(nom="Chevalier Dragon" + _suffixe(level), pv_bonus=3)
         self.level = level
+
+    def can_use_in_combat(self, joueur, carte, Jeu, log_details):
+        if "Dragon" not in getattr(carte, "types", []):
+            return False
+        if Jeu.traquenard_actif or carte.executed:
+            return False
+        return self.level == 2 or not any("Dragon" in m.types for m in joueur.pile_monstres_vaincus)
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         # N1: execute les Dragons (et les garde) si pas de Dragon dans la pile. N2: sans condition.
@@ -282,7 +300,7 @@ class Tricheur(Perso):
             c = Jeu.donjon.prochaine_carte()
             if hasattr(c, 'types') and not getattr(c, 'event', False):
                 joueur.ajouter_monstre_vaincu(c)
-                log_details.append(f"{joueur.nom} ({self.nom}) triche et ajoute {c.titre} ? sa pile !")
+                log_details.append(f"{joueur.nom} ({self.nom}) triche et ajoute {c.titre} à sa pile !")
             else:
                 a_reposer.append(c)
         for c in reversed(a_reposer):
@@ -293,6 +311,13 @@ class DocteurDePeste(Perso):
     def __init__(self, level=1):
         super().__init__(nom="DocteurDePeste" + _suffixe(level), pv_bonus=3 if level == 2 else 2)
         self.level = level
+
+    def can_use_in_combat(self, joueur, carte, Jeu, log_details):
+        return (
+            "Rat" in getattr(carte, "types", [])
+            and not Jeu.traquenard_actif
+            and not carte.executed
+        )
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if "Rat" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
@@ -338,13 +363,13 @@ class InventeurGenial(Perso):
         if not require_bool(use, 'inventeur_genial'):
             return
         self.compteur += 1
-        log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacit? ({self.compteur}/{self.level}).")
+        log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité ({self.compteur}/{self.level}).")
 
         options = tuple(objets_brises)
         objets_a_defausser = list(_decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECTS, 'inventeur_discards', subject=carte, options=options, metadata={'hero': self, 'log_details': log_details}))
         objets_a_defausser = list(require_options(objets_a_defausser, options, min_count=2, max_count=2, allow_empty=False, decision_name='inventeur_discards'))
         noms_defausse = [o.nom for o in objets_a_defausser]
-        log_details.append(f"--> D?fausse {noms_defausse}.")
+        log_details.append(f"--> Défausse {noms_defausse}.")
 
         for obj in objets_a_defausser:
             joueur.objets.remove(obj)
@@ -364,6 +389,12 @@ class Flutiste(Perso):
 
     def rules(self, joueur, carte, Jeu, log_details):
         return ("Gobelin" in carte.types) and not Jeu.traquenard_actif
+
+    def can_use_in_combat(self, joueur, carte, Jeu, log_details):
+        return (
+            "Gobelin" in getattr(carte, "types", [])
+            and not Jeu.traquenard_actif
+        )
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'flutiste', subject=carte, metadata={'hero': self, 'log_details': log_details})
@@ -393,6 +424,13 @@ class Avatar(Perso):
     def __init__(self, level=1):
         super().__init__(nom="Avatar" + _suffixe(level), pv_bonus=3 if level == 2 else 2)
         self.level = level
+
+    def can_use_in_combat_late(self, joueur, carte, Jeu, log_details):
+        return (
+            not self.capacite_utilisee
+            and not Jeu.traquenard_actif
+            and not carte.executed
+        )
 
     def combat_effet_late(self, joueur, carte, Jeu, log_details):
         # Une fois par partie: execute et defausse un monstre (N2: execute et le garde)
@@ -452,7 +490,7 @@ class Prophete(Perso):
                 raise ValueError('Policy returned invalid split for prophete_cards')
             for c in a_defausser:
                 Jeu.defausse.append(c)
-                log_details.append(f"{joueur.nom} ({self.nom}) d?fausse {c.titre} (trop dangereux).")
+                log_details.append(f"{joueur.nom} ({self.nom}) défausse {c.titre} (trop dangereux).")
             for c in reversed(a_reposer):
                 Jeu.donjon.rajoute_en_haut_de_la_pile(c)
                 joueur.cartes_connues.add(c)
@@ -461,7 +499,7 @@ class Prophete(Perso):
             donjon = Jeu.donjon
             for i in range(donjon.index, min(donjon.index + 2, donjon.nb_cartes)):
                 joueur.cartes_connues.add(donjon.cartes[donjon.ordre[i]])
-            log_details.append(f"{joueur.nom} ({self.nom}) consulte secr?tement les 2 prochaines cartes ({self.compteur}/2).")
+            log_details.append(f"{joueur.nom} ({self.nom}) consulte secrètement les 2 prochaines cartes ({self.compteur}/2).")
 
 class Shaman(Perso):
     def __init__(self, level=1):

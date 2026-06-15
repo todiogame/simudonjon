@@ -110,6 +110,10 @@ def _traq_condition(source, joueur, carte, Jeu, late=False):
     try:
         if isinstance(source, Objet):
             return source.can_use_in_combat(joueur, carte, Jeu, [])
+        if late and hasattr(source, "can_use_in_combat_late"):
+            return source.can_use_in_combat_late(joueur, carte, Jeu, [])
+        if hasattr(source, "can_use_in_combat"):
+            return source.can_use_in_combat(joueur, carte, Jeu, [])
         return source.condition(joueur, carte, Jeu, [])
     except Exception:
         return False

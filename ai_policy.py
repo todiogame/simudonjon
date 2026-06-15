@@ -168,6 +168,10 @@ class DefaultDungeonPolicy:
         phase = context.phase
         if phase in {'repair_payment_monster', 'fortune_wheel_monster', 'crane_du_necromancien'}:
             return min(options, key=lambda m: m.puissance)
+        if phase in {'discard_monster_from_pile', 'tapis_volant_escape', 'potage_improvise'}:
+            return min(options, key=lambda m: 0 if m.is_X else m.puissance)
+        if phase == 'barbecue_du_ponceur':
+            return max(options, key=lambda m: 0 if m.is_X else m.puissance)
         if phase == 'soulstorm_monster':
             joueur = context.actor
             couverts = [m for m in options if self._passive_line_covers_card(joueur, m)]
@@ -295,6 +299,10 @@ class DefaultDungeonPolicy:
         return max(candidates, key=lambda t: (scores[t], counts[t], t == "Golem", t))
 
     def decide_choose_category(self, context):
+        if context.phase == 'fruit_du_destin_category':
+            monsters = context.meta('monsters', ())
+            events = context.meta('events', ())
+            return "monster" if len(monsters) >= len(events) else "event"
         return context.options[0] if context.options else None
 
     def decide_choose_destination(self, context):

@@ -14,6 +14,13 @@ from smoke_policy import (
     smoke_policy_controls_object_order,
     smoke_traquenard_legality_independent_from_object_policy,
     smoke_unavailable_hero_ability_does_not_call_policy,
+    smoke_traquenard_detects_chevalier_dragon_candidate,
+    smoke_traquenard_detects_docteur_de_peste_candidate,
+    smoke_traquenard_detects_avatar_late_candidate,
+    smoke_defausse_monstre_de_pile_policy_choice,
+    smoke_barbecue_du_ponceur_policy_target,
+    smoke_fruit_du_destin_policy_category,
+    smoke_fruit_du_destin_invalid_category_rejected,
 )
 
 
@@ -75,3 +82,31 @@ def test_event_beast_policy_choice_and_decline():
 
 def test_guardian_angel_attrape_reves_confidence():
     smoke_guardian_angel_attrape_reves_confidence()
+
+
+def test_traquenard_detects_chevalier_dragon_candidate():
+    smoke_traquenard_detects_chevalier_dragon_candidate()
+
+
+def test_traquenard_detects_docteur_de_peste_candidate():
+    smoke_traquenard_detects_docteur_de_peste_candidate()
+
+
+def test_traquenard_detects_avatar_late_candidate():
+    smoke_traquenard_detects_avatar_late_candidate()
+
+
+def test_defausse_monstre_de_pile_policy_choice():
+    smoke_defausse_monstre_de_pile_policy_choice()
+
+
+def test_barbecue_du_ponceur_policy_target():
+    smoke_barbecue_du_ponceur_policy_target()
+
+
+def test_fruit_du_destin_policy_category():
+    smoke_fruit_du_destin_policy_category()
+
+
+def test_fruit_du_destin_invalid_category_rejected():
+    smoke_fruit_du_destin_invalid_category_rejected()

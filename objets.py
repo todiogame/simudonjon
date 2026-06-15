@@ -2152,17 +2152,31 @@ class FruitDuDestin(Objet):
         if not (monsters or events):
             log_details.append(f"{self.nom} n'a aucun effet : aucune carte monstre ou évènement en défausse.")
         else:
-            # Choisir le type de carte à défausser
-            if len(monsters) >= len(events):
-                chosen_cards = monsters
-                chosen_type = "monstre"
-            else:
-                chosen_cards = events
-                chosen_type = "évènement"
-            
+            categories = []
+            if monsters:
+                categories.append("monster")
+            if events:
+                categories.append("event")
+
+            category = _decide(
+                joueur,
+                Jeu,
+                DecisionKind.CHOOSE_CATEGORY,
+                'fruit_du_destin_category',
+                subject=self,
+                options=tuple(categories),
+                metadata={
+                    'monsters': tuple(monsters),
+                    'events': tuple(events),
+                    'log_details': log_details,
+                },
+            )
+            category = require_option(category, tuple(categories), decision_name='fruit_du_destin_category')
+
+            chosen_cards = monsters if category == "monster" else events
+            chosen_type = "monstre" if category == "monster" else "évènement"
             nb = len(chosen_cards)
 
-            
             self.gagnePV(nb, joueur, log_details)
             log_details.append(f"{joueur.nom} utilise {self.nom} sur les {chosen_type} pour gagner {nb} PV. ({len(monsters)} monstres et {len(events)} events )")
 
@@ -2472,13 +2486,26 @@ def _peek_prochaine_carte(Jeu):
         return None
     return donjon.cartes[donjon.ordre[donjon.index]]
 
-def _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=False):
+def _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=False, phase='discard_monster_from_pile'):
     # defausse un monstre de la pile du joueur (jamais le Golem d'or)
     candidats = [m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet)]
     if not candidats:
         return None
-    cle = lambda m: 0 if m.is_X else m.puissance
-    monstre = max(candidats, key=cle) if plus_puissant else min(candidats, key=cle)
+
+    options = tuple(candidats)
+    monstre = _decide(
+        joueur,
+        Jeu,
+        DecisionKind.CHOOSE_MONSTER,
+        phase,
+        options=options,
+        metadata={
+            'plus_puissant': plus_puissant,
+            'log_details': log_details,
+        },
+    )
+    monstre = require_option(monstre, options, decision_name=phase)
+
     joueur.pile_monstres_vaincus.remove(monstre)
     Jeu.defausse.append(monstre)
     return monstre
@@ -3029,14 +3056,14 @@ class TapisVolant(Objet):
         return carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):
         # s'envole avant de subir le coup fatal (la carte retourne sur le Donjon)
-        if _defausse_monstre_de_pile(joueur, Jeu, log_details):
+        if _defausse_monstre_de_pile(joueur, Jeu, log_details, phase='tapis_volant_escape'):
             joueur.fuite()
             log_details.append(f"{joueur.nom} s'envole du Donjon avec {self.nom} !\n")
             self.destroy(joueur, Jeu, log_details)
     def en_fuite(self, joueur, Jeu, log_details):
         # fuite volontaire : le tapis remplace un jet mal parti par une sortie garantie
         if (self.intact and joueur.jet_fuite <= 5
-                and _defausse_monstre_de_pile(joueur, Jeu, log_details)):
+                and _defausse_monstre_de_pile(joueur, Jeu, log_details, phase='tapis_volant_escape')):
             joueur.jet_fuite = 100
             log_details.append(f"{joueur.nom} s'envole du Donjon avec {self.nom} (fuite garantie).")
             self.destroy(joueur, Jeu, log_details)
@@ -3144,7 +3171,7 @@ class BarbecueDuPonceur(Objet):
             not m.is_X and m.puissance >= 4 and not (m.effet and "GOLD" in m.effet)
             for m in joueur.pile_monstres_vaincus)
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        monstre = _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=True)
+        monstre = _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=True, phase='barbecue_du_ponceur')
         if monstre:
             log_details.append(f"{joueur.nom} défausse {monstre.titre} ({self.nom}).")
             self.gagnePV(0 if monstre.is_X else monstre.puissance, joueur, log_details)
@@ -3234,7 +3261,7 @@ class PotageImprovise(Objet):
         return joueur.pv_total <= 4
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.gagnePV(len(joueur.pile_monstres_vaincus), joueur, log_details)
-        monstre = _defausse_monstre_de_pile(joueur, Jeu, log_details)
+        monstre = _defausse_monstre_de_pile(joueur, Jeu, log_details, phase='potage_improvise')
         if monstre:
             log_details.append(f"{joueur.nom} défausse {monstre.titre} ({self.nom}).")
         self.destroy(joueur, Jeu, log_details)

@@ -374,7 +374,187 @@ def smoke_guardian_angel_attrape_reves_confidence():
     assert require_option(confidence, options, allow_none=True, decision_name='guardian_angel_confidence_object').nom == "Attrape-Rêves"
 
 
+def smoke_traquenard_detects_chevalier_dragon_candidate():
+    from heros import ChevalierDragon
+    from monstres import CarteMonstre, DonjonDeck
+    from simu import GameState, _premier_candidat_traquenard
+    from objets import SANS_HOOK_OBJET
+
+    joueur = Joueur("D", ChevalierDragon(2), [])
+    carte = CarteMonstre("Dragon test", 9, ["Dragon"])
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    jeu.traquenard_actif = True
+
+    candidat = _premier_candidat_traquenard(
+        joueur,
+        carte,
+        jeu,
+        SANS_HOOK_OBJET['en_combat'],
+        SANS_HOOK_PERSO['en_combat'],
+        SANS_HOOK_PERSO['en_combat_late'],
+    )
+
+    assert candidat is not None
+    assert candidat["source"] is joueur.perso_obj
+
+
+def smoke_traquenard_detects_docteur_de_peste_candidate():
+    from heros import DocteurDePeste
+    from monstres import CarteMonstre, DonjonDeck
+    from simu import GameState, _premier_candidat_traquenard
+    from objets import SANS_HOOK_OBJET
+
+    joueur = Joueur("E", DocteurDePeste(1), [])
+    carte = CarteMonstre("Rat test", 3, ["Rat"])
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    jeu.traquenard_actif = True
+
+    candidat = _premier_candidat_traquenard(
+        joueur,
+        carte,
+        jeu,
+        SANS_HOOK_OBJET['en_combat'],
+        SANS_HOOK_PERSO['en_combat'],
+        SANS_HOOK_PERSO['en_combat_late'],
+    )
+
+    assert candidat is not None
+    assert candidat["source"] is joueur.perso_obj
+
+
+def smoke_traquenard_detects_avatar_late_candidate():
+    from heros import Avatar
+    from monstres import CarteMonstre, DonjonDeck
+    from simu import GameState, _premier_candidat_traquenard
+    from objets import SANS_HOOK_OBJET
+
+    joueur = Joueur("F", Avatar(1), [])
+    carte = CarteMonstre("Demon test", 7, ["Démon"])
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    jeu.traquenard_actif = True
+
+    candidat = _premier_candidat_traquenard(
+        joueur,
+        carte,
+        jeu,
+        SANS_HOOK_OBJET['en_combat'],
+        SANS_HOOK_PERSO['en_combat'],
+        SANS_HOOK_PERSO['en_combat_late'],
+    )
+
+    assert candidat is not None
+    assert candidat["source"] is joueur.perso_obj
+    assert candidat["late"] is True
+
+
+def smoke_defausse_monstre_de_pile_policy_choice():
+    from monstres import CarteMonstre, DonjonDeck
+    from simu import GameState
+
+    class ChooseSpecificMonsterPolicy(DefaultDungeonPolicy):
+        def decide_choose_monster(self, context):
+            if context.phase == 'discard_monster_from_pile':
+                return max(context.options, key=lambda m: 0 if m.is_X else m.puissance)
+            return super().decide_choose_monster(context)
+
+    joueur = Joueur("G", Princesse(1), [])
+    faible = CarteMonstre("Rat faible", 2, ["Rat"])
+    fort = CarteMonstre("Dragon fort", 9, ["Dragon"])
+    joueur.pile_monstres_vaincus = [faible, fort]
+    jeu = GameState([joueur], DonjonDeck(), [], ChooseSpecificMonsterPolicy())
+
+    from objets import _defausse_monstre_de_pile
+    monstre = _defausse_monstre_de_pile(joueur, jeu, [])
+    assert monstre is fort
+    assert fort not in joueur.pile_monstres_vaincus
+    assert fort in jeu.defausse
+    assert faible in joueur.pile_monstres_vaincus
+
+
+def smoke_barbecue_du_ponceur_policy_target():
+    from monstres import CarteMonstre, DonjonDeck
+    from simu import GameState
+
+    class ChooseSpecificMonsterPolicy(DefaultDungeonPolicy):
+        def decide_choose_monster(self, context):
+            if context.phase == 'barbecue_du_ponceur':
+                return min(context.options, key=lambda m: 0 if m.is_X else m.puissance)
+            return super().decide_choose_monster(context)
+
+    joueur = Joueur("H", Princesse(1), [])
+    faible = CarteMonstre("Rat faible", 2, ["Rat"])
+    fort = CarteMonstre("Dragon fort", 9, ["Dragon"])
+    joueur.pile_monstres_vaincus = [faible, fort]
+    jeu = GameState([joueur], DonjonDeck(), [], ChooseSpecificMonsterPolicy())
+
+    from objets import _defausse_monstre_de_pile
+    monstre = _defausse_monstre_de_pile(joueur, jeu, [], plus_puissant=True, phase='barbecue_du_ponceur')
+    assert monstre is faible
+    assert faible not in joueur.pile_monstres_vaincus
+    assert faible in jeu.defausse
+    assert fort in joueur.pile_monstres_vaincus
+
+
+def smoke_fruit_du_destin_policy_category():
+    from monstres import CarteMonstre, CarteEvent, DonjonDeck
+    from simu import GameState
+
+    class ChooseEventCategory(DefaultDungeonPolicy):
+        def decide_choose_category(self, context):
+            if context.phase == 'fruit_du_destin_category':
+                return "event"
+            return super().decide_choose_category(context)
+
+    joueur = Joueur("I", Princesse(1), [])
+    event = CarteEvent("Heal test", "", "HEAL")
+    monstre = CarteMonstre("Orc test", 3, ["Orc"])
+    jeu = GameState([joueur], DonjonDeck(), [], ChooseEventCategory())
+    jeu.defausse.extend([monstre, event])
+
+    from objets import FruitDuDestin
+    fruit = FruitDuDestin()
+    pv_pre = joueur.pv_total
+    fruit.combat_effet(joueur, monstre, jeu, [])
+    assert joueur.pv_total == pv_pre + 1  # 1 event = 1 PV
+    assert not fruit.intact
+
+
+def smoke_fruit_du_destin_invalid_category_rejected():
+    from monstres import CarteMonstre, CarteEvent, DonjonDeck
+    from simu import GameState
+
+    class BadCategoryPolicy(DefaultDungeonPolicy):
+        def decide_choose_category(self, context):
+            if context.phase == 'fruit_du_destin_category':
+                return "invalid_category"
+            return super().decide_choose_category(context)
+
+    joueur = Joueur("J", Princesse(1), [])
+    event = CarteEvent("Heal test", "", "HEAL")
+    monstre = CarteMonstre("Orc test", 3, ["Orc"])
+    jeu = GameState([joueur], DonjonDeck(), [], BadCategoryPolicy())
+    jeu.defausse.extend([monstre, event])
+
+    from objets import FruitDuDestin
+    fruit = FruitDuDestin()
+    pv_pre = joueur.pv_total
+    try:
+        fruit.combat_effet(joueur, monstre, jeu, [])
+        assert False, "Should have raised ValueError for invalid category"
+    except ValueError:
+        pass
+    assert fruit.intact
+    assert joueur.pv_total == pv_pre
+
+
 if __name__ == "__main__":
+    smoke_traquenard_detects_chevalier_dragon_candidate()
+    smoke_traquenard_detects_docteur_de_peste_candidate()
+    smoke_traquenard_detects_avatar_late_candidate()
+    smoke_defausse_monstre_de_pile_policy_choice()
+    smoke_barbecue_du_ponceur_policy_target()
+    smoke_fruit_du_destin_policy_category()
+    smoke_fruit_du_destin_invalid_category_rejected()
     smoke_ordonnanceur_policy_equivalence()
     smoke_legacy_wrappers()
     smoke_draft_policy_equivalence()

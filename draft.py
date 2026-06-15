@@ -20,8 +20,8 @@ from ai_decisions import DecisionContext, DecisionKind, require_option
 # ==============================================
 # Configuration
 # ==============================================
-NB_DRAFT_SIMULATIONS = 10000            # Nombre total de drafts à simuler
-NB_GAMES_PER_DRAFT_FOR_STATS = 1000   # Nb parties jouées pour évaluer chaque draft
+NB_DRAFT_SIMULATIONS = 100            # Nombre total de drafts à simuler
+NB_GAMES_PER_DRAFT_FOR_STATS = 100   # Nb parties jouées pour évaluer chaque draft
 ITERATIONS_PER_CHOICE_EVALUATION = 30 # Nb simulations Monte-Carlo par candidat (graines communes => moins d'iterations suffisent)
 MC_PICKS_A_PARTIR_DE = 4              # picks 1-4 : priors seuls ; picks suivants : Monte-Carlo
 MC_NB_CANDIDATS = 3                   # le Monte-Carlo n'evalue que les meilleurs candidats au prior
