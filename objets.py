@@ -61,8 +61,11 @@ class Objet:
     def worthit(self, joueur, carte, Jeu, log_details):
         # worth it to use the item?
         return True
+    def can_use_in_combat(self, joueur, carte, Jeu, log_details):
+        return self.intact and self.rules(joueur, carte, Jeu, log_details)
+
     def condition(self, joueur, carte, Jeu, log_details): # check if we use the item or not
-        if not self.intact or not self.rules(joueur, carte, Jeu, log_details):
+        if not self.can_use_in_combat(joueur, carte, Jeu, log_details):
             return False
         decision = _decide(
             joueur,
@@ -4385,6 +4388,7 @@ objets_disponibles = [
 
 
 __all__ = [
+            "Objet",
             "objets_disponibles",
             "Egide",
             "MainDeMidas",

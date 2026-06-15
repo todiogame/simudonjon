@@ -194,12 +194,15 @@ class Ninja(Perso):
 
     def en_fuite(self, joueur, Jeu, log_details):
         # Une fois par partie: jet de fuite +3 (N2: +5) jusqu'a la fin du tour
+        if self.capacite_utilisee:
+            return
         use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'ninja_flee_bonus', subject=self, metadata={'log_details': log_details})
-        if not self.capacite_utilisee and require_bool(use, 'ninja_flee_bonus'):
-            self.capacite_utilisee = True
-            bonus = 5 if self.level == 2 else 3
-            joueur.jet_fuite += bonus
-            log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité: jet de fuite +{bonus} => {joueur.jet_fuite}.")
+        if not require_bool(use, 'ninja_flee_bonus'):
+            return
+        self.capacite_utilisee = True
+        bonus = 5 if self.level == 2 else 3
+        joueur.jet_fuite += bonus
+        log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacit?: jet de fuite +{bonus} => {joueur.jet_fuite}.")
 
 class Princesse(Perso):
     def __init__(self, level=1):
@@ -208,23 +211,25 @@ class Princesse(Perso):
 
     def debut_tour(self, joueur, Jeu, log_details):
         # Une fois par partie: pioche un objet (N2: pioche 2, defausse 1)
+        if self.capacite_utilisee or not Jeu.objets_dispo:
+            return
         use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'princess_draw', subject=self, metadata={'log_details': log_details})
-        if not self.capacite_utilisee and require_bool(use, 'princess_draw'):
-            self.capacite_utilisee = True
-            if self.level == 2 and len(Jeu.objets_dispo) >= 2:
-                choix = random.sample(Jeu.objets_dispo, 2)
-                options = tuple(choix)
-                garde = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT, 'princess_keep_object', subject=self, options=options, metadata={'log_details': log_details})
-                garde = require_option(garde, options, decision_name='princess_keep_object')
-                jete = choix[0] if garde is choix[1] else choix[1]
-                Jeu.objets_dispo.remove(garde)
-                Jeu.objets_dispo.remove(jete)
-                joueur.ajouter_objet(garde)
-                log_details.append(f"{joueur.nom} ({self.nom}) pioche 2 objets, garde {garde.nom} et défausse {jete.nom}.")
-            else:
-                log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité pour piocher un objet")
-                self.piocheItem(joueur, Jeu, log_details)
-
+        if not require_bool(use, 'princess_draw'):
+            return
+        self.capacite_utilisee = True
+        if self.level == 2 and len(Jeu.objets_dispo) >= 2:
+            choix = random.sample(Jeu.objets_dispo, 2)
+            options = tuple(choix)
+            garde = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT, 'princess_keep_object', subject=self, options=options, metadata={'log_details': log_details})
+            garde = require_option(garde, options, decision_name='princess_keep_object')
+            jete = choix[0] if garde is choix[1] else choix[1]
+            Jeu.objets_dispo.remove(garde)
+            Jeu.objets_dispo.remove(jete)
+            joueur.ajouter_objet(garde)
+            log_details.append(f"{joueur.nom} ({self.nom}) pioche 2 objets, garde {garde.nom} et d?fausse {jete.nom}.")
+        else:
+            log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacit? pour piocher un objet")
+            self.piocheItem(joueur, Jeu, log_details)
 
 class MercenaireOrc(Perso):
     def __init__(self, level=1):
@@ -263,24 +268,26 @@ class Tricheur(Perso):
 
     def debut_tour(self, joueur, Jeu, log_details):
         # Une fois par partie: pioche une carte cachee (N2: deux). Si monstre -> sa pile, sinon repose.
-        # (simplification IA : resolution immediate au lieu de garder la carte cachee)
+        if self.capacite_utilisee or Jeu.donjon.vide:
+            return
         use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'tricheur_debut_tour', subject=self, metadata={'log_details': log_details})
-        if not self.capacite_utilisee and not Jeu.donjon.vide and require_bool(use, 'tricheur_debut_tour'):
-            self.capacite_utilisee = True
-            nb = 2 if self.level == 2 else 1
-            a_reposer = []
-            for _ in range(nb):
-                if Jeu.donjon.vide:
-                    break
-                c = Jeu.donjon.prochaine_carte()
-                if hasattr(c, 'types') and not getattr(c, 'event', False):
-                    joueur.ajouter_monstre_vaincu(c)
-                    log_details.append(f"{joueur.nom} ({self.nom}) triche et ajoute {c.titre} à sa pile !")
-                else:
-                    a_reposer.append(c)
-            for c in reversed(a_reposer):
-                Jeu.donjon.rajoute_en_haut_de_la_pile(c)
-                log_details.append(f"{joueur.nom} ({self.nom}) repose {c.titre} sur le Donjon.")
+        if not require_bool(use, 'tricheur_debut_tour'):
+            return
+        self.capacite_utilisee = True
+        nb = 2 if self.level == 2 else 1
+        a_reposer = []
+        for _ in range(nb):
+            if Jeu.donjon.vide:
+                break
+            c = Jeu.donjon.prochaine_carte()
+            if hasattr(c, 'types') and not getattr(c, 'event', False):
+                joueur.ajouter_monstre_vaincu(c)
+                log_details.append(f"{joueur.nom} ({self.nom}) triche et ajoute {c.titre} ? sa pile !")
+            else:
+                a_reposer.append(c)
+        for c in reversed(a_reposer):
+            Jeu.donjon.rajoute_en_haut_de_la_pile(c)
+            log_details.append(f"{joueur.nom} ({self.nom}) repose {c.titre} sur le Donjon.")
 
 class DocteurDePeste(Perso):
     def __init__(self, level=1):
@@ -322,32 +329,27 @@ class InventeurGenial(Perso):
         self.level = level  # N1: 1 utilisation par partie, N2: 2
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        # Vérifier si capacité dispo et conditions remplies
-        if self.compteur < self.level:
-            # Trouver les objets brisés (non intacts)
-            objets_brises = [o for o in joueur.objets if not getattr(o, 'intact', True)]
+        if self.compteur >= self.level:
+            return
+        objets_brises = [o for o in joueur.objets if not getattr(o, 'intact', True)]
+        if len(objets_brises) < 2:
+            return
+        use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'inventeur_genial', subject=carte, options=tuple(objets_brises), metadata={'hero': self, 'log_details': log_details})
+        if not require_bool(use, 'inventeur_genial'):
+            return
+        self.compteur += 1
+        log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacit? ({self.compteur}/{self.level}).")
 
-            # Condition: au moins 2 objets brisés
-            use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'inventeur_genial', subject=carte, options=tuple(objets_brises), metadata={'hero': self, 'log_details': log_details})
-            if len(objets_brises) >= 2 and require_bool(use, 'inventeur_genial'):
-                # Décision IA : on utilise dès que possible
-                self.compteur += 1
-                log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité ({self.compteur}/{self.level}).")
+        options = tuple(objets_brises)
+        objets_a_defausser = list(_decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECTS, 'inventeur_discards', subject=carte, options=options, metadata={'hero': self, 'log_details': log_details}))
+        objets_a_defausser = list(require_options(objets_a_defausser, options, min_count=2, max_count=2, allow_empty=False, decision_name='inventeur_discards'))
+        noms_defausse = [o.nom for o in objets_a_defausser]
+        log_details.append(f"--> D?fausse {noms_defausse}.")
 
-                # Choisir 2 objets brisés au hasard à défausser
-                options = tuple(objets_brises)
-                objets_a_defausser = list(_decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECTS, 'inventeur_discards', subject=carte, options=options, metadata={'hero': self, 'log_details': log_details}))
-                objets_a_defausser = list(require_options(objets_a_defausser, options, min_count=2, max_count=2, allow_empty=False, decision_name='inventeur_discards'))
-                noms_defausse = [o.nom for o in objets_a_defausser]
-                log_details.append(f"--> Défausse {noms_defausse}.")
+        for obj in objets_a_defausser:
+            joueur.objets.remove(obj)
 
-                # Les retirer de l'inventaire du joueur
-                for obj in objets_a_defausser:
-                    joueur.objets.remove(obj)
-
-                self.piocheItem(joueur, Jeu, log_details)
-
-
+        self.piocheItem(joueur, Jeu, log_details)
 
 class Flutiste(Perso):
     def __init__(self, level=1):
@@ -394,13 +396,16 @@ class Avatar(Perso):
 
     def combat_effet_late(self, joueur, carte, Jeu, log_details):
         # Une fois par partie: execute et defausse un monstre (N2: execute et le garde)
+        if self.capacite_utilisee or Jeu.traquenard_actif or carte.executed:
+            return
         use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'avatar', subject=carte, metadata={'hero': self, 'log_details': log_details})
-        if not self.capacite_utilisee and not Jeu.traquenard_actif and not carte.executed and require_bool(use, 'avatar'):
-            self.capacite_utilisee = True
-            if self.level == 2:
-                self.execute(joueur, carte, log_details)
-            else:
-                self.executeEtDefausse(joueur, carte, Jeu, log_details)
+        if not require_bool(use, 'avatar'):
+            return
+        self.capacite_utilisee = True
+        if self.level == 2:
+            self.execute(joueur, carte, log_details)
+        else:
+            self.executeEtDefausse(joueur, carte, Jeu, log_details)
 
 class Berserker(Perso):
     def __init__(self, level=1):
@@ -409,10 +414,13 @@ class Berserker(Perso):
 
     def survie_effet(self, joueur, carte, Jeu, log_details):
         # Une fois par partie, survivez avec 1 PV (N2: 3 PV)
+        if self.capacite_utilisee or joueur.pv_total > 0:
+            return
         use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'berserker_survive', subject=carte, metadata={'hero': self, 'log_details': log_details})
-        if not self.capacite_utilisee and joueur.pv_total <= 0 and require_bool(use, 'berserker_survive'):
-            self.capacite_utilisee = True
-            self.survit(3 if self.level == 2 else 1, joueur, carte, log_details)
+        if not require_bool(use, 'berserker_survive'):
+            return
+        self.capacite_utilisee = True
+        self.survit(3 if self.level == 2 else 1, joueur, carte, log_details)
 
 class Prophete(Perso):
     def __init__(self, level=1):
@@ -420,9 +428,12 @@ class Prophete(Perso):
         self.level = level
     def debut_tour(self, joueur, Jeu, log_details):
         # N2: deux fois par partie, regarde les 2 prochaines cartes et peut les defausser ou les reposer.
-        # IA: utilise quand ses PV sont bas, defausse les monstres qui le tueraient.
+        if self.compteur >= 2 or Jeu.donjon.vide:
+            return
         use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'prophete', subject=self, metadata={'log_details': log_details})
-        if self.level == 2 and self.compteur < 2 and not Jeu.donjon.vide and require_bool(use, 'prophete'):
+        if not require_bool(use, 'prophete'):
+            return
+        if self.level == 2:
             self.compteur += 1
             log_details.append(f"{joueur.nom} ({self.nom}) consulte les 2 prochaines cartes du Donjon ({self.compteur}/2).")
             cartes_vues = []
@@ -430,32 +441,27 @@ class Prophete(Perso):
                 if Jeu.donjon.vide:
                     break
                 cartes_vues.append(Jeu.donjon.prochaine_carte())
-                continue
-                if hasattr(c, 'types') and not getattr(c, 'event', False) and c.puissance >= joueur.pv_total:
-                    Jeu.defausse.append(c)
-                    log_details.append(f"{joueur.nom} ({self.nom}) défausse {c.titre} (trop dangereux).")
-                else:
-                    a_reposer.append(c)
             options = tuple(cartes_vues)
             a_defausser, a_reposer = _decide(joueur, Jeu, DecisionKind.CHOOSE_CARDS_SPLIT, 'prophete_cards', subject=self, options=options, metadata={'log_details': log_details})
             a_defausser = require_options(a_defausser, options, decision_name='prophete_cards_discard')
             a_reposer = require_options(a_reposer, options, decision_name='prophete_cards_repose')
-            if set(map(id, a_defausser)) | set(map(id, a_reposer)) != set(map(id, options)) or set(map(id, a_defausser)) & set(map(id, a_reposer)):
+            discard_ids = set(map(id, a_defausser))
+            repose_ids = set(map(id, a_reposer))
+            option_ids = set(map(id, options))
+            if discard_ids | repose_ids != option_ids or discard_ids & repose_ids:
                 raise ValueError('Policy returned invalid split for prophete_cards')
             for c in a_defausser:
                 Jeu.defausse.append(c)
-                log_details.append(f"{joueur.nom} ({self.nom}) dÃ©fausse {c.titre} (trop dangereux).")
+                log_details.append(f"{joueur.nom} ({self.nom}) d?fausse {c.titre} (trop dangereux).")
             for c in reversed(a_reposer):
                 Jeu.donjon.rajoute_en_haut_de_la_pile(c)
-                joueur.cartes_connues.add(c)  # il sait ce qui arrive (exploite par l'IA de fuite/repioche)
-        elif self.level == 1 and self.compteur < 2 and not Jeu.donjon.vide and require_bool(use, 'prophete'):
-            # N1: deux fois par partie, regarde secretement les 2 prochaines cartes
-            # (memorisees dans cartes_connues, exploitees par l'IA de fuite/repioche)
+                joueur.cartes_connues.add(c)
+        else:
             self.compteur += 1
             donjon = Jeu.donjon
             for i in range(donjon.index, min(donjon.index + 2, donjon.nb_cartes)):
                 joueur.cartes_connues.add(donjon.cartes[donjon.ordre[i]])
-            log_details.append(f"{joueur.nom} ({self.nom}) consulte secrètement les 2 prochaines cartes ({self.compteur}/2).")
+            log_details.append(f"{joueur.nom} ({self.nom}) consulte secr?tement les 2 prochaines cartes ({self.compteur}/2).")
 
 class Shaman(Perso):
     def __init__(self, level=1):
@@ -467,6 +473,8 @@ class Shaman(Perso):
         if self.level == 2 and jet == 6:
             self.gagnePV(1, joueur, log_details)
         # Quand vous obtenez 1 ou 2 avec le de, vous pouvez le relancer une fois
+        if rerolled or reversed or jet > 2 or jet >= jet_voulu:
+            return jet
         use = _decide(joueur, Jeu, DecisionKind.USE_HERO_ABILITY, 'shaman_reroll', subject=self, metadata={'jet': jet, 'jet_voulu': jet_voulu, 'reversed': reversed, 'rerolled': rerolled, 'log_details': log_details})
         if require_bool(use, 'shaman_reroll'):
             log_details.append(f"{joueur.nom} ({self.nom}) relance son dé de {jet}.")
@@ -519,38 +527,28 @@ class BeteDeLEvenement(Perso):
         self.level = level
         self.ignore_cout_evenements = True  # ne paie pas les coûts en monstres imposés par les événements
 
-    def _ordre_evenements_benefiques(self, joueur):
-        # TODO: heuristique moteur temporaire; la priorité devra idéalement être portée par la politique IA.
-        ordre = []
-        objets_brises = any(not objet.intact for objet in joueur.objets)
-        objets_intacts = sum(1 for objet in joueur.objets if objet.intact)
-        nb_golems = sum(1 for monstre in joueur.pile_monstres_vaincus if "Golem" in monstre.types)
-
-        if objets_brises:
-            ordre.append("REPAIR")
-        if objets_intacts < 4:
-            ordre.append("SHOP")
-
-        ordre.append("FORTUNE_WHEEL")
-        if nb_golems >= 2:
-            ordre.extend(("INJECTION", "HEAL"))
-        else:
-            ordre.extend(("HEAL", "INJECTION"))
-        return ordre
-
     def debut_tour(self, joueur, Jeu, log_details):
-        # Une fois par partie, remet le dernier evenement de la defausse sur le Donjon (N2: au choix)
-        # IA : seulement si cet evenement est benefique
-        if not self.capacite_utilisee:
-            bons = self._ordre_evenements_benefiques(joueur)
-            events = [c for c in Jeu.defausse if getattr(c, 'event', False)]
-            cible = _decide(joueur, Jeu, DecisionKind.CHOOSE_CARD, 'event_beast_target', subject=self, options=tuple(events), metadata={'preferred_effects': tuple(bons), 'level': self.level, 'log_details': log_details})
-            cible = require_option(cible, tuple(events), allow_none=True, decision_name='event_beast_target')
-            if cible:
-                self.capacite_utilisee = True
-                Jeu.defausse.remove(cible)
-                Jeu.donjon.rajoute_en_haut_de_la_pile(cible)
-                log_details.append(f"{joueur.nom} ({self.nom}) remet {cible.titre} sur le Donjon.")
+        # Une fois par partie, remet un evenement legal de la defausse sur le Donjon.
+        if self.capacite_utilisee:
+            return
+        events = tuple(c for c in Jeu.defausse if getattr(c, 'event', False))
+        if not events:
+            return
+        cible = _decide(
+            joueur,
+            Jeu,
+            DecisionKind.CHOOSE_CARD,
+            'event_beast_target',
+            subject=self,
+            options=events,
+            metadata={'level': self.level, 'log_details': log_details},
+        )
+        cible = require_option(cible, events, allow_none=True, decision_name='event_beast_target')
+        if cible:
+            self.capacite_utilisee = True
+            Jeu.defausse.remove(cible)
+            Jeu.donjon.rajoute_en_haut_de_la_pile(cible)
+            log_details.append(f"{joueur.nom} ({self.nom}) remet {cible.titre} sur le Donjon.")
 
 # --- Table de dispatch des hooks (optimisation, voir objets.py) ---------------
 # NB: debut_partie n'y figure pas car la version de base fait le reset d'etat

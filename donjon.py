@@ -18,7 +18,7 @@ import multiprocessing
 from heros import persos_disponibles
 
 # Nombre de simulations souhaitées
-total_simulations = 3000000
+total_simulations = 100000
 
 def _simuler_batch(args):
     """Worker (multiprocessing) : simule nb_sims parties et retourne des compteurs agrégés.

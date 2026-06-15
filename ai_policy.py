@@ -67,13 +67,19 @@ class DefaultDungeonPolicy:
     def decide_use_active_object(self, context):
         return True
 
+    def decide_use_event_effect(self, context):
+        if context.phase == 'fortune_wheel':
+            gratuit = context.meta('gratuit', False)
+            return gratuit or bool(context.options and context.actor.pv_total <= 6)
+        return True
+
     def decide_should_face_special_card(self, context):
         effect = getattr(context.subject, 'effet', None)
         if effect == 'KRAKEN':
             return any(objet.intact and 10 in objet.puissance_tags for objet in context.actor.objets)
         if effect == 'GUARDIAN_ANGEL':
             return any(
-                objet.intact and (8 in objet.puissance_tags or objet.nom == "Attrape-RÃªves")
+                objet.intact and (8 in objet.puissance_tags or objet.nom == "Attrape-Rêves")
                 for objet in context.actor.objets
             )
         return True
@@ -114,7 +120,7 @@ class DefaultDungeonPolicy:
         if phase in {'kraken_confidence_object', 'guardian_angel_confidence_object'}:
             power = 10 if phase.startswith('kraken') else 8
             for objet in options:
-                if objet.intact and (power in objet.puissance_tags or objet.nom == "Attrape-RÃªves"):
+                if objet.intact and (power in objet.puissance_tags or objet.nom == "Attrape-Rêves"):
                     return objet
             return None
         return options[0]
@@ -221,7 +227,22 @@ class DefaultDungeonPolicy:
             best = min(options, key=score_key)
             return best if score_key(best) < score_key(current_card) else None
         if context.phase == 'event_beast_target':
-            preferred_effects = context.meta('preferred_effects', ())
+            actor = context.actor
+            objets_brises = any(not objet.intact for objet in actor.objets)
+            objets_intacts = sum(1 for objet in actor.objets if objet.intact)
+            nb_golems = sum(1 for monstre in actor.pile_monstres_vaincus if "Golem" in monstre.types)
+
+            preferred_effects = []
+            if objets_brises:
+                preferred_effects.append("REPAIR")
+            if objets_intacts < 4:
+                preferred_effects.append("SHOP")
+            preferred_effects.append("FORTUNE_WHEEL")
+            if nb_golems >= 2:
+                preferred_effects.extend(("INJECTION", "HEAL"))
+            else:
+                preferred_effects.extend(("HEAL", "INJECTION"))
+
             level = context.meta('level', 1)
             if level == 2:
                 for effet in preferred_effects:
@@ -349,7 +370,8 @@ class DefaultDungeonPolicy:
             log_details.append(f"==> {joueur.nom} DECIDE DE TENTER LA FUITE (car dernier joueur vivant).")
             return True
 
-        if joueur.politique_fuite == 'ev':
+        politique_fuite = getattr(joueur, 'politique_fuite', 'ev')
+        if politique_fuite == 'ev':
             veut_fuir = self._decision_fuite_ev(joueur, Jeu)
         else:
             veut_fuir = self._decision_fuite_seuils(joueur, Jeu)
@@ -484,40 +506,6 @@ class DefaultDungeonPolicy:
 
         return min(objets_intacts, key=lambda o: (o.pv_bonus >= joueur.pv_total, valeur(o)))
 
-    def choose_repair_payment_monster(self, joueur, Jeu, log_details, monsters):
-        return min(monsters, key=lambda m: m.puissance) if monsters else None
-
-    def choose_repair_object(self, joueur, Jeu, log_details, broken_objects):
-        return max(broken_objects, key=lambda o: o.pv_bonus) if broken_objects else None
-
-    def should_use_fortune_wheel(self, joueur, Jeu, log_details, free, discardable_monsters):
-        return free or (discardable_monsters and joueur.pv_total <= 6)
-
-    def choose_fortune_wheel_monster(self, joueur, Jeu, log_details, monsters):
-        return min(monsters, key=lambda m: m.puissance) if monsters else None
-
-    def choose_soulstorm_monster(self, joueur, Jeu, log_details):
-        if not joueur.pile_monstres_vaincus:
-            return None
-        couverts = [m for m in joueur.pile_monstres_vaincus if self._passive_line_covers_card(joueur, m)]
-        if couverts:
-            return max(
-                couverts,
-                key=lambda m: (
-                    joueur._degats_attendus(m, Jeu),
-                    getattr(m, 'puissance_initiale', getattr(m, 'puissance', 0)),
-                    len(getattr(m, 'types_initiaux', getattr(m, 'types', ()))),
-                ),
-            )
-        return min(
-            joueur.pile_monstres_vaincus,
-            key=lambda m: (
-                joueur._degats_attendus(m, Jeu),
-                getattr(m, 'puissance_initiale', getattr(m, 'puissance', 0)),
-                len(getattr(m, 'types_initiaux', getattr(m, 'types', ()))),
-            ),
-        )
-
     def _passive_line_covers_card(self, joueur, carte):
         if getattr(carte, 'non_executable', False):
             return False
@@ -536,12 +524,6 @@ class DefaultDungeonPolicy:
                 return True
         return False
 
-    def choose_shop_discard(self, joueur, Jeu, log_details, intact_objects):
-        echangeables = [o for o in intact_objects if o.pv_bonus <= 2]
-        if not echangeables or not len(Jeu.objets_dispo):
-            return None
-        return min(echangeables, key=lambda o: o.priorite)
-
     def order_player_objects(self, joueur, objects, phase='inventory'):
         from ai_decisions import DecisionContext, DecisionKind
         return self.decide(DecisionContext(
@@ -551,204 +533,6 @@ class DefaultDungeonPolicy:
             phase=phase,
             options=tuple(objects),
         ))
-
-    # Object decisions. Object hooks define legal timing/options; policy chooses.
-    def should_use_object_in_combat(self, view, objet, carte, log_details):
-        return objet.worthit(view.player, carte, view._jeu, log_details)
-
-    def choose_couteau_suisse_repair(self, view, broken_objects):
-        return random.choice(list(broken_objects)) if broken_objects else None
-
-    def choose_gants_de_gaia_discards(self, view, broken_objects, count):
-        return tuple(list(broken_objects)[-count:][::-1])
-
-    def choose_enclume_instable_object(self, view, broken_objects):
-        return random.choice(list(broken_objects)) if broken_objects else None
-
-    def choose_corne_dabordage_monster(self, view, victim, monsters):
-        return random.choice(list(monsters)) if monsters else None
-
-    def choose_esprit_du_donjon_monster(self, view, victim, monsters):
-        return random.choice(list(monsters)) if monsters else None
-
-    def choose_canne_a_chep_object(self, view, dead_player, intact_objects):
-        return random.choice(list(intact_objects)) if intact_objects else None
-
-    def choose_sac_de_constantinople_dragon(self, view, victim, dragons):
-        return random.choice(list(dragons)) if dragons else None
-
-    def choose_pelle_du_fossoyeur_monsters(self, view, discard_monsters, max_count):
-        golem_or = []
-        dragons = []
-        others = []
-        for monster in discard_monsters:
-            if getattr(monster, 'effet', None) == "GOLD":
-                golem_or.append(monster)
-            elif "Dragon" in getattr(monster, 'types', ()):
-                dragons.append(monster)
-            else:
-                others.append(monster)
-
-        chosen = []
-        if golem_or:
-            chosen.append(golem_or[0])
-        random.shuffle(dragons)
-        while len(chosen) < max_count and dragons:
-            chosen.append(dragons.pop())
-        random.shuffle(others)
-        while len(chosen) < max_count and others:
-            chosen.append(others.pop())
-        return tuple(chosen)
-
-    def choose_draw_two_keep_object(self, view, choices, source):
-        return max(choices, key=lambda o: o.priorite) if choices else None
-
-    def choose_sceptre_changeur_target(self, view, current_card, candidates, score_key):
-        if not candidates:
-            return None
-        best = min(candidates, key=score_key)
-        return best if score_key(best) < score_key(current_card) else None
-
-    def choose_epee_vengeresse_power(self, view, scores, counts, covered_powers):
-        if not scores:
-            return 5
-        candidates = [p for p in scores if p not in covered_powers] or list(scores)
-        return max(candidates, key=lambda p: (scores[p], p, counts[p]))
-
-    def choose_dague_vengeresse_type(self, view, scores, counts, covered_types):
-        if not scores:
-            return "Golem"
-        candidates = [t for t in scores if t not in covered_types] or list(scores)
-        return max(candidates, key=lambda t: (scores[t], counts[t], t == "Golem", t))
-
-    def choose_imprimante_model(self, view, models):
-        return max(models, key=lambda o: o.priorite) if models else None
-
-    def choose_object_to_sacrifice(self, view, candidates):
-        return min(candidates, key=lambda o: (o.pv_bonus, o.priorite)) if candidates else None
-
-    def choose_object_to_sacrifice_like_limon(self, view, candidates):
-        if not candidates:
-            return None
-        jeu = view._jeu
-
-        def value(objet):
-            if not (objet.types_tags or objet.puissance_tags):
-                return objet.priorite
-            donjon = jeu.donjon
-            restants = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
-            cibles = sum(
-                1
-                for carte in restants
-                if any(t in getattr(carte, 'types_initiaux', ()) for t in objet.types_tags)
-                or getattr(carte, 'puissance_initiale', None) in objet.puissance_tags
-            )
-            return objet.priorite * cibles / (1 + cibles)
-
-        return min(candidates, key=value)
-
-    def choose_anneau_du_vent_destination(self, view, card):
-        return 'bottom'
-
-    def choose_boule_de_cristal_power(self, view, counts, covered_powers):
-        if not counts:
-            return None
-        candidates = [p for p in counts if p not in covered_powers] or list(counts)
-        return max(candidates, key=lambda p: (counts[p] * p, p, counts[p]))
-
-    def choose_crane_du_necromancien_monster(self, view, candidates):
-        return min(candidates, key=lambda m: m.puissance) if candidates else None
-
-    def choose_coursier_volant_discard(self, view, candidates):
-        inutiles = [o for o in candidates if o.priorite < 40]
-        return min(inutiles, key=lambda o: o.priorite) if inutiles else None
-
-    def should_keep_sceptre_du_maharal_monster(self, view, card):
-        return True
-
-    def choose_dague_de_brutus_beneficiary(self, view, opponents):
-        return min(opponents, key=lambda j: len(j.pile_monstres_vaincus)) if opponents else None
-
-    # Hero ability decisions. Hero hooks define legal timing/options; policy chooses.
-    def should_use_ninja_flee_bonus(self, view):
-        return True
-
-    def should_use_princess_draw(self, view):
-        return True
-
-    def choose_princess_keep_object(self, view, choices):
-        return max(choices, key=lambda o: o.priorite)
-
-    def should_use_tricheur(self, view):
-        return True
-
-    def should_use_chevalier_dragon(self, view, carte):
-        return True
-
-    def should_use_docteur_de_peste(self, view, carte):
-        return True
-
-    def should_use_inventeur_genial(self, view, carte, broken_objects):
-        return True
-
-    def choose_inventeur_discards(self, view, broken_objects):
-        return tuple(random.sample(list(broken_objects), 2))
-
-    def should_use_flutiste(self, view, carte):
-        return True
-
-    def should_use_avatar(self, view, carte):
-        joueur = view.player
-        return carte.dommages > (joueur.pv_total / 2)
-
-    def should_use_berserker_survive(self, view, carte):
-        return True
-
-    def should_use_prophete(self, view):
-        joueur = view.player
-        hero = joueur.perso_obj
-        seuil = 4 if getattr(hero, 'level', 1) == 2 else 6
-        return joueur.pv_total <= seuil
-
-    def choose_prophete_cards(self, view, cards):
-        joueur = view.player
-        discard = []
-        repose = []
-        for card in cards:
-            if hasattr(card, 'types') and not getattr(card, 'event', False) and card.puissance >= joueur.pv_total:
-                discard.append(card)
-            else:
-                repose.append(card)
-        return tuple(discard), tuple(repose)
-
-    def should_shaman_reroll(self, view, jet, jet_voulu, reversed, rerolled):
-        return not rerolled and not reversed and jet <= 2 and jet < jet_voulu
-
-    def should_lapin_skip_turn(self, view, prochaine):
-        joueur = view.player
-        return (hasattr(prochaine, 'types') and not getattr(prochaine, 'event', False)
-                and prochaine.puissance >= joueur.pv_total)
-
-    def choose_event_beast_target(self, view, events, preferred_effects, level):
-        if level == 2:
-            for effet in preferred_effects:
-                candidats = [c for c in events if c.effet == effet]
-                if candidats:
-                    return candidats[-1]
-            return None
-        return events[-1] if events and events[-1].effet in preferred_effects else None
-
-    def should_face_kraken(self, joueur, carte, Jeu, log_details):
-        for objet in joueur.objets:
-            if objet.intact and 10 in objet.puissance_tags:
-                return True, objet
-        return False, None
-
-    def should_face_guardian_angel(self, joueur, carte, Jeu, log_details):
-        for objet in joueur.objets:
-            if objet.intact and (8 in objet.puissance_tags or objet.nom == "Attrape-Rêves"):
-                return True, objet
-        return False, None
 
     def should_pay_traquenard(self, joueur, carte, Jeu, candidate, log_details):
         hp_gain = candidate['hp_gain']

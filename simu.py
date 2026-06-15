@@ -108,6 +108,8 @@ def _traq_action_kind(source, late=False):
 
 def _traq_condition(source, joueur, carte, Jeu, late=False):
     try:
+        if isinstance(source, Objet):
+            return source.can_use_in_combat(joueur, carte, Jeu, [])
         return source.condition(joueur, carte, Jeu, [])
     except Exception:
         return False
@@ -560,7 +562,19 @@ def ordonnanceur(joueurs, donjon, objets_dispo, log=True, policy=None):
                 # Roue de l'infortune: defausser un monstre pour lancer le de et gagner autant de PV
                 gratuit = getattr(joueur.perso_obj, 'ignore_cout_evenements', False)
                 monstres_defaussables = [m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet)]
-                use_wheel = gratuit or bool(monstres_defaussables and joueur.pv_total <= 6)
+                if gratuit or monstres_defaussables:
+                    use_wheel = Jeu.policy.decide(DecisionContext(
+                        kind=DecisionKind.USE_EVENT_EFFECT,
+                        actor=joueur,
+                        game=Jeu,
+                        phase='fortune_wheel',
+                        subject=carte,
+                        options=tuple(monstres_defaussables),
+                        metadata={'gratuit': gratuit, 'log_details': log_details},
+                    ))
+                    use_wheel = require_bool(use_wheel, 'fortune_wheel')
+                else:
+                    use_wheel = False
                 if use_wheel:
                     if gratuit:
                         log_details.append(f"{joueur.nom} ({joueur.perso_obj.nom}) ne défausse pas de monstre pour {carte.titre}.")

@@ -10,6 +10,7 @@ class DecisionKind(Enum):
     USE_OBJECT_IN_COMBAT = auto()
     USE_HERO_ABILITY = auto()
     USE_ACTIVE_OBJECT = auto()
+    USE_EVENT_EFFECT = auto()
 
     SHOULD_FACE_SPECIAL_CARD = auto()
     SHOULD_KEEP_SPECIAL_MONSTER = auto()

@@ -3,13 +3,14 @@ import random
 import numpy as np
 
 from ai_policy import DefaultDungeonPolicy, default_draft_policy, default_dungeon_policy
+from ai_decisions import DecisionContext, DecisionKind, require_option
 from draft import _charger_priors, _draft_rapide
-from heros import Princesse, persos_disponibles
+from heros import BeteDeLEvenement, Princesse, SANS_HOOK_PERSO, persos_disponibles
 from joueurs import Joueur
-from monstres import CarteMonstre, DonjonDeck
-from objets import ArmureEnCuir, CouteauSuisse, HacheDeGlace, Objet, objets_disponibles
+from monstres import CarteEvent, CarteMonstre, DonjonDeck
+from objets import ArmureEnCuir, AttrapeReves, CouteauSuisse, HacheDeGlace, Objet, SANS_HOOK_OBJET, objets_disponibles
 from party import draft_soiree
-from simu import GameState, ordonnanceur
+from simu import GameState, _premier_candidat_traquenard, ordonnanceur
 
 
 def _build_players(seed):
@@ -121,6 +122,25 @@ def smoke_hero_policy_can_decline():
     assert joueur.objets == []
 
 
+def smoke_unavailable_hero_ability_does_not_call_policy():
+    class CountingPolicy(DefaultDungeonPolicy):
+        def __init__(self):
+            self.hero_calls = 0
+
+        def decide_use_hero_ability(self, context):
+            self.hero_calls += 1
+            return super().decide_use_hero_ability(context)
+
+    policy = CountingPolicy()
+    joueur = Joueur("P", Princesse(1), [])
+    joueur.perso_obj.capacite_utilisee = True
+    jeu = GameState([joueur], DonjonDeck(), list(objets_disponibles), policy)
+
+    joueur.perso_obj.debut_tour(joueur, jeu, [])
+
+    assert policy.hero_calls == 0
+
+
 def smoke_object_policy_can_decline_combat_use():
     class DeclineObjectsPolicy(DefaultDungeonPolicy):
         def decide_use_object_in_combat(self, context):
@@ -223,15 +243,151 @@ def smoke_donjon_worker_batch_runs():
     donjon._simuler_batch((2, 12345))
 
 
+def smoke_traquenard_legality_independent_from_object_policy():
+    class RefuseObjectPayTrapPolicy(DefaultDungeonPolicy):
+        def decide_use_object_in_combat(self, context):
+            return False
+
+        def decide_pay_traquenard(self, context):
+            return True
+
+    hache = HacheDeGlace()
+    joueur = Joueur("Q", Princesse(1), [hache])
+    carte = CarteMonstre("Dragon test", 9, ["Dragon"])
+    carte.dommages = 9
+    jeu = GameState([joueur], DonjonDeck(), [], RefuseObjectPayTrapPolicy())
+    jeu.traquenard_actif = True
+
+    candidat = _premier_candidat_traquenard(
+        joueur,
+        carte,
+        jeu,
+        SANS_HOOK_OBJET['en_combat'],
+        SANS_HOOK_PERSO['en_combat'],
+        SANS_HOOK_PERSO['en_combat_late'],
+    )
+
+    assert candidat is not None
+    assert candidat['source'] is hache
+
+
+def _single_card_deck(card):
+    deck = DonjonDeck()
+    deck.cartes = [card]
+    card.index = 0
+    card.ordre = 0
+    deck.nb_cartes = 1
+    deck.ordre = np.array([0])
+    deck.index = 0
+    return deck
+
+
+def smoke_fortune_wheel_policy_can_decline():
+    class DeclineWheelPolicy(DefaultDungeonPolicy):
+        def decide_use_hero_ability(self, context):
+            return False
+
+        def decide_use_event_effect(self, context):
+            if context.phase == 'fortune_wheel':
+                return False
+            return super().decide_use_event_effect(context)
+
+    monstre = CarteMonstre("Golem test", 5, ["Golem"])
+    joueur = Joueur("W", Princesse(1), [])
+    joueur.pile_monstres_vaincus.append(monstre)
+    pv_depart = joueur.pv_total
+    event = CarteEvent("Roue test", "", "FORTUNE_WHEEL")
+
+    ordonnanceur([joueur], _single_card_deck(event), [], False, policy=DeclineWheelPolicy())
+
+    assert joueur.pile_monstres_vaincus == [monstre]
+    assert joueur.pv_total == pv_depart
+
+
+def smoke_event_beast_policy_choice_and_decline():
+    repair = CarteEvent("Bricoleur test", "", "REPAIR")
+    heal = CarteEvent("Heal test", "", "HEAL")
+
+    def add_to_deck(deck, *cards):
+        if deck.ordre is None:
+            deck.ordre = np.array([], dtype=int)
+            deck.index = 0
+        for card in cards:
+            card.index = len(deck.cartes)
+            card.ordre = card.index
+            deck.cartes.append(card)
+
+    class DeclineBeastPolicy(DefaultDungeonPolicy):
+        def decide_choose_card(self, context):
+            if context.phase == 'event_beast_target':
+                return None
+            return super().decide_choose_card(context)
+
+    joueur = Joueur("B", BeteDeLEvenement(2), [])
+    jeu = GameState([joueur], DonjonDeck(), [], DeclineBeastPolicy())
+    add_to_deck(jeu.donjon, repair, heal)
+    jeu.defausse.extend([repair, heal])
+    joueur.perso_obj.debut_tour(joueur, jeu, [])
+    assert not joueur.perso_obj.capacite_utilisee
+    assert jeu.defausse == [repair, heal]
+
+    class ChooseHealPolicy(DefaultDungeonPolicy):
+        def decide_choose_card(self, context):
+            if context.phase == 'event_beast_target':
+                return next(c for c in context.options if c.effet == 'HEAL')
+            return super().decide_choose_card(context)
+
+    joueur = Joueur("B", BeteDeLEvenement(2), [])
+    jeu = GameState([joueur], DonjonDeck(), [], ChooseHealPolicy())
+    add_to_deck(jeu.donjon, repair, heal)
+    jeu.defausse.extend([repair, heal])
+    joueur.perso_obj.debut_tour(joueur, jeu, [])
+    assert joueur.perso_obj.capacite_utilisee
+    assert heal not in jeu.defausse
+    assert jeu.donjon.cartes[jeu.donjon.ordre[jeu.donjon.index]] is heal
+
+
+def smoke_guardian_angel_attrape_reves_confidence():
+    joueur = Joueur("G", Princesse(1), [AttrapeReves()])
+    carte = CarteMonstre("Ange Gardien test", 8, [], effet="GUARDIAN_ANGEL")
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+
+    wants = jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.SHOULD_FACE_SPECIAL_CARD,
+        actor=joueur,
+        game=jeu,
+        phase="guardian_angel_face_or_discard",
+        subject=carte,
+    ))
+    assert wants is True
+
+    options = tuple(joueur.objets)
+    confidence = jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.CHOOSE_OBJECT,
+        actor=joueur,
+        game=jeu,
+        phase='guardian_angel_confidence_object',
+        subject=carte,
+        options=options,
+        metadata={'allow_none': True},
+    ))
+    assert require_option(confidence, options, allow_none=True, decision_name='guardian_angel_confidence_object').nom == "Attrape-Rêves"
+
+
 if __name__ == "__main__":
     smoke_ordonnanceur_policy_equivalence()
     smoke_legacy_wrappers()
     smoke_draft_policy_equivalence()
     smoke_hero_policy_can_decline()
+    smoke_unavailable_hero_ability_does_not_call_policy()
     smoke_object_policy_can_decline_combat_use()
     smoke_object_policy_can_choose_target()
     smoke_policy_controls_object_order()
     smoke_invalid_policy_rejected()
     smoke_default_policy_normalizes_legacy_worthit()
     smoke_donjon_worker_batch_runs()
+    smoke_traquenard_legality_independent_from_object_policy()
+    smoke_fortune_wheel_policy_can_decline()
+    smoke_event_beast_policy_choice_and_decline()
+    smoke_guardian_angel_attrape_reves_confidence()
     print("policy smoke ok")
