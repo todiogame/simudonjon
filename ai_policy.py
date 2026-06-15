@@ -310,6 +310,9 @@ class DefaultDungeonPolicy:
             return None
         return min(echangeables, key=lambda o: o.priorite)
 
+    def order_player_objects(self, joueur, objects, phase='inventory'):
+        return tuple(sorted(objects, key=lambda obj: obj.priorite, reverse=True))
+
     # Object decisions. Object hooks define legal timing/options; policy chooses.
     def should_use_object_in_combat(self, view, objet, carte, log_details):
         return objet.worthit(view.player, carte, view._jeu, log_details)
@@ -385,8 +388,25 @@ class DefaultDungeonPolicy:
     def choose_object_to_sacrifice(self, view, candidates):
         return min(candidates, key=lambda o: (o.pv_bonus, o.priorite)) if candidates else None
 
-    def choose_object_to_sacrifice_like_limon(self, view, candidates, value_key):
-        return min(candidates, key=value_key) if candidates else None
+    def choose_object_to_sacrifice_like_limon(self, view, candidates):
+        if not candidates:
+            return None
+        jeu = view._jeu
+
+        def value(objet):
+            if not (objet.types_tags or objet.puissance_tags):
+                return objet.priorite
+            donjon = jeu.donjon
+            restants = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
+            cibles = sum(
+                1
+                for carte in restants
+                if any(t in getattr(carte, 'types_initiaux', ()) for t in objet.types_tags)
+                or getattr(carte, 'puissance_initiale', None) in objet.puissance_tags
+            )
+            return objet.priorite * cibles / (1 + cibles)
+
+        return min(candidates, key=value)
 
     def choose_anneau_du_vent_destination(self, view, card):
         return 'bottom'
@@ -401,7 +421,8 @@ class DefaultDungeonPolicy:
         return min(candidates, key=lambda m: m.puissance) if candidates else None
 
     def choose_coursier_volant_discard(self, view, candidates):
-        return min(candidates, key=lambda o: o.priorite) if candidates else None
+        inutiles = [o for o in candidates if o.priorite < 40]
+        return min(inutiles, key=lambda o: o.priorite) if inutiles else None
 
     def should_keep_sceptre_du_maharal_monster(self, view, card):
         return True

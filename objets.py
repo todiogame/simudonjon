@@ -2478,23 +2478,6 @@ def _choisir_objet_a_sacrifier(joueur, Jeu, exclus):
     policy, view = _policy_view(joueur, Jeu, phase='object_sacrifice')
     return policy.choose_object_to_sacrifice(view, tuple(candidats))
 
-
-def _valeur_objet_sacrifie_comme_limon(joueur, objet, Jeu):
-    # Meme heuristique que Joueur.decideBriseObjet / Limon glouton:
-    # un objet de ligne perd de la valeur si ses cibles ont presque disparu.
-    if not (objet.types_tags or objet.puissance_tags):
-        return objet.priorite
-    donjon = Jeu.donjon
-    restants = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
-    cibles = sum(
-        1
-        for carte in restants
-        if any(t in getattr(carte, 'types_initiaux', ()) for t in objet.types_tags)
-        or getattr(carte, 'puissance_initiale', None) in objet.puissance_tags
-    )
-    return objet.priorite * cibles / (1 + cibles)
-
-
 def _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, exclus):
     # Meme ordre de preference que le Limon glouton, mais on n'autorise pas
     # un sacrifice qui tuerait le joueur avant la resolution de l'objet.
@@ -2502,11 +2485,7 @@ def _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, exclus):
     if not candidats:
         return None
     policy, view = _policy_view(joueur, Jeu, phase='object_sacrifice_limon')
-    return policy.choose_object_to_sacrifice_like_limon(
-        view,
-        tuple(candidats),
-        lambda o: _valeur_objet_sacrifie_comme_limon(joueur, o, Jeu),
-    )
+    return policy.choose_object_to_sacrifice_like_limon(view, tuple(candidats))
 
 
 def _pioche_deux_objets_garde_le_meilleur(joueur, Jeu, log_details, source):
@@ -3535,7 +3514,7 @@ class CoursierVolant(Objet):
     def fin_tour(self, joueur, Jeu, log_details):
         if self.intact and Jeu.objets_dispo:
             inutiles = [o for o in joueur.objets
-                        if o.intact and o is not self and not o.actif and o.pv_bonus == 0 and o.priorite < 40]
+                        if o.intact and o is not self and not o.actif and o.pv_bonus == 0]
             if inutiles:
                 policy, view = _policy_view(joueur, Jeu, phase='coursier_volant')
                 jete = policy.choose_coursier_volant_discard(view, tuple(inutiles))

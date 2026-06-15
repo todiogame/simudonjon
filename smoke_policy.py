@@ -158,6 +158,23 @@ def smoke_object_policy_can_choose_target():
     assert not armure.intact
 
 
+def smoke_policy_controls_object_order():
+    class ReverseInventoryPolicy(DefaultDungeonPolicy):
+        def order_player_objects(self, joueur, objects, phase='inventory'):
+            return tuple(reversed(objects))
+
+    joueur = Joueur("R", Princesse(1), [])
+    jeu = GameState([joueur], DonjonDeck(), [], ReverseInventoryPolicy())
+    hache = HacheDeGlace()
+    armure = ArmureEnCuir()
+
+    joueur.ajouter_objet(hache)
+    joueur.ajouter_objet(armure)
+
+    assert joueur.policy is jeu.policy
+    assert joueur.objets == [armure, hache]
+
+
 if __name__ == "__main__":
     smoke_ordonnanceur_policy_equivalence()
     smoke_legacy_wrappers()
@@ -165,4 +182,5 @@ if __name__ == "__main__":
     smoke_hero_policy_can_decline()
     smoke_object_policy_can_decline_combat_use()
     smoke_object_policy_can_choose_target()
+    smoke_policy_controls_object_order()
     print("policy smoke ok")

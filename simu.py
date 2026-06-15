@@ -26,6 +26,8 @@ class GameState:
         self.objets_dispo = objets_dispo
         self.nb_joueurs = len(joueurs)
         self.policy = policy or default_dungeon_policy()
+        for joueur in self.joueurs:
+            joueur.policy = self.policy
 
 _TRAQ_ACTION_KIND_OVERRIDES = {
     DagueDeBrutus: 'execute',
@@ -400,7 +402,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
     
     for j in joueurs:
         j.partie_joueurs = joueurs  # utilise par perdre_medaille (Parfum de Scandale)
-        j.trier_objets_par_priorite()
+        j.ordonner_objets_pour_ia()
         j.appliquer_panoplies(log_details)  # +2 PV par 3 objets de meme couleur (bonus d'avant-partie)
         j.perso_obj.debut_partie(j, Jeu, log_details)  # reset aussi l'etat une-fois-par-partie du perso
         for objet in j.objets:

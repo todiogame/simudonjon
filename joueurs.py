@@ -64,6 +64,7 @@ class Joueur:
         self.tiebreaker = False
         self.cartes_connues = set()  # cartes du Donjon vues via les objets de divination
         self.partie_joueurs = None   # tous les joueurs de la partie (pose par l'ordonnanceur, pour le Parfum de Scandale)
+        self.policy = None
         self.strategie_traquenard = 'net_gain'
         self.traquenard_opportunites = 0
         self.traquenard_payes = 0
@@ -72,7 +73,7 @@ class Joueur:
     def ajouter_objet(self, objet):
         self.objets.append(objet)
         self.pv_total += objet.pv_bonus
-        self.trier_objets_par_priorite() # maintenir les objets tries dans le bon ordre d'utilisation
+        self.ordonner_objets_pour_ia()
 
     def appliquer_panoplies(self, log_details):
         # Panoplie : +2 PV par groupe de 3 objets de meme couleur au debut de la partie.
@@ -176,8 +177,14 @@ class Joueur:
         # log_details.append(f"[debug] Score final de {self.nom} : {score_calcule_par_effets}, original_score_final {original_score_final}")
         return score_calcule_par_effets
 
+    def ordonner_objets_pour_ia(self, phase='inventory'):
+        from ai_policy import default_dungeon_policy
+        policy = self.policy or default_dungeon_policy()
+        self.objets = list(policy.order_player_objects(self, tuple(self.objets), phase=phase))
+
     def trier_objets_par_priorite(self):
-        self.objets = sorted(self.objets, key=lambda obj: obj.priorite, reverse=True)
+        # Compatibility wrapper: object order is an AI policy decision.
+        self.ordonner_objets_pour_ia()
 
     def rollDice(self, Jeu, log_details, jet_voulu=4, reversed=False, rerolled=False): #de base on se considere content avec un 4.
         jet_voulu = min(6,max(1, jet_voulu))
@@ -626,32 +633,6 @@ class Joueur:
         objet = policy.choose_object_to_break(self, jeu, log_details)
         if objet is None:
             return None
-        objet.destroy(self, jeu, log_details)
-        self._gerer_pv_bonus(objet, log_details)
-        return objet
-        """Brise l'objet le moins utile, sans se tuer si possible.
-
-        La valeur d'un objet cibleur (types_tags/puissance_tags) fond avec le
-        nombre de proies restantes au Donjon : un Glaive d'argent sans Vampire
-        restant ne vaut plus rien, quelle que soit sa priorite. Valide par A/B
-        en self-play contre les formes additives et les malus mousse/PV,
-        qui n'apportent rien."""
-        objets_intacts = [o for o in self.objets if o.intact]
-        if not objets_intacts:
-            return None
-
-        donjon = jeu.donjon
-        restants = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
-
-        def valeur(o):
-            if not (o.types_tags or o.puissance_tags):
-                return o.priorite
-            cibles = sum(1 for c in restants
-                         if any(t in getattr(c, 'types_initiaux', ()) for t in o.types_tags)
-                         or getattr(c, 'puissance_initiale', None) in o.puissance_tags)
-            return o.priorite * cibles / (1 + cibles)
-
-        objet = min(objets_intacts, key=lambda o: (o.pv_bonus >= self.pv_total, valeur(o)))
         objet.destroy(self, jeu, log_details)
         self._gerer_pv_bonus(objet, log_details)
         return objet
