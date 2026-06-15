@@ -1174,12 +1174,14 @@ class FouetDuFourbe(Objet):
         type_monstre = carte.types
         for autre_joueur in Jeu.joueurs:
             if autre_joueur != joueur:
-                for monstre in autre_joueur.pile_monstres_vaincus:
-                    if any(t in type_monstre for t in monstre.types):
-                        autre_joueur.pile_monstres_vaincus.remove(monstre)
-                        Jeu.defausse.append(monstre)
-                        log_details.append(f"{autre_joueur.nom} défausse {monstre.titre} à cause du {self.nom} de {joueur.nom}")
-                        break
+                matching = [m for m in autre_joueur.pile_monstres_vaincus if any(t in type_monstre for t in m.types)]
+                if matching:
+                    options = tuple(matching)
+                    monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'fouet_du_fourbe', subject=carte, options=options, metadata={'victim': autre_joueur, 'source': self, 'log_details': log_details})
+                    monstre = require_option(monstre, options, decision_name='fouet_du_fourbe')
+                    autre_joueur.pile_monstres_vaincus.remove(monstre)
+                    Jeu.defausse.append(monstre)
+                    log_details.append(f"{autre_joueur.nom} défausse {monstre.titre} à cause du {self.nom} de {joueur.nom}")
         self.destroy(joueur, Jeu, log_details)
 
 class CraneDuRoiLiche(Objet):
@@ -1857,14 +1859,27 @@ class GrenadeSinge(Objet):
 class SceptreChangeur(Objet):
     def __init__(self):
         super().__init__("Sceptre Changeur", True)
+    def _candidats(self, Jeu):
+        donjon = Jeu.donjon
+        return [
+            donjon.cartes[idx]
+            for idx in donjon.ordre[donjon.index:]
+            if isinstance(donjon.cartes[idx], CarteMonstre)
+        ]
     def rules(self, joueur, carte, Jeu, log_details):
-        return (not Jeu.traquenard_actif
-                and any(isinstance(Jeu.donjon.cartes[idx], CarteMonstre)
-                        for idx in Jeu.donjon.ordre[Jeu.donjon.index:]))
+        return not Jeu.traquenard_actif and bool(self._candidats(Jeu))
     def worthit(self, joueur, carte, Jeu, log_details):
-        return _choisir_cible_sceptre_changeur(joueur, carte, Jeu) is not None
+        return bool(self._candidats(Jeu))
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        cible = _choisir_cible_sceptre_changeur(joueur, carte, Jeu)
+        options = tuple(self._candidats(Jeu))
+        if not options:
+            return
+        cible = _decide(
+            joueur, Jeu, DecisionKind.CHOOSE_CARD, 'sceptre_changeur',
+            subject=carte, options=options,
+            metadata={'score_key': lambda c: _score_sceptre_changeur(c, joueur, Jeu)},
+        )
+        cible = require_option(cible, options, allow_none=True, decision_name='sceptre_changeur')
         if cible is None:
             return
         Jeu.defausse.append(carte)
@@ -2918,12 +2933,18 @@ class ArmureDeMage(Objet):
 class BombePirate(Objet):
     def __init__(self):
         super().__init__("Bombe pirate", False)
+    def _candidats(self, joueur):
+        return [o for o in joueur.objets if o.intact and o is not self and o.pv_bonus < joueur.pv_total]
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, [self]) is not None
+        return not Jeu.traquenard_actif and bool(self._candidats(joueur))
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= joueur.pv_total and carte.puissance >= 5
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        sacrifie = _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, [self])
+        options = tuple(self._candidats(joueur))
+        if not options:
+            return
+        sacrifie = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE, 'bombe_pirate_sacrifice', subject=carte, options=options, metadata={'reason': 'limon', 'log_details': log_details})
+        sacrifie = require_option(sacrifie, options, decision_name='bombe_pirate_sacrifice')
         if sacrifie is None:
             return
         log_details.append(f"{joueur.nom} brise {sacrifie.nom} avec {self.nom}.")
@@ -3279,7 +3300,9 @@ class ClocheDuDejaVu(Objet):
         if self.intact:
             faciles = self._fodder(Jeu)
             if faciles:
-                monstre = faciles[0]
+                options = tuple(faciles)
+                monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'cloche_du_deja_vu_debut', subject=self, options=options, metadata={'log_details': log_details})
+                monstre = require_option(monstre, options, decision_name='cloche_du_deja_vu_debut')
                 Jeu.defausse.remove(monstre)
                 Jeu.donjon.rajoute_en_haut_de_la_pile(monstre)
                 self.gagnePV(3, joueur, log_details)
@@ -3295,11 +3318,14 @@ class ClocheDuDejaVu(Objet):
         # (defausse de preference, sinon sa propre pile)
         faciles = self._fodder(Jeu)
         if faciles:
-            monstre = faciles[0]
+            options = tuple(faciles)
+            monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'cloche_du_deja_vu_urgence', subject=carte, options=options, metadata={'log_details': log_details})
+            monstre = require_option(monstre, options, decision_name='cloche_du_deja_vu_urgence')
             Jeu.defausse.remove(monstre)
         else:
-            candidats = [m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet)]
-            monstre = min(candidats, key=lambda m: 0 if m.is_X else m.puissance)
+            options = tuple(m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet))
+            monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'cloche_du_deja_vu_urgence', subject=carte, options=options, metadata={'log_details': log_details})
+            monstre = require_option(monstre, options, decision_name='cloche_du_deja_vu_urgence')
             joueur.pile_monstres_vaincus.remove(monstre)
         Jeu.donjon.rajoute_en_haut_de_la_pile(monstre)
         self.gagnePV(3, joueur, log_details)
@@ -3897,12 +3923,18 @@ class BottesDePoncage(Objet):
 class BombeDeMidas(Objet):
     def __init__(self):
         super().__init__("Bombe de Midas", True)
+    def _candidats(self, joueur):
+        return [o for o in joueur.objets if o.intact and o is not self and o.pv_bonus < joueur.pv_total]
     def rules(self, joueur, carte, Jeu, log_details):
-        return not Jeu.traquenard_actif and _choisir_objet_a_sacrifier(joueur, Jeu, [self]) is not None
+        return not Jeu.traquenard_actif and bool(self._candidats(joueur))
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= joueur.pv_total and carte.puissance >= 5
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        sacrifie = _choisir_objet_a_sacrifier(joueur, Jeu, [self])
+        options = tuple(self._candidats(joueur))
+        if not options:
+            return
+        sacrifie = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE, 'bombe_de_midas_sacrifice', subject=carte, options=options, metadata={'log_details': log_details})
+        sacrifie = require_option(sacrifie, options, decision_name='bombe_de_midas_sacrifice')
         if sacrifie is None:
             return
         log_details.append(f"{joueur.nom} brise {sacrifie.nom} avec {self.nom}.")
