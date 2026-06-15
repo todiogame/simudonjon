@@ -7,11 +7,14 @@ from smoke_policy import (
     smoke_guardian_angel_attrape_reves_confidence,
     smoke_hero_policy_can_decline,
     smoke_invalid_policy_rejected,
+    smoke_combat_object_policy_can_chain_multiple_objects,
     smoke_legacy_wrappers,
     smoke_object_policy_can_choose_target,
     smoke_object_policy_can_decline_combat_use,
     smoke_ordonnanceur_policy_equivalence,
+    smoke_policy_map_routes_by_actor,
     smoke_policy_controls_object_order,
+    smoke_random_policy_runs_full_games,
     smoke_traquenard_legality_independent_from_object_policy,
     smoke_unavailable_hero_ability_does_not_call_policy,
     smoke_traquenard_detects_chevalier_dragon_candidate,
@@ -67,12 +70,24 @@ def test_invalid_policy_rejected():
     smoke_invalid_policy_rejected()
 
 
+def test_combat_object_policy_can_chain_multiple_objects():
+    smoke_combat_object_policy_can_chain_multiple_objects()
+
+
 def test_default_policy_normalizes_legacy_worthit():
     smoke_default_policy_normalizes_legacy_worthit()
 
 
 def test_donjon_worker_batch_runs():
     smoke_donjon_worker_batch_runs()
+
+
+def test_random_policy_runs_full_games():
+    smoke_random_policy_runs_full_games()
+
+
+def test_policy_map_routes_by_actor():
+    smoke_policy_map_routes_by_actor()
 
 
 def test_traquenard_legality_independent_from_object_policy():

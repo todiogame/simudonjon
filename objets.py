@@ -141,13 +141,15 @@ class Objet:
 
     def en_combat(self, joueur, carte, Jeu, log_details):
         if self.condition(joueur, carte, Jeu, log_details):
-            try:
-                self.combat_effet(joueur, carte, Jeu, log_details)
-            except ExecutionImpossible:
-                # Troll : la carte ne peut pas etre executee, l'objet reste range
-                log_details.append(f"{carte.titre} ne peut pas être exécuté : {joueur.nom} n'utilise pas {self.nom}.")
+            self.apply_in_combat(joueur, carte, Jeu, log_details)
 
-    
+    def apply_in_combat(self, joueur, carte, Jeu, log_details):
+        try:
+            self.combat_effet(joueur, carte, Jeu, log_details)
+        except ExecutionImpossible:
+            # Troll : la carte ne peut pas etre executee, l'objet reste range
+            log_details.append(f"{carte.titre} ne peut pas etre execute : {joueur.nom} n'utilise pas {self.nom}.")
+
     def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         if(joueur_proprietaire.dans_le_dj):

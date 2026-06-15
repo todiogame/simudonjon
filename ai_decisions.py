@@ -8,6 +8,7 @@ class DecisionKind(Enum):
     SHOULD_FLEE = auto()
 
     USE_OBJECT_IN_COMBAT = auto()
+    CHOOSE_COMBAT_OBJECT = auto()
     USE_HERO_ABILITY = auto()
     USE_ACTIVE_OBJECT = auto()
     USE_EVENT_EFFECT = auto()
@@ -56,6 +57,10 @@ class DecisionContext:
         return self.metadata.get(key, default)
 
 
+class CombatObjectChoice(Enum):
+    RESOLVE_NOW = auto()
+
+
 def require_bool(value, decision_name):
     if type(value) is not bool:
         raise ValueError(f"Policy must return bool for {decision_name}, got {type(value).__name__}")
@@ -67,6 +72,14 @@ def require_option(value, options, *, allow_none=False, decision_name="decision"
         return None
     if value not in options:
         raise ValueError(f"Policy returned invalid option for {decision_name}")
+    return value
+
+
+def require_combat_object_choice(value, options, *, decision_name="decision"):
+    if value is CombatObjectChoice.RESOLVE_NOW:
+        return value
+    if value not in options:
+        raise ValueError(f"Policy returned invalid combat object choice for {decision_name}")
     return value
 
 

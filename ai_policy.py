@@ -2,7 +2,29 @@ import math
 import random
 from collections import Counter
 
-from ai_decisions import DecisionKind
+from ai_decisions import CombatObjectChoice, DecisionKind
+
+
+class RoutedDungeonPolicy:
+    """Dispatches decisions to a per-seat policy while preserving the legacy `.decide()` API."""
+
+    def __init__(self, default_policy, assignments=None):
+        self.default_policy = default_policy
+        self._by_actor_id = {}
+        if assignments:
+            self.set_assignments(assignments)
+
+    def set_assignments(self, assignments):
+        self._by_actor_id = {id(actor): policy for actor, policy in assignments.items()}
+
+    def policy_for(self, actor):
+        if actor is None:
+            return self.default_policy
+        return self._by_actor_id.get(id(actor), self.default_policy)
+
+    def decide(self, context):
+        return self.policy_for(context.actor).decide(context)
+
 
 class DefaultDungeonPolicy:
     """Default behavior-preserving dungeon AI policy.
@@ -26,6 +48,19 @@ class DefaultDungeonPolicy:
     def decide_use_object_in_combat(self, context):
         objet = context.meta('objet') or (context.options[0] if context.options else None)
         return bool(objet.worthit(context.actor, context.subject, context.game, context.meta('log_details', [])))
+
+    def decide_choose_combat_object(self, context):
+        options = tuple(context.options)
+        if not options:
+            return CombatObjectChoice.RESOLVE_NOW
+        actor = context.actor
+        subject = context.subject
+        game = context.game
+        log_details = context.meta('log_details', [])
+        for objet in options:
+            if objet.worthit(actor, subject, game, log_details):
+                return objet
+        return CombatObjectChoice.RESOLVE_NOW
 
     def decide_use_hero_ability(self, context):
         phase = context.phase
@@ -682,8 +717,156 @@ class DefaultDraftPolicy:
         return draft._choisirObjet_legacy(i, objets_joueurs, mains_joueurs, personnages_assigner, log)
 
 
+class RandomPolicy:
+    """Legal-but-random dungeon policy used as a separation check and RL baseline."""
+
+    _BOOL_DECISIONS = {
+        DecisionKind.SHOULD_REPLAY,
+        DecisionKind.SHOULD_FLEE,
+        DecisionKind.USE_OBJECT_IN_COMBAT,
+        DecisionKind.USE_HERO_ABILITY,
+        DecisionKind.USE_ACTIVE_OBJECT,
+        DecisionKind.USE_EVENT_EFFECT,
+        DecisionKind.SHOULD_FACE_SPECIAL_CARD,
+        DecisionKind.SHOULD_KEEP_SPECIAL_MONSTER,
+        DecisionKind.PAY_TRAQUENARD,
+    }
+
+    def decide(self, context):
+        method_name = f"decide_{context.kind.name.lower()}"
+        method = getattr(self, method_name, None)
+        if method is None:
+            raise NotImplementedError(f"No policy handler for {context.kind}")
+        return method(context)
+
+    def decide_should_replay(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_should_flee(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_use_object_in_combat(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_choose_combat_object(self, context):
+        options = tuple(context.options)
+        return random.choice(options + (CombatObjectChoice.RESOLVE_NOW,))
+
+    def decide_use_hero_ability(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_use_active_object(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_use_event_effect(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_should_face_special_card(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_should_keep_special_monster(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_pay_traquenard(self, context):
+        return bool(random.getrandbits(1))
+
+    def decide_choose_object(self, context):
+        return self._random_option(context.options, allow_none=context.meta('allow_none', False))
+
+    def decide_choose_objects(self, context):
+        options = list(context.options)
+        if not options:
+            return ()
+        if context.phase == 'gants_de_gaia_discards':
+            count = min(context.meta('count', 0), len(options))
+            return tuple(random.sample(options, count))
+        if context.phase == 'inventeur_discards':
+            count = min(2, len(options))
+            return tuple(random.sample(options, count))
+        count = random.randint(0, len(options))
+        return tuple(random.sample(options, count))
+
+    def decide_choose_object_to_sacrifice(self, context):
+        allow_none = context.meta('allow_none', False) or context.phase == 'break_object_limon'
+        return self._random_option(context.options, allow_none=allow_none)
+
+    def decide_choose_object_to_repair(self, context):
+        return self._random_option(context.options)
+
+    def decide_choose_monster(self, context):
+        return self._random_option(context.options)
+
+    def decide_choose_monsters(self, context):
+        options = list(context.options)
+        if not options:
+            return ()
+        max_count = min(context.meta('max_count', len(options)), len(options))
+        count = random.randint(0, max_count)
+        return tuple(random.sample(options, count))
+
+    def decide_choose_card(self, context):
+        return self._random_option(context.options, allow_none=context.meta('allow_none', False))
+
+    def decide_choose_cards(self, context):
+        options = list(context.options)
+        if not options:
+            return ()
+        count = random.randint(0, len(options))
+        return tuple(random.sample(options, count))
+
+    def decide_choose_cards_split(self, context):
+        cards = list(context.options)
+        random.shuffle(cards)
+        split_index = random.randint(0, len(cards))
+        return tuple(cards[:split_index]), tuple(cards[split_index:])
+
+    def decide_choose_player(self, context):
+        return self._random_option(context.options)
+
+    def decide_choose_power(self, context):
+        options = tuple(context.options) or tuple((context.meta('scores') or context.meta('counts') or {}).keys())
+        return self._random_option(options, allow_none=context.phase == 'boule_de_cristal')
+
+    def decide_choose_type(self, context):
+        options = tuple(context.options) or tuple((context.meta('scores') or context.meta('counts') or {}).keys())
+        return self._random_option(options)
+
+    def decide_choose_category(self, context):
+        return self._random_option(context.options)
+
+    def decide_choose_destination(self, context):
+        return self._random_option(context.options)
+
+    def decide_choose_order(self, context):
+        return self._shuffled(context.options)
+
+    def decide_order_objects(self, context):
+        return self._shuffled(context.options)
+
+    def decide_order_cards(self, context):
+        return self._shuffled(context.options)
+
+    def decide_draft_pick(self, context):
+        return self._random_option(context.options)
+
+    def _random_option(self, options, allow_none=False):
+        options = tuple(options)
+        if allow_none:
+            choices = options + (None,)
+            return random.choice(choices)
+        if not options:
+            return None
+        return random.choice(options)
+
+    def _shuffled(self, options):
+        values = list(options)
+        random.shuffle(values)
+        return tuple(values)
+
+
 _DEFAULT_DUNGEON_POLICY = DefaultDungeonPolicy()
 _DEFAULT_DRAFT_POLICY = DefaultDraftPolicy()
+_RANDOM_DUNGEON_POLICY = RandomPolicy()
 
 
 def default_dungeon_policy():
@@ -692,3 +875,7 @@ def default_dungeon_policy():
 
 def default_draft_policy():
     return _DEFAULT_DRAFT_POLICY
+
+
+def random_dungeon_policy():
+    return _RANDOM_DUNGEON_POLICY

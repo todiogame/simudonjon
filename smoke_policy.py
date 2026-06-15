@@ -2,8 +2,8 @@ import random
 
 import numpy as np
 
-from ai_policy import DefaultDungeonPolicy, default_draft_policy, default_dungeon_policy
-from ai_decisions import DecisionContext, DecisionKind, require_option
+from ai_policy import DefaultDungeonPolicy, default_draft_policy, default_dungeon_policy, random_dungeon_policy
+from ai_decisions import CombatObjectChoice, DecisionContext, DecisionKind, require_option
 from draft import _charger_priors, _draft_rapide
 from heros import BeteDeLEvenement, Princesse, SANS_HOOK_PERSO, persos_disponibles
 from joueurs import Joueur
@@ -143,21 +143,68 @@ def smoke_unavailable_hero_ability_does_not_call_policy():
 
 def smoke_object_policy_can_decline_combat_use():
     class DeclineObjectsPolicy(DefaultDungeonPolicy):
-        def decide_use_object_in_combat(self, context):
+        def decide_should_flee(self, context):
             return False
+
+        def decide_choose_combat_object(self, context):
+            return CombatObjectChoice.RESOLVE_NOW
 
     hache = HacheDeGlace()
     joueur = Joueur("O", Princesse(1), [hache])
     joueur.pv_total = 5
     carte = CarteMonstre("Dragon test", 9, ["Dragon"])
     carte.dommages = 10
-    jeu = GameState([joueur], DonjonDeck(), [], DeclineObjectsPolicy())
+    deck = _single_card_deck(carte)
+    jeu = GameState([joueur], deck, [], DeclineObjectsPolicy())
 
-    hache.en_combat(joueur, carte, jeu, [])
+    ordonnanceur([joueur], deck, [], False, policy=DeclineObjectsPolicy())
 
     assert not carte.executed
     assert hache.intact
     assert joueur.pile_monstres_vaincus == []
+
+
+def smoke_combat_object_policy_can_chain_multiple_objects():
+    trace = []
+
+    class TraceObject(Objet):
+        def __init__(self, nom, delta):
+            super().__init__(nom, actif=True)
+            self.delta = delta
+
+        def combat_effet(self, joueur, carte, Jeu, log_details):
+            trace.append(self.nom)
+            self.compteur += 1
+            carte.dommages = max(0, carte.dommages - self.delta)
+
+    class ScriptedCombatPolicy(DefaultDungeonPolicy):
+        def decide_should_flee(self, context):
+            return False
+
+        def decide_choose_combat_object(self, context):
+            if context.meta('combat_step', 0) == 0:
+                return next(objet for objet in context.options if objet.nom == "Second")
+            if context.meta('combat_step', 0) == 1:
+                return next(objet for objet in context.options if objet.nom == "Premier")
+            return CombatObjectChoice.RESOLVE_NOW
+
+    premier = TraceObject("Premier", 2)
+    second = TraceObject("Second", 3)
+    joueur = Joueur("C", Princesse(1), [premier, second])
+    joueur.pv_total = 10
+    carte = CarteMonstre("Dragon test", 9, ["Dragon"])
+    carte.dommages = 6
+    deck = _single_card_deck(carte)
+
+    ordonnanceur([joueur], deck, [], False, policy=ScriptedCombatPolicy())
+
+    assert joueur.pile_monstres_vaincus
+    assert carte.executed is False
+    assert carte.dommages == 4
+    assert joueur.pv_total == 6
+    assert premier.compteur == 1
+    assert second.compteur == 1
+    assert trace == ["Second", "Premier"]
 
 
 def smoke_object_policy_can_choose_target():
@@ -200,22 +247,25 @@ def smoke_policy_controls_object_order():
 
 
 def smoke_invalid_policy_rejected():
-    class InvalidBoolPolicy(DefaultDungeonPolicy):
-        def decide_use_object_in_combat(self, context):
+    class InvalidCombatChoicePolicy(DefaultDungeonPolicy):
+        def decide_should_flee(self, context):
+            return False
+
+        def decide_choose_combat_object(self, context):
             return None
 
     hache = HacheDeGlace()
     joueur = Joueur("I", Princesse(1), [hache])
     carte = CarteMonstre("Dragon test", 9, ["Dragon"])
     carte.dommages = 10
-    jeu = GameState([joueur], DonjonDeck(), [], InvalidBoolPolicy())
+    deck = _single_card_deck(carte)
 
     try:
-        hache.en_combat(joueur, carte, jeu, [])
+        ordonnanceur([joueur], deck, [], False, policy=InvalidCombatChoicePolicy())
     except ValueError:
         pass
     else:
-        raise AssertionError("invalid bool policy return was not rejected")
+        raise AssertionError("invalid combat choice policy return was not rejected")
 
     assert not carte.executed
     assert hache.intact
@@ -240,7 +290,42 @@ def smoke_default_policy_normalizes_legacy_worthit():
 def smoke_donjon_worker_batch_runs():
     import donjon
 
-    donjon._simuler_batch((2, 12345))
+    for seed in (12345, 12346, 12347, 12348):
+        donjon._simuler_batch((128, seed))
+
+
+def smoke_random_policy_runs_full_games():
+    for seed in range(16):
+        joueurs, objets_simu = _build_players(1000 + seed)
+        ordonnanceur(joueurs, DonjonDeck(), objets_simu, False, policy=random_dungeon_policy())
+
+
+def smoke_policy_map_routes_by_actor():
+    class ReverseInventoryPolicy(DefaultDungeonPolicy):
+        def decide_order_objects(self, context):
+            return tuple(reversed(context.options))
+
+    class KeepInventoryPolicy(DefaultDungeonPolicy):
+        def decide_order_objects(self, context):
+            return tuple(context.options)
+
+    joueurs = [
+        Joueur("A", Princesse(1), [HacheDeGlace(), ArmureEnCuir()]),
+        Joueur("B", Princesse(1), [HacheDeGlace(), ArmureEnCuir()]),
+    ]
+    jeu = GameState(
+        joueurs,
+        DonjonDeck(),
+        [],
+        policy={0: ReverseInventoryPolicy(), 1: KeepInventoryPolicy()},
+    )
+
+    assert joueurs[0].policy is jeu.policy
+    assert joueurs[1].policy is jeu.policy
+    joueurs[0].ordonner_objets_pour_ia()
+    joueurs[1].ordonner_objets_pour_ia()
+    assert [objet.nom for objet in joueurs[0].objets] == ["Armure en cuir", "Hache de Glace"]
+    assert [objet.nom for objet in joueurs[1].objets] == ["Hache de Glace", "Armure en cuir"]
 
 
 def smoke_traquenard_legality_independent_from_object_policy():

@@ -1,8 +1,15 @@
 import random
 import numpy as np
 
-from ai_policy import default_dungeon_policy
-from ai_decisions import DecisionContext, DecisionKind, require_bool, require_option
+from ai_policy import RoutedDungeonPolicy, default_dungeon_policy
+from ai_decisions import (
+    CombatObjectChoice,
+    DecisionContext,
+    DecisionKind,
+    require_bool,
+    require_combat_object_choice,
+    require_option,
+)
 from objets import *
 from objets import SANS_HOOK_OBJET
 from joueurs import Joueur
@@ -26,9 +33,39 @@ class GameState:
         self.donjon = donjon
         self.objets_dispo = objets_dispo
         self.nb_joueurs = len(joueurs)
-        self.policy = policy or default_dungeon_policy()
+        self.policy = self._normalize_policy(policy)
         for joueur in self.joueurs:
             joueur.policy = self.policy
+
+    def _normalize_policy(self, policy):
+        if isinstance(policy, RoutedDungeonPolicy):
+            return policy
+        if policy is None or hasattr(policy, 'decide'):
+            return RoutedDungeonPolicy(policy or default_dungeon_policy())
+        if isinstance(policy, (list, tuple)):
+            if len(policy) != len(self.joueurs):
+                raise ValueError("Per-seat policy list must match the number of players")
+            assignments = {joueur: seat_policy for joueur, seat_policy in zip(self.joueurs, policy)}
+            return RoutedDungeonPolicy(default_dungeon_policy(), assignments)
+        if isinstance(policy, dict):
+            assignments = {}
+            for key, seat_policy in policy.items():
+                joueur = self._resolve_policy_player(key)
+                assignments[joueur] = seat_policy
+            return RoutedDungeonPolicy(default_dungeon_policy(), assignments)
+        raise TypeError(f"Unsupported dungeon policy container: {type(policy).__name__}")
+
+    def _resolve_policy_player(self, key):
+        if key in self.joueurs:
+            return key
+        if isinstance(key, int):
+            return self.joueurs[key]
+        if isinstance(key, str):
+            for joueur in self.joueurs:
+                if joueur.nom == key:
+                    return joueur
+            raise KeyError(f"Unknown player name for policy routing: {key}")
+        raise KeyError(f"Unsupported player key for policy routing: {key!r}")
 
 _TRAQ_ACTION_KIND_OVERRIDES = {
     DagueDeBrutus: 'execute',
@@ -208,6 +245,64 @@ def _decision_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, 
         metadata={'candidate': candidat, 'log_details': log_details},
     ))
     return require_bool(decision, 'PAY_TRAQUENARD')
+
+
+def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, attempted_ids=()):
+    attempted_ids = set(attempted_ids)
+    candidates = []
+    for objet in joueur.objets:
+        if type(objet) in O_COMBAT or id(objet) in attempted_ids:
+            continue
+        try:
+            legal = objet.can_use_in_combat(joueur, carte, Jeu, [])
+        except Exception:
+            legal = False
+        if legal:
+            candidates.append(objet)
+    return tuple(candidates)
+
+
+def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT):
+    attempted_ids = set()
+    combat_step = 0
+    while True:
+        if carte.executed or joueur.fuite_reussie or not joueur.vivant or joueur.pv_total <= 0:
+            return carte, False, False
+        if getattr(Jeu, 'carte_ignoree', False):
+            return carte, True, False
+        if getattr(Jeu, 'carte_forcee', None) is not None:
+            return Jeu.carte_forcee, False, True
+
+        options = _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, attempted_ids)
+        if not options:
+            return carte, False, False
+
+        decision = Jeu.policy.decide(DecisionContext(
+            kind=DecisionKind.CHOOSE_COMBAT_OBJECT,
+            actor=joueur,
+            game=Jeu,
+            phase='choose_combat_object',
+            subject=carte,
+            options=options,
+            metadata={
+                'allow_resolve_now': True,
+                'combat_step': combat_step,
+                'attempted_object_ids': tuple(attempted_ids),
+                'log_details': log_details,
+            },
+        ))
+        decision = require_combat_object_choice(decision, options, decision_name='CHOOSE_COMBAT_OBJECT')
+        if decision is CombatObjectChoice.RESOLVE_NOW:
+            return carte, False, False
+
+        attempted_ids.add(id(decision))
+        decision.apply_in_combat(joueur, carte, Jeu, log_details)
+        combat_step += 1
+
+        if getattr(Jeu, 'carte_ignoree', False):
+            return carte, True, False
+        if getattr(Jeu, 'carte_forcee', None) is not None:
+            return Jeu.carte_forcee, False, True
 
 def _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC):
     effet_carte = carte.effet
@@ -854,24 +949,19 @@ def ordonnanceur(joueurs, donjon, objets_dispo, log=True, policy=None):
                             effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
                             remplacement = True
                         else:
-                            # comprehension = copie filtree: certains objets se retirent de la liste (Hache de Glace).
-                            # Chaque objet decide via ses rules/worthit ; on ne s'arrete que si le monstre
-                            # est execute ou si le joueur a fui (l'ancien break a dommages<=0 empechait
-                            # d'executer les monstres a 0 dommages comme la Fee des que le 1er objet etait inerte).
-                            for objet in [o for o in joueur.objets if type(o) not in O_COMBAT]:
-                                if carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
-                                    break
-                                objet.en_combat(joueur, carte, Jeu, log_details)
-                                if getattr(Jeu, 'carte_ignoree', False):
-                                    carte_ignoree = True
-                                if not joueur.vivant or joueur.pv_total <= 0:
-                                    break
-                                if getattr(Jeu, 'carte_forcee', None) is not None:
-                                    carte = Jeu.carte_forcee
-                                    del Jeu.carte_forcee
-                                    effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
-                                    remplacement = True
-                                    break
+                            carte_courante, combat_ignoree, remplacement = _run_combat_object_phase(
+                                joueur,
+                                carte,
+                                Jeu,
+                                log_details,
+                                O_COMBAT,
+                            )
+                            carte = carte_courante
+                            if combat_ignoree:
+                                carte_ignoree = True
+                            if remplacement:
+                                del Jeu.carte_forcee
+                                effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
                         if not remplacement or carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
                             break
                     if not joueur.vivant or joueur.pv_total <= 0:
