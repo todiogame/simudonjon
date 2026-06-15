@@ -264,6 +264,9 @@ class Joueur:
         return carte.puissance in puissances_couvertes or any(t in types_couverts for t in types)
 
     def deciderDeRejouer(self, Jeu, log_details):
+        from ai_policy import default_dungeon_policy
+        policy = getattr(Jeu, 'policy', None) or default_dungeon_policy()
+        return policy.should_replay(self, Jeu, log_details)
         """IA: decide de repiocher volontairement au lieu de passer son tour."""
         if not self.dans_le_dj or Jeu.donjon.vide or Jeu.traquenard_actif or self.doit_passer:
             return False
@@ -556,6 +559,9 @@ class Joueur:
     politique_fuite = 'ev'  # attribut de classe : 'ev' (esperance) ou 'seuils' (ancienne)
 
     def deciderDeFuir(self, Jeu, log_details):
+        from ai_policy import default_dungeon_policy
+        policy = getattr(Jeu, 'policy', None) or default_dungeon_policy()
+        return policy.should_flee(self, Jeu, log_details)
         # --- NOUVELLE Condition : Interdiction de fuir au Tour 1 ---
         # On vérifie l'attribut 'tour' du joueur lui-même
         if self.tour == 1:
@@ -615,6 +621,14 @@ class Joueur:
             log_details.append(f"L'objet casse {objet.nom} donnait {objet.pv_bonus}PV ca fait ca de moins. PV restant {self.pv_total}PV")
 
     def decideBriseObjet(self, jeu, log_details):
+        from ai_policy import default_dungeon_policy
+        policy = getattr(jeu, 'policy', None) or default_dungeon_policy()
+        objet = policy.choose_object_to_break(self, jeu, log_details)
+        if objet is None:
+            return None
+        objet.destroy(self, jeu, log_details)
+        self._gerer_pv_bonus(objet, log_details)
+        return objet
         """Brise l'objet le moins utile, sans se tuer si possible.
 
         La valeur d'un objet cibleur (types_tags/puissance_tags) fond avec le

@@ -32,6 +32,7 @@ from simu import ordonnanceur
 from monstres import DonjonDeck
 from heros import _classes_persos
 from draft import calculer_priors, _charger_priors, score_pick
+from ai_policy import default_draft_policy
 
 # ==============================================
 # Configuration
@@ -113,7 +114,7 @@ def score_pick_soiree(objet, perso, priors, mes_medailles, medailles_adverses):
 
 
 # --- Draft complet aux priors (avant chaque manche) ---
-def draft_soiree(persos, medailles, log=False):
+def draft_soiree(persos, medailles, log=False, draft_policy=None):
     """Draft : mains de 7 qui tournent, chacun garde 6 objets.
     Retourne (builds, objets_restants_pour_la_manche)."""
     pool = list(objets_disponibles)
@@ -121,6 +122,7 @@ def draft_soiree(persos, medailles, log=False):
         o.repare()
     nb = len(persos)
     priors = _charger_priors()
+    draft_policy = draft_policy or default_draft_policy()
 
     mains = []
     for _ in range(nb):
@@ -136,8 +138,8 @@ def draft_soiree(persos, medailles, log=False):
         for i in range(nb):
             if len(builds[i]) < NB_OBJETS_PAR_JOUEUR and mains[i]:
                 adverses = total_medailles - medailles[i]
-                choix = max(mains[i], key=lambda o: score_pick_soiree(
-                    o, persos[i], priors, medailles[i], adverses))
+                choix = draft_policy.choose_party_draft_object(
+                    mains[i], persos[i], priors, medailles[i], adverses)
                 builds[i].append(choix)
                 mains[i].remove(choix)
                 if log:
@@ -150,7 +152,7 @@ def draft_soiree(persos, medailles, log=False):
 
 
 # --- Une soirée complète ---
-def jouer_soiree(log=False):
+def jouer_soiree(log=False, draft_policy=None, dungeon_policy=None):
     """Joue une soirée et retourne (index_vainqueur, historique, infos).
     historique = liste de manches ; une manche = liste par joueur de
     (nom_perso, [noms objets draftés], win, mort, fui, poncé, etat_avant, delta_medailles)."""
@@ -167,6 +169,7 @@ def jouer_soiree(log=False):
     historique = []
     vainqueur_idx = None
     manche = 0
+    draft_policy = draft_policy or default_draft_policy()
     while True:
         manche += 1
         if manche > MAX_MANCHES_PAR_SOIREE:
@@ -188,10 +191,10 @@ def jouer_soiree(log=False):
                        for i in range(nb_joueurs)]
         medailles_avant = list(medailles)
 
-        builds, objets_restants = draft_soiree(persos, medailles, log)
+        builds, objets_restants = draft_soiree(persos, medailles, log, draft_policy)
         joueurs = [Joueur(noms[i], persos[i], builds[i], medailles=medailles[i])
                    for i in range(nb_joueurs)]
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), SEUIL_PV_ESSAI_FUITE, objets_restants, log)
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), SEUIL_PV_ESSAI_FUITE, objets_restants, log, policy=dungeon_policy)
 
         enregistrement = []
         for i, j in enumerate(joueurs):

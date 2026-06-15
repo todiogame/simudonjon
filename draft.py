@@ -14,6 +14,7 @@ from joueurs import Joueur              # Classe Joueur
 from simu import ordonnanceur         # Moteur de simulation de partie
 from monstres import DonjonDeck       # Gestion du deck de donjon
 from heros import persos_disponibles # Liste globale des instances Perso
+from ai_policy import default_draft_policy
 
 # ==============================================
 # Configuration
@@ -74,7 +75,7 @@ def _charger_priors():
         }
     return _PRIORS
 
-def _draft_rapide(persos, priors_par_joueur, epsilon=0.0):
+def _draft_rapide(persos, priors_par_joueur, epsilon=0.0, draft_policy=None):
     """Draft complet aux priors seuls (mains de 7 qui tournent, 6 picks chacun),
     sans Monte-Carlo. priors_par_joueur : un dict de priors par siege (le meme pour
     tous en self-play). epsilon : part de picks uniformes (exploration).
@@ -83,6 +84,7 @@ def _draft_rapide(persos, priors_par_joueur, epsilon=0.0):
     for o in pool:
         o.repare()
     nb = len(persos)
+    draft_policy = draft_policy or default_draft_policy()
     mains = []
     for _ in range(nb):
         main = random.sample(pool, min(7, len(pool)))
@@ -94,11 +96,8 @@ def _draft_rapide(persos, priors_par_joueur, epsilon=0.0):
         suivantes = [[] for _ in range(nb)]
         for i in range(nb):
             if len(builds[i]) < 6 and mains[i]:
-                if epsilon and random.random() < epsilon:
-                    choix = random.choice(mains[i])
-                else:
-                    priors = priors_par_joueur[i]
-                    choix = max(mains[i], key=lambda o: score_pick(o, persos[i], priors))
+                priors = priors_par_joueur[i]
+                choix = draft_policy.choose_fast_draft_object(mains[i], persos[i], priors, epsilon)
                 builds[i].append(choix)
                 mains[i].remove(choix)
             suivantes[(i + 1) % nb] = mains[i]
@@ -274,7 +273,7 @@ def calculWinrate(combinaison, objets_autres_joueurs, perso_joueur, persos_autre
 
 
 # --- Choix d'objet par l'IA pendant le draft ---
-def choisirObjet(i, objets_joueurs, mains_joueurs, personnages_assigner, log):
+def _choisirObjet_legacy(i, objets_joueurs, mains_joueurs, personnages_assigner, log):
     """Choisit un objet dans la main :
     - picks 1 a MC_PICKS_A_PARTIR_DE : priors (winrate objet + synergie perso), quasi gratuit ;
     - derniers picks : Monte-Carlo a graines communes sur les MC_NB_CANDIDATS meilleurs candidats."""
@@ -333,14 +332,20 @@ def choisirObjet(i, objets_joueurs, mains_joueurs, personnages_assigner, log):
     return meilleur_objet
 
 
+def choisirObjet(i, objets_joueurs, mains_joueurs, personnages_assigner, log, draft_policy=None):
+    draft_policy = draft_policy or default_draft_policy()
+    return draft_policy.choose_draft_object(i, objets_joueurs, mains_joueurs, personnages_assigner, log)
+
+
 # --- Simulation d'un draft complet ---
-def draftGame(noms_joueurs, personnages_assigner, log=False):
+def draftGame(noms_joueurs, personnages_assigner, log=False, draft_policy=None):
     """Simule le processus de draft pour un set de joueurs/personnages."""
     objets_disponibles_simu = list(objets_disponibles)
     for o in objets_disponibles_simu: o.repare()
     persos_disponibles_simu = list(persos_disponibles)
     for p in persos_disponibles_simu: p.capacite_utilisee = False
     nb_joueurs = len(noms_joueurs)
+    draft_policy = draft_policy or default_draft_policy()
 
     mains_joueurs = []
     for _ in range(nb_joueurs):
@@ -362,7 +367,7 @@ def draftGame(noms_joueurs, personnages_assigner, log=False):
         for i in range(nb_joueurs):
             if len(objets_joueurs[i]) < 6 and mains_joueurs[i]:
                 if log: print(f"{noms_joueurs[i]}({personnages_assigner[i].nom}) choisit parmi: {[obj.nom for obj in mains_joueurs[i]]}")
-                objet_choisi = choisirObjet(i, objets_joueurs, mains_joueurs, personnages_assigner, log)
+                objet_choisi = choisirObjet(i, objets_joueurs, mains_joueurs, personnages_assigner, log, draft_policy)
                 if objet_choisi:
                     objets_joueurs[i].append(objet_choisi)
                     try:
