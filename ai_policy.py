@@ -172,10 +172,12 @@ class DefaultDungeonPolicy:
             return min(options, key=lambda m: 0 if m.is_X else m.puissance)
         if phase == 'barbecue_du_ponceur':
             return max(options, key=lambda m: 0 if m.is_X else m.puissance)
-        if phase in {'cloche_du_deja_vu_debut', 'cloche_du_deja_vu_urgence'}:
+        if phase in {'cloche_du_deja_vu_urgence_pile', 'cloche_du_deja_vu_urgence'}:
             return min(options, key=lambda m: 0 if m.is_X else m.puissance)
         if phase == 'fouet_du_fourbe':
-            return max(options, key=lambda m: 0 if m.is_X else m.puissance)
+            return options[0]
+        if phase in {'cloche_du_deja_vu_debut', 'cloche_du_deja_vu_urgence_defausse'}:
+            return options[0]
         if phase == 'soulstorm_monster':
             joueur = context.actor
             couverts = [m for m in options if self._passive_line_covers_card(joueur, m)]
@@ -200,6 +202,13 @@ class DefaultDungeonPolicy:
 
     def decide_choose_monsters(self, context):
         options = context.options
+        if context.phase == 'couteaux_de_lancer':
+            max_count = context.meta('max_count', len(options))
+            return tuple(sorted(
+                options,
+                key=lambda m: getattr(m, 'puissance_initiale', getattr(m, 'puissance', 0)),
+                reverse=True,
+            )[:max_count])
         if context.phase == 'pelle_du_fossoyeur':
             max_count = context.meta('max_count', len(options))
             golem_or = []
@@ -262,6 +271,14 @@ class DefaultDungeonPolicy:
         return options[0]
 
     def decide_choose_cards(self, context):
+        if context.phase == 'tambour_de_kui':
+            pv_total = context.meta('pv_total', context.actor.pv_total)
+            return tuple(
+                c for c in context.options
+                if not getattr(c, 'event', False)
+                and hasattr(c, 'puissance_initiale')
+                and c.puissance_initiale >= pv_total + 3
+            )
         return tuple(context.options)
 
     def decide_choose_cards_split(self, context):
@@ -312,6 +329,25 @@ class DefaultDungeonPolicy:
     def decide_choose_destination(self, context):
         if context.phase == 'anneau_du_vent':
             return 'bottom'
+        if context.phase == 'oeil_d_horus':
+            prochaine = context.meta('prochaine')
+            if (
+                prochaine is not None
+                and not getattr(prochaine, 'event', False)
+                and not getattr(prochaine, 'is_X', False)
+                and getattr(prochaine, 'puissance_initiale', 0) >= max(4, context.actor.pv_total)
+            ):
+                return 'bottom'
+            return 'keep'
+        if context.phase == 'oiseau_de_mauvais_augure':
+            prochaine = context.meta('prochaine')
+            bonne_carte = getattr(prochaine, 'event', False) or (
+                prochaine is not None
+                and not getattr(prochaine, 'event', False)
+                and not getattr(prochaine, 'is_X', False)
+                and getattr(prochaine, 'puissance_initiale', 0) <= 2
+            )
+            return 'bottom' if bonne_carte else 'keep'
         return context.options[0] if context.options else None
 
     def decide_choose_order(self, context):
@@ -321,6 +357,22 @@ class DefaultDungeonPolicy:
         return tuple(sorted(context.options, key=lambda obj: obj.priorite, reverse=True))
 
     def decide_order_cards(self, context):
+        if context.phase == 'fil_du_destin':
+            actor = context.actor
+
+            def danger(card):
+                if getattr(card, 'event', False):
+                    return -1
+                if actor.peut_executer_facilement(card):
+                    return 0
+                return 4 if getattr(card, 'is_X', False) else getattr(card, 'puissance_initiale', 0)
+
+            cards = tuple(context.options)
+            ordered_indexes = sorted(range(len(cards)), key=lambda i: danger(cards[i]))
+            if not ordered_indexes:
+                return ()
+            new_order = [ordered_indexes[0]] + sorted(ordered_indexes[1:], key=lambda i: -danger(cards[i]))
+            return tuple(cards[i] for i in new_order)
         return tuple(context.options)
 
     def should_replay(self, joueur, Jeu, log_details):

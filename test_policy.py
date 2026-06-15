@@ -19,6 +19,13 @@ from smoke_policy import (
     smoke_traquenard_detects_avatar_late_candidate,
     smoke_defausse_monstre_de_pile_policy_choice,
     smoke_barbecue_du_ponceur_policy_target,
+    smoke_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases,
+    smoke_default_policy_cloche_du_deja_vu_split_choices,
+    smoke_default_policy_couteaux_de_lancer_targets_strongest,
+    smoke_default_policy_divination_destinations_preserve_keep_bottom_rules,
+    smoke_default_policy_fil_du_destin_orders_by_old_danger_heuristic,
+    smoke_default_policy_fouet_du_fourbe_preserves_first_matching_choice,
+    smoke_default_policy_tambour_de_kui_discards_dangerous_visible_monsters,
     smoke_fruit_du_destin_policy_category,
     smoke_fruit_du_destin_invalid_category_rejected,
 )
@@ -110,3 +117,31 @@ def test_fruit_du_destin_policy_category():
 
 def test_fruit_du_destin_invalid_category_rejected():
     smoke_fruit_du_destin_invalid_category_rejected()
+
+
+def test_default_policy_couteaux_de_lancer_targets_strongest():
+    smoke_default_policy_couteaux_de_lancer_targets_strongest()
+
+
+def test_default_policy_tambour_de_kui_discards_dangerous_visible_monsters():
+    smoke_default_policy_tambour_de_kui_discards_dangerous_visible_monsters()
+
+
+def test_default_policy_divination_destinations_preserve_keep_bottom_rules():
+    smoke_default_policy_divination_destinations_preserve_keep_bottom_rules()
+
+
+def test_default_policy_fil_du_destin_orders_by_old_danger_heuristic():
+    smoke_default_policy_fil_du_destin_orders_by_old_danger_heuristic()
+
+
+def test_default_policy_fouet_du_fourbe_preserves_first_matching_choice():
+    smoke_default_policy_fouet_du_fourbe_preserves_first_matching_choice()
+
+
+def test_default_policy_cloche_du_deja_vu_split_choices():
+    smoke_default_policy_cloche_du_deja_vu_split_choices()
+
+
+def test_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases():
+    smoke_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases()

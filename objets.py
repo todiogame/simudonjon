@@ -3319,13 +3319,13 @@ class ClocheDuDejaVu(Objet):
         faciles = self._fodder(Jeu)
         if faciles:
             options = tuple(faciles)
-            monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'cloche_du_deja_vu_urgence', subject=carte, options=options, metadata={'log_details': log_details})
-            monstre = require_option(monstre, options, decision_name='cloche_du_deja_vu_urgence')
+            monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'cloche_du_deja_vu_urgence_defausse', subject=carte, options=options, metadata={'log_details': log_details})
+            monstre = require_option(monstre, options, decision_name='cloche_du_deja_vu_urgence_defausse')
             Jeu.defausse.remove(monstre)
         else:
             options = tuple(m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet))
-            monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'cloche_du_deja_vu_urgence', subject=carte, options=options, metadata={'log_details': log_details})
-            monstre = require_option(monstre, options, decision_name='cloche_du_deja_vu_urgence')
+            monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'cloche_du_deja_vu_urgence_pile', subject=carte, options=options, metadata={'log_details': log_details})
+            monstre = require_option(monstre, options, decision_name='cloche_du_deja_vu_urgence_pile')
             joueur.pile_monstres_vaincus.remove(monstre)
         Jeu.donjon.rajoute_en_haut_de_la_pile(monstre)
         self.gagnePV(3, joueur, log_details)
@@ -4084,15 +4084,6 @@ class FilDuDestin(Objet):
             return
         positions = list(range(donjon.index, donjon.index + 4))
         cartes = [donjon.cartes[donjon.ordre[p]] for p in positions]
-        def danger(c):
-            if getattr(c, 'event', False):
-                return -1
-            if joueur.peut_executer_facilement(c):
-                return 0
-            return 4 if c.is_X else c.puissance_initiale
-        tri = sorted(range(4), key=lambda i: danger(cartes[i]))
-        nouvel_ordre = [tri[0]] + sorted(tri[1:], key=lambda i: -danger(cartes[i]))
-        anciens = [donjon.ordre[p] for p in positions]
         options = tuple(cartes)
         nouvel_ordre = _decide(joueur, Jeu, DecisionKind.ORDER_CARDS, 'fil_du_destin', subject=self, options=options, metadata={'log_details': log_details})
         if set(map(id, nouvel_ordre)) != set(map(id, options)) or len(nouvel_ordre) != len(options):

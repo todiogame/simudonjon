@@ -8,7 +8,7 @@ from draft import _charger_priors, _draft_rapide
 from heros import BeteDeLEvenement, Princesse, SANS_HOOK_PERSO, persos_disponibles
 from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
-from objets import ArmureEnCuir, AttrapeReves, CouteauSuisse, HacheDeGlace, Objet, SANS_HOOK_OBJET, objets_disponibles
+from objets import ArmureEnCuir, AttrapeReves, ClocheDuDejaVu, CouteauSuisse, HacheDeGlace, Objet, SANS_HOOK_OBJET, objets_disponibles
 from party import draft_soiree
 from simu import GameState, _premier_candidat_traquenard, ordonnanceur
 
@@ -282,6 +282,18 @@ def _single_card_deck(card):
     return deck
 
 
+def _deck_with_cards(*cards):
+    deck = DonjonDeck()
+    deck.cartes = list(cards)
+    for i, card in enumerate(deck.cartes):
+        card.index = i
+        card.ordre = i
+    deck.nb_cartes = len(cards)
+    deck.ordre = np.arange(len(cards))
+    deck.index = 0
+    return deck
+
+
 def smoke_fortune_wheel_policy_can_decline():
     class DeclineWheelPolicy(DefaultDungeonPolicy):
         def decide_use_hero_ability(self, context):
@@ -547,6 +559,172 @@ def smoke_fruit_du_destin_invalid_category_rejected():
     assert joueur.pv_total == pv_pre
 
 
+def smoke_default_policy_couteaux_de_lancer_targets_strongest():
+    joueur = Joueur("K", Princesse(1), [])
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    faible = CarteMonstre("Rat faible", 2, ["Rat"])
+    fort = CarteMonstre("Dragon fort", 9, ["Dragon"])
+    moyen = CarteMonstre("Golem moyen", 5, ["Golem"])
+    haut = CarteMonstre("Demon haut", 7, ["Demon"])
+
+    choix = jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.CHOOSE_MONSTERS,
+        actor=joueur,
+        game=jeu,
+        phase='couteaux_de_lancer',
+        options=(faible, fort, moyen, haut),
+        metadata={'max_count': 3},
+    ))
+
+    assert choix == (fort, haut, moyen)
+
+
+def smoke_default_policy_tambour_de_kui_discards_dangerous_visible_monsters():
+    joueur = Joueur("L", Princesse(1), [])
+    joueur.pv_total = 4
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    dangereux = CarteMonstre("Dragon test", 7, ["Dragon"])
+    limite_basse = CarteMonstre("Golem test", 6, ["Golem"])
+    event = CarteEvent("Heal test", "", "HEAL")
+
+    choix = jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.CHOOSE_CARDS,
+        actor=joueur,
+        game=jeu,
+        phase='tambour_de_kui',
+        options=(dangereux, limite_basse, event),
+        metadata={'pv_total': joueur.pv_total},
+    ))
+
+    assert choix == (dangereux,)
+
+
+def smoke_default_policy_divination_destinations_preserve_keep_bottom_rules():
+    joueur = Joueur("M", Princesse(1), [])
+    joueur.pv_total = 5
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    fort = CarteMonstre("Dragon test", 9, ["Dragon"])
+    faible = CarteMonstre("Squelette test", 2, ["Squelette"])
+    event = CarteEvent("Heal test", "", "HEAL")
+
+    def decide(phase, card):
+        return jeu.policy.decide(DecisionContext(
+            kind=DecisionKind.CHOOSE_DESTINATION,
+            actor=joueur,
+            game=jeu,
+            phase=phase,
+            subject=None,
+            options=('keep', 'bottom'),
+            metadata={'prochaine': card},
+        ))
+
+    assert decide('oeil_d_horus', fort) == 'bottom'
+    assert decide('oeil_d_horus', faible) == 'keep'
+    assert decide('oiseau_de_mauvais_augure', event) == 'bottom'
+    assert decide('oiseau_de_mauvais_augure', faible) == 'bottom'
+    assert decide('oiseau_de_mauvais_augure', fort) == 'keep'
+
+
+def smoke_default_policy_fil_du_destin_orders_by_old_danger_heuristic():
+    joueur = Joueur("N", Princesse(1), [])
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    orc = CarteMonstre("Orc test", 3, ["Orc"])
+    dragon = CarteMonstre("Dragon test", 9, ["Dragon"])
+    event = CarteEvent("Heal test", "", "HEAL")
+    mimic = CarteMonstre("Mimique test", 0, [], effet="MIMIC", is_X=True)
+
+    choix = jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.ORDER_CARDS,
+        actor=joueur,
+        game=jeu,
+        phase='fil_du_destin',
+        options=(orc, dragon, event, mimic),
+    ))
+
+    assert choix == (event, dragon, mimic, orc)
+
+
+def smoke_default_policy_fouet_du_fourbe_preserves_first_matching_choice():
+    joueur = Joueur("O", Princesse(1), [])
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    premier = CarteMonstre("Squelette faible", 2, ["Squelette"])
+    second = CarteMonstre("Dragon squelette", 9, ["Squelette", "Dragon"])
+
+    choix = jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.CHOOSE_MONSTER,
+        actor=joueur,
+        game=jeu,
+        phase='fouet_du_fourbe',
+        options=(premier, second),
+    ))
+
+    assert choix is premier
+
+
+def smoke_default_policy_cloche_du_deja_vu_split_choices():
+    joueur = Joueur("P", Princesse(1), [])
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+    premier_fodder = CarteMonstre("Gobelin premier", 1, ["Gobelin"])
+    second_fodder = CarteMonstre("Gobelin second", 1, ["Gobelin"])
+    faible = CarteMonstre("Squelette faible", 2, ["Squelette"])
+    fort = CarteMonstre("Dragon fort", 9, ["Dragon"])
+
+    fodder = jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.CHOOSE_MONSTER,
+        actor=joueur,
+        game=jeu,
+        phase='cloche_du_deja_vu_urgence_defausse',
+        options=(premier_fodder, second_fodder),
+    ))
+    pile = jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.CHOOSE_MONSTER,
+        actor=joueur,
+        game=jeu,
+        phase='cloche_du_deja_vu_urgence_pile',
+        options=(fort, faible),
+    ))
+
+    assert fodder is premier_fodder
+    assert pile is faible
+
+
+def smoke_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases():
+    class RecordingPolicy(DefaultDungeonPolicy):
+        def __init__(self):
+            self.phases = []
+
+        def decide_choose_monster(self, context):
+            self.phases.append(context.phase)
+            return super().decide_choose_monster(context)
+
+    policy = RecordingPolicy()
+    joueur = Joueur("Q", Princesse(1), [])
+    attack = CarteMonstre("Dragon attaque", 9, ["Dragon"])
+    attack.dommages = 9
+    fodder = CarteMonstre("Gobelin fodder", 1, ["Gobelin"])
+    pile_faible = CarteMonstre("Squelette faible", 2, ["Squelette"])
+    pile_fort = CarteMonstre("Dragon fort", 9, ["Dragon"])
+    deck = _deck_with_cards(attack, fodder, pile_faible, pile_fort)
+    jeu = GameState([joueur], deck, [], policy)
+    cloche = ClocheDuDejaVu()
+
+    jeu.defausse.append(fodder)
+    cloche.combat_effet(joueur, attack, jeu, [])
+    assert policy.phases == ['cloche_du_deja_vu_urgence_defausse']
+    assert deck.cartes[deck.ordre[deck.index]] is fodder
+
+    policy = RecordingPolicy()
+    joueur = Joueur("R", Princesse(1), [])
+    joueur.pile_monstres_vaincus = [pile_fort, pile_faible]
+    deck = _deck_with_cards(attack, fodder, pile_faible, pile_fort)
+    jeu = GameState([joueur], deck, [], policy)
+    cloche = ClocheDuDejaVu()
+
+    cloche.combat_effet(joueur, attack, jeu, [])
+    assert policy.phases == ['cloche_du_deja_vu_urgence_pile']
+    assert deck.cartes[deck.ordre[deck.index]] is pile_faible
+
+
 if __name__ == "__main__":
     smoke_traquenard_detects_chevalier_dragon_candidate()
     smoke_traquenard_detects_docteur_de_peste_candidate()
@@ -555,6 +733,13 @@ if __name__ == "__main__":
     smoke_barbecue_du_ponceur_policy_target()
     smoke_fruit_du_destin_policy_category()
     smoke_fruit_du_destin_invalid_category_rejected()
+    smoke_default_policy_couteaux_de_lancer_targets_strongest()
+    smoke_default_policy_tambour_de_kui_discards_dangerous_visible_monsters()
+    smoke_default_policy_divination_destinations_preserve_keep_bottom_rules()
+    smoke_default_policy_fil_du_destin_orders_by_old_danger_heuristic()
+    smoke_default_policy_fouet_du_fourbe_preserves_first_matching_choice()
+    smoke_default_policy_cloche_du_deja_vu_split_choices()
+    smoke_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases()
     smoke_ordonnanceur_policy_equivalence()
     smoke_legacy_wrappers()
     smoke_draft_policy_equivalence()
