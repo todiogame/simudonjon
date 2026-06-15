@@ -24,7 +24,7 @@ for sim in range(3000):
         for o in objs:
             objets_simu.remove(o)
         joueurs.append(Joueur(nom, persos[i], objs, int(random.random() < 0.3)))
-    vainqueur, js = ordonnanceur(joueurs, DonjonDeck(), 5, objets_simu, False)
+    vainqueur, js = ordonnanceur(joueurs, DonjonDeck(), objets_simu, False)
     etat = repr([(j.nom, j.personnage_nom, j.pv_total, j.score_final, j.vivant,
                   j.fuite_reussie, j.dans_le_dj,
                   [m.titre for m in j.pile_monstres_vaincus]) for j in js])

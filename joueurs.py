@@ -179,8 +179,17 @@ class Joueur:
 
     def ordonner_objets_pour_ia(self, phase='inventory'):
         from ai_policy import default_dungeon_policy
+        from ai_decisions import DecisionContext, DecisionKind, require_permutation
         policy = self.policy or default_dungeon_policy()
-        self.objets = list(policy.order_player_objects(self, tuple(self.objets), phase=phase))
+        options = tuple(self.objets)
+        decision = policy.decide(DecisionContext(
+            kind=DecisionKind.ORDER_OBJECTS,
+            actor=self,
+            game=None,
+            phase=phase,
+            options=options,
+        ))
+        self.objets = list(require_permutation(decision, options, decision_name='order_player_objects'))
 
     def trier_objets_par_priorite(self):
         # Compatibility wrapper: object order is an AI policy decision.
@@ -271,52 +280,15 @@ class Joueur:
         return carte.puissance in puissances_couvertes or any(t in types_couverts for t in types)
 
     def deciderDeRejouer(self, Jeu, log_details):
-        from ai_policy import default_dungeon_policy
-        policy = getattr(Jeu, 'policy', None) or default_dungeon_policy()
-        return policy.should_replay(self, Jeu, log_details)
-        """IA: decide de repiocher volontairement au lieu de passer son tour."""
-        if not self.dans_le_dj or Jeu.donjon.vide or Jeu.traquenard_actif or self.doit_passer:
-            return False
-
-        # 1) la prochaine carte est connue (objets de divination): decision informee
-        carte_connue = self.connait_prochaine_carte(Jeu)
-        if carte_connue is not None:
-            if getattr(carte_connue, 'event', False):
-                log_details.append(f"{self.nom} sait qu'un évènement arrive et continue de piocher.")
-                return True
-            if not getattr(carte_connue, 'is_X', False):
-                if self.peut_executer_facilement(carte_connue):
-                    log_details.append(f"{self.nom} sait que {carte_connue.titre} arrive et peut le gérer: il continue.")
-                    return True
-                if carte_connue.puissance <= 1 and self.pv_total >= 4:
-                    return True
-            return False  # la suite est connue et mauvaise: on passe
-
-        # Repioche a l'aveugle: seulement si la pioche est quasi gratuite (aucune carte
-        # restante ne fait plus de 2 degats). Encaisser des degats pour du tempo declenche
-        # la fuite anticipee et fait perdre plus de points qu'il n'en rapporte.
-        # Early-exit: on s'arrete a la premiere carte dangereuse (cas ultra-majoritaire).
-        couverture = self._couverture_objets()
-        donjon = Jeu.donjon
-        for i in donjon.ordre[donjon.index:]:
-            c = donjon.cartes[i]
-            if getattr(c, 'event', False):
-                continue
-            if self._degats_attendus(c, Jeu) > 2 and not self.peut_executer_facilement(c, couverture):
-                return False
-
-        # 2) objets qui recompensent plusieurs monstres vaincus dans le meme tour
-        for objet in self.objets:
-            objectif = getattr(objet, 'objectif_multi_kill', 0)
-            if objet.intact and objectif:
-                besoin = objectif - self.monstres_ajoutes_ce_tour
-                if 0 < besoin <= 2 and self.monstres_ajoutes_ce_tour >= 1:
-                    log_details.append(f"{self.nom} continue de piocher pour activer {objet.nom}.")
-                    return True
-
-        # 3) la pioche est quasi gratuite pour nous: continuer a poncer le Donjon
-        log_details.append(f"{self.nom} ne risque plus rien et continue de poncer le Donjon.")
-        return True
+        from ai_decisions import DecisionContext, DecisionKind, require_bool
+        decision = Jeu.policy.decide(DecisionContext(
+            kind=DecisionKind.SHOULD_REPLAY,
+            actor=self,
+            game=Jeu,
+            phase='replay',
+            metadata={'log_details': log_details},
+        ))
+        return require_bool(decision, 'SHOULD_REPLAY')
 
     def _nb_options_combat(self):
         # Objets actifs intacts qui peuvent reellement proteger: hook de combat ou
@@ -566,61 +538,16 @@ class Joueur:
     politique_fuite = 'ev'  # attribut de classe : 'ev' (esperance) ou 'seuils' (ancienne)
 
     def deciderDeFuir(self, Jeu, log_details):
-        from ai_policy import default_dungeon_policy
-        policy = getattr(Jeu, 'policy', None) or default_dungeon_policy()
-        return policy.should_flee(self, Jeu, log_details)
-        # --- NOUVELLE Condition : Interdiction de fuir au Tour 1 ---
-        # On vérifie l'attribut 'tour' du joueur lui-même
-        if self.tour == 1:
-            # Pas besoin de vérifier les autres conditions si c'est le tour 1
-            # log_details.append(f"--> {self.nom} NE TENTE PAS LA FUITE (Tour 1).")
-            return False # On ne fuit jamais au premier tour
-        # --- Fin Nouvelle Condition ---
+        from ai_decisions import DecisionContext, DecisionKind, require_bool
+        decision = Jeu.policy.decide(DecisionContext(
+            kind=DecisionKind.SHOULD_FLEE,
+            actor=self,
+            game=Jeu,
+            phase='flee',
+            metadata={'log_details': log_details},
+        ))
+        return require_bool(decision, 'SHOULD_FLEE')
 
-        # Certains objets (Ceinture du Ponceur) interdisent de tenter la fuite avec moins de 6 PV
-        if self.pv_total < 6 and any(getattr(objet, 'bloque_fuite_pv_bas', False) and objet.intact for objet in self.objets):
-            return False
-
-        # La prochaine carte est connue (objets de divination): decision informee
-        carte_connue = self.connait_prochaine_carte(Jeu)
-        if carte_connue is not None and not getattr(carte_connue, 'is_X', False):
-            if getattr(carte_connue, 'event', False):
-                return False  # un evenement nous attend: aucune raison de fuir
-            if self.peut_executer_facilement(carte_connue) or carte_connue.puissance <= 2:
-                return False  # la prochaine carte est gerable
-            if (carte_connue.puissance >= self.pv_total
-                    and self._nb_options_combat() <= 1):
-                log_details.append(f"==> {self.nom} sait que {carte_connue.titre} arrive et TENTE LA FUITE.")
-                return True
-
-        # Dernier joueur encore vivant : fuir verrouille la victoire.
-        joueurs_vivants_compte = sum(1 for j in Jeu.joueurs if j.vivant)
-        if joueurs_vivants_compte <= 1 and self.vivant:
-            log_details.append(f"==> {self.nom} DECIDE DE TENTER LA FUITE (car dernier joueur vivant).")
-            return True
-
-        # Coeur de la decision, selon la politique du joueur
-        if self.politique_fuite == 'ev':
-            veut_fuir = self._decision_fuite_ev(Jeu)
-        else:
-            veut_fuir = self._decision_fuite_seuils(Jeu)
-        if not veut_fuir:
-            return False
-
-        # Blocage fuyard : fuir avec moins de points qu'un fuyard = defaite assuree,
-        # autant continuer a marquer (ou mourir en essayant).
-        a_battre = max((j.getScoreActuel(log_details) for j in Jeu.joueurs
-                        if j is not self and j.fuite_reussie), default=-1)
-        if a_battre >= 0:
-            mes_monstres = self.getScoreActuel(log_details)
-            if a_battre > mes_monstres:
-                # log_details.append(f"==> {self.nom} NE TENTE PAS LA FUITE (bloqué par un fuyard à {a_battre} MV).")
-                return False
-            log_details.append(f"--> {self.nom} DECIDE DE TENTER LA FUITE (Un fuyard a {a_battre} MV, il a {mes_monstres} MV)")
-        else:
-            log_details.append(f"--> {self.nom} DECIDE DE TENTER LA FUITE (Aucun score n'a encore ete posé)")
-        return True
-        
     def _gerer_pv_bonus(self, objet, log_details):
         """Gère la perte des PV bonus lors de la destruction d'un objet"""
         if objet.pv_bonus:
@@ -628,9 +555,17 @@ class Joueur:
             log_details.append(f"L'objet casse {objet.nom} donnait {objet.pv_bonus}PV ca fait ca de moins. PV restant {self.pv_total}PV")
 
     def decideBriseObjet(self, jeu, log_details):
-        from ai_policy import default_dungeon_policy
-        policy = getattr(jeu, 'policy', None) or default_dungeon_policy()
-        objet = policy.choose_object_to_break(self, jeu, log_details)
+        from ai_decisions import DecisionContext, DecisionKind, require_option
+        objets_intacts = tuple(o for o in self.objets if o.intact)
+        objet = jeu.policy.decide(DecisionContext(
+            kind=DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE,
+            actor=self,
+            game=jeu,
+            phase='break_object_limon',
+            options=objets_intacts,
+            metadata={'reason': 'limon', 'log_details': log_details},
+        ))
+        objet = require_option(objet, objets_intacts, allow_none=True, decision_name='break_object_limon')
         if objet is None:
             return None
         objet.destroy(self, jeu, log_details)

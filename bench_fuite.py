@@ -60,7 +60,7 @@ def _batch(args):
             j.politique_fuite = 'ev' if i in sieges_ev else 'seuils'
             joueurs.append(j)
             medailles_avant.append(j.medailles)
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), 6, objets_simu, False)
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), objets_simu, False)
         for i, j in enumerate(joueurs):
             s = stats[j.politique_fuite]
             s['played'] += 1

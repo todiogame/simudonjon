@@ -57,7 +57,7 @@ def _batch(args):
         if combine_politique:
             for i, j in enumerate(joueurs):
                 j.politique_fuite = 'ev' if i in sieges_a else 'seuils'
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), 6, restants, False)
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), restants, False)
         for i, j in enumerate(joueurs):
             cle = 'nouveaux' if i in sieges_a else 'anciens'
             stats[cle][1] += 1

@@ -2,6 +2,7 @@ import random
 import numpy as np
 
 from ai_policy import default_dungeon_policy
+from ai_decisions import DecisionContext, DecisionKind, require_bool, require_option
 from objets import *
 from objets import SANS_HOOK_OBJET
 from joueurs import Joueur
@@ -191,40 +192,16 @@ def _decision_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, 
         return False
 
     joueur.traquenard_opportunites += 1
-    return Jeu.policy.should_pay_traquenard(joueur, carte, Jeu, candidat, log_details)
-    hp_gain = candidat['hp_gain']
-    hp_cost = candidat['hp_cost']
-    resource_cost = candidat['resource_cost']
-    success_prob = candidat['success_prob']
-    pv_depart = joueur.pv_total
-    pv_succes = pv_depart - hp_cost + hp_gain - 3
-    pv_echec = pv_depart - hp_cost - carte.dommages
-
-    if pv_succes <= 0 or (success_prob < 1.0 and pv_echec <= 0):
-        log_details.append(f"{joueur.nom} refuse de payer Traquenard: ligne suicidaire via {type(candidat['source']).__name__}.")
-        return False
-
-    gain_net = success_prob * (carte.dommages + hp_gain - 3) - hp_cost - resource_cost
-    strategie = getattr(joueur, 'strategie_traquenard', 'baseline')
-    if strategie == 'baseline':
-        decision = pv_depart > 4 and carte.dommages > 3
-    elif strategie == 'degats_purs':
-        decision = carte.dommages >= 3
-    elif strategie == 'net_gain':
-        decision = gain_net > 0
-    elif strategie == 'net_gain_prudent':
-        seuil = 1.0 if resource_cost <= 1.0 else 2.0
-        decision = carte.dommages >= 3 and gain_net >= seuil
-    else:
-        decision = pv_depart > 4 and carte.dommages > 3
-
-    if decision:
-        log_details.append(
-            f"{joueur.nom} paie Traquenard via {type(candidat['source']).__name__} "
-            f"[{strategie}] gain_net={gain_net:.2f}, PV succes={pv_succes:.1f}."
-        )
-    return decision
-
+    decision = Jeu.policy.decide(DecisionContext(
+        kind=DecisionKind.PAY_TRAQUENARD,
+        actor=joueur,
+        game=Jeu,
+        phase='traquenard',
+        subject=carte,
+        options=(candidat,),
+        metadata={'candidate': candidat, 'log_details': log_details},
+    ))
+    return require_bool(decision, 'PAY_TRAQUENARD')
 
 def _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC):
     effet_carte = carte.effet
@@ -371,7 +348,7 @@ def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, do
             and carte not in Jeu.defausse and carte.index not in Jeu.donjon.ordre[Jeu.donjon.index:]):
         donjon.rajoute_en_haut_de_la_pile(carte)
 
-def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=None):
+def ordonnanceur(joueurs, donjon, objets_dispo, log=True, policy=None):
     # arreter la simulation si on a un objet casse dans une main
     for j in joueurs:
         for o in j.objets:
@@ -490,7 +467,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
 
         joueur.jet_fuite_lance = False
 
-        if Jeu.policy.should_flee(joueur, Jeu, log_details):
+        if joueur.deciderDeFuir(Jeu, log_details):
             # Tentative de fuite
             joueur.jet_fuite = joueur.rollDice(Jeu, log_details) + joueur.calculer_modificateurs()
             if log:
@@ -544,11 +521,15 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
                     if gratuit:
                         log_details.append(f"{joueur.nom} ({joueur.perso_obj.nom}) ne défausse pas de monstre pour {carte.titre}.")
                     else:
-                        monstre_defausse = Jeu.policy.choose_repair_payment_monster(joueur, Jeu, log_details, monstres_defaussables)
+                        options = tuple(monstres_defaussables)
+                        monstre_defausse = Jeu.policy.decide(DecisionContext(kind=DecisionKind.CHOOSE_MONSTER, actor=joueur, game=Jeu, phase='repair_payment_monster', subject=carte, options=options, metadata={'log_details': log_details}))
+                        monstre_defausse = require_option(monstre_defausse, options, decision_name='repair_payment_monster')
                         joueur.pile_monstres_vaincus.remove(monstre_defausse)
                         Jeu.defausse.append(monstre_defausse)
                         log_details.append(f"{joueur.nom} défausse {monstre_defausse.titre} pour {carte.titre}.")
-                    objet_reparé = Jeu.policy.choose_repair_object(joueur, Jeu, log_details, objets_brisés)
+                    options = tuple(objets_brisés)
+                    objet_reparé = Jeu.policy.decide(DecisionContext(kind=DecisionKind.CHOOSE_OBJECT_TO_REPAIR, actor=joueur, game=Jeu, phase='repair_object', subject=carte, options=options, metadata={'log_details': log_details}))
+                    objet_reparé = require_option(objet_reparé, options, decision_name='repair_object')
                     objet_reparé.repare()
                     joueur.pv_total += objet_reparé.pv_bonus
                     log_details.append(f"Réparé {objet_reparé.nom} grâce à {carte.titre}. PV total augmenté de {objet_reparé.pv_bonus}, PV restant: {joueur.pv_total}")
@@ -579,11 +560,14 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
                 # Roue de l'infortune: defausser un monstre pour lancer le de et gagner autant de PV
                 gratuit = getattr(joueur.perso_obj, 'ignore_cout_evenements', False)
                 monstres_defaussables = [m for m in joueur.pile_monstres_vaincus if not (m.effet and "GOLD" in m.effet)]
-                if Jeu.policy.should_use_fortune_wheel(joueur, Jeu, log_details, gratuit, monstres_defaussables):  # IA: paye 1 PV de score si les PV sont bas
+                use_wheel = gratuit or bool(monstres_defaussables and joueur.pv_total <= 6)
+                if use_wheel:
                     if gratuit:
                         log_details.append(f"{joueur.nom} ({joueur.perso_obj.nom}) ne défausse pas de monstre pour {carte.titre}.")
                     else:
-                        monstre_defausse = Jeu.policy.choose_fortune_wheel_monster(joueur, Jeu, log_details, monstres_defaussables)
+                        options = tuple(monstres_defaussables)
+                        monstre_defausse = Jeu.policy.decide(DecisionContext(kind=DecisionKind.CHOOSE_MONSTER, actor=joueur, game=Jeu, phase='fortune_wheel_monster', subject=carte, options=options, metadata={'log_details': log_details}))
+                        monstre_defausse = require_option(monstre_defausse, options, decision_name='fortune_wheel_monster')
                         joueur.pile_monstres_vaincus.remove(monstre_defausse)
                         Jeu.defausse.append(monstre_defausse)
                         log_details.append(f"{joueur.nom} défausse {monstre_defausse.titre} pour {carte.titre}.")
@@ -599,7 +583,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
                         if getattr(autre_joueur.perso_obj, 'ignore_cout_evenements', False):
                             log_details.append(f"{autre_joueur.nom} ({autre_joueur.perso_obj.nom}) ignore {carte.titre}.")
                         elif autre_joueur.pile_monstres_vaincus:
-                            monstre_remis = Jeu.policy.choose_soulstorm_monster(autre_joueur, Jeu, log_details)
+                            options = tuple(autre_joueur.pile_monstres_vaincus)
+                            monstre_remis = Jeu.policy.decide(DecisionContext(kind=DecisionKind.CHOOSE_MONSTER, actor=autre_joueur, game=Jeu, phase='soulstorm_monster', subject=carte, options=options, metadata={'log_details': log_details}))
+                            monstre_remis = require_option(monstre_remis, options, decision_name='soulstorm_monster')
                             autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
                             donjon.ajouter_monstre(monstre_remis)
                             log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
@@ -642,7 +628,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
                 else:
                     # Sinon: peut defausser un objet intact pour en repiocher un
                     # IA: echange l'objet intact le moins prioritaire (sans sacrifier de gros PV bonus)
-                    objet_jete = Jeu.policy.choose_shop_discard(joueur, Jeu, log_details, objets_intacts)
+                    options = tuple(objets_intacts)
+                    objet_jete = Jeu.policy.decide(DecisionContext(kind=DecisionKind.CHOOSE_OBJECT, actor=joueur, game=Jeu, phase='shop_discard', subject=carte, options=options, metadata={'allow_none': True, 'log_details': log_details}))
+                    objet_jete = require_option(objet_jete, options, allow_none=True, decision_name='shop_discard')
                     if objet_jete is not None:
                         joueur.objets.remove(objet_jete)
                         joueur.pv_total -= objet_jete.pv_bonus
@@ -796,11 +784,16 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
                     if not Jeu.kraken_vu:
                         Jeu.kraken_vu = True
                         # Vérifier si le joueur a un objet intact avec puissance 10
-                        has_power_10, objet_confiance = Jeu.policy.should_face_kraken(joueur, carte, Jeu, log_details)
-                        if has_power_10:
-                            log_details.append(f"{joueur.nom} decide d'affronter {carte.titre} confiant avec ({objet_confiance.nom})")
-                        if not has_power_10:
-                            log_details.append(f"{joueur.nom} decide de remettre le {carte.titre} car il n'a pas d'objet pour le gerer.")
+                        wants_to_face = Jeu.policy.decide(DecisionContext(kind=DecisionKind.SHOULD_FACE_SPECIAL_CARD, actor=joueur, game=Jeu, phase='kraken_face_or_bottom', subject=carte, metadata={'log_details': log_details}))
+                        wants_to_face = require_bool(wants_to_face, 'kraken_face_or_bottom')
+                        if wants_to_face:
+                            objets_confiance = tuple(o for o in joueur.objets if o.intact)
+                            objet_confiance = Jeu.policy.decide(DecisionContext(kind=DecisionKind.CHOOSE_OBJECT, actor=joueur, game=Jeu, phase='kraken_confidence_object', subject=carte, options=objets_confiance, metadata={'allow_none': True, 'log_details': log_details}))
+                            objet_confiance = require_option(objet_confiance, objets_confiance, allow_none=True, decision_name='kraken_confidence_object')
+                            suffixe = f" confiant avec ({objet_confiance.nom})" if objet_confiance is not None else ''
+                            log_details.append(f"{joueur.nom} decide d'affronter {carte.titre}{suffixe}")
+                        else:
+                            log_details.append(f"{joueur.nom} decide de remettre le {carte.titre}.")
                             Jeu.donjon.rajoute_en_bas_de_la_pile(carte)
                             carte_ignoree = True
                     else:
@@ -808,16 +801,16 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
 
                 if effet_carte == "GUARDIAN_ANGEL":
                     # Vérifier si le joueur a un objet intact avec puissance 8
-                    has_power_8, objet_confiance = Jeu.policy.should_face_guardian_angel(joueur, carte, Jeu, log_details)
-                    if has_power_8:
-                        log_details.append(f"{joueur.nom} decide d'affronter {carte.titre} confiant avec ({objet_confiance.nom})")
-                    for objet in ():
-                        if objet.intact and (8 in objet.puissance_tags or objet.nom == "Attrape-Rêves"):
-                            log_details.append(f"{joueur.nom} decide d'affronter {carte.titre} confiant avec ({objet.nom})")
-                            has_power_8 = True
-                            break
-                    if not has_power_8:
-                        log_details.append(f"{joueur.nom} decide de defausser {carte.titre} car il n'a pas d'objet pour le gerer.")
+                    wants_to_face = Jeu.policy.decide(DecisionContext(kind=DecisionKind.SHOULD_FACE_SPECIAL_CARD, actor=joueur, game=Jeu, phase='guardian_angel_face_or_discard', subject=carte, metadata={'log_details': log_details}))
+                    wants_to_face = require_bool(wants_to_face, 'guardian_angel_face_or_discard')
+                    if wants_to_face:
+                        objets_confiance = tuple(o for o in joueur.objets if o.intact)
+                        objet_confiance = Jeu.policy.decide(DecisionContext(kind=DecisionKind.CHOOSE_OBJECT, actor=joueur, game=Jeu, phase='guardian_angel_confidence_object', subject=carte, options=objets_confiance, metadata={'allow_none': True, 'log_details': log_details}))
+                        objet_confiance = require_option(objet_confiance, objets_confiance, allow_none=True, decision_name='guardian_angel_confidence_object')
+                        suffixe = f" confiant avec ({objet_confiance.nom})" if objet_confiance is not None else ''
+                        log_details.append(f"{joueur.nom} decide d'affronter {carte.titre}{suffixe}")
+                    else:
+                        log_details.append(f"{joueur.nom} decide de defausser {carte.titre}.")
                         Jeu.defausse.append(carte)
                         carte_ignoree = True
                 
@@ -903,7 +896,9 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
                     # (si un objet de survie sauve le joueur, survit() ajoute la carte lui-meme)
                     if joueur.vivant and joueur.pv_total > 0: joueur.ajouter_monstre_vaincu(carte)
                 if effet_carte == "LIMON":
-                    objet_avale = Jeu.policy.choose_object_to_break(joueur, Jeu, log_details)
+                    options = tuple(o for o in joueur.objets if o.intact)
+                    objet_avale = Jeu.policy.decide(DecisionContext(kind=DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE, actor=joueur, game=Jeu, phase='break_object_limon', subject=carte, options=options, metadata={'reason': 'limon', 'log_details': log_details}))
+                    objet_avale = require_option(objet_avale, options, allow_none=True, decision_name='break_object_limon')
                     if objet_avale:
                         objet_avale.destroy(joueur, Jeu, log_details)
                         joueur._gerer_pv_bonus(objet_avale, log_details)
@@ -1002,7 +997,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
             # repioche volontaire (IA): poncer quand on est en forme, chasser un combo multi-kill,
             # ou exploiter la connaissance de la prochaine carte (objets de divination)
             if (joueur.dans_le_dj and not joueur.rejoue and not Jeu.execute_next_monster
-                    and not joueur.doit_passer and Jeu.policy.should_replay(joueur, Jeu, log_details)):
+                    and not joueur.doit_passer and joueur.deciderDeRejouer(Jeu, log_details)):
                 joueur.rejoue = True
 
             # si le joueur est toujours la, et que soit il doit passer, soit il ne doit pas rejouer et il ne peut pas executer le prochain monstre
@@ -1108,7 +1103,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True, policy=N
 
 def loguer_x_parties(x=1):
     # Constantes pour cette fonction de test/log
-    seuil_pv_essai_fuite = 6 # Cohérent avec prio.py/donjon.py
     nb_items_par_joueur = 5 # Nombre d'items pour les joueurs non-test
     nb_joueurs_total = 4    # On garde 4 joueurs pour ce mode log
     nom_joueur_test = "Sagarex"
@@ -1228,9 +1222,8 @@ def loguer_x_parties(x=1):
             print(f"  -> {j.nom} ({j.personnage_nom}) commence avec {j.pv_total} PV."+ (f" Il a {j.medailles} medaille(s)." if j.medailles else ""))
             print(f"     Objets: {[o.nom for o in j.objets]}")
 
-        print(f"Seuil de PV pour tenter la fuite : {seuil_pv_essai_fuite}\n")
 
         # Lancer la simulation
         deck = DonjonDeck()
         # Les objets restants dans objets_disponibles_partie sont passés à l'ordonnanceur
-        ordonnanceur(joueurs, deck, seuil_pv_essai_fuite, objets_disponibles_partie, True) # log=True
+        ordonnanceur(joueurs, deck, objets_disponibles_partie, True) # log=True

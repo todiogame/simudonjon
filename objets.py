@@ -2,6 +2,7 @@ import random
 import json
 import numpy as np
 from monstres import CarteMonstre
+from ai_decisions import DecisionContext, DecisionKind, require_bool, require_option, require_options
 # Lire le fichier JSON une fois au début
 with open('priorites_objets.json', 'r') as json_file:
     priorites_objets = json.load(json_file)
@@ -24,10 +25,16 @@ def nb_couleurs(objets, intacts_seulement=False):
     return len({o.couleur for o in objets
                 if o.couleur and (o.intact or not intacts_seulement)})
 
-def _policy_view(joueur, Jeu, phase=None, card=None):
-    from ai_policy import default_dungeon_policy, player_view
-    policy = getattr(Jeu, 'policy', None) or default_dungeon_policy()
-    return policy, player_view(joueur, Jeu, phase=phase, card=card)
+def _decide(joueur, Jeu, kind, phase, *, subject=None, options=(), metadata=None):
+    return Jeu.policy.decide(DecisionContext(
+        kind=kind,
+        actor=joueur,
+        game=Jeu,
+        phase=phase,
+        subject=subject,
+        options=tuple(options),
+        metadata=metadata,
+    ))
 
 class ExecutionImpossible(Exception):
     """Levee quand un objet tente d'executer une carte non executable (Troll).
@@ -57,13 +64,16 @@ class Objet:
     def condition(self, joueur, carte, Jeu, log_details): # check if we use the item or not
         if not self.intact or not self.rules(joueur, carte, Jeu, log_details):
             return False
-        policy, view = _policy_view(joueur, Jeu, phase='object_combat', card=carte)
-        return policy.should_use_object_in_combat(
-            view,
-            self,
-            carte,
-            log_details,
+        decision = _decide(
+            joueur,
+            Jeu,
+            DecisionKind.USE_OBJECT_IN_COMBAT,
+            'object_combat',
+            subject=carte,
+            options=(self,),
+            metadata={'objet': self, 'log_details': log_details},
         )
+        return require_bool(decision, 'USE_OBJECT_IN_COMBAT')
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         pass
@@ -438,8 +448,9 @@ class CouteauSuisse(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         objets_brisés = [obj for obj in joueur.objets if (not obj.intact and not obj.nom == "Couteau Suisse")]
         if objets_brisés:
-            policy, view = _policy_view(joueur, Jeu, phase='couteau_suisse', card=carte)
-            objet_repare = policy.choose_couteau_suisse_repair(view, tuple(objets_brisés))
+            options = tuple(objets_brisés)
+            objet_repare = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT_TO_REPAIR, 'couteau_suisse_repair', subject=carte, options=options, metadata={'source': self, 'log_details': log_details})
+            objet_repare = require_option(objet_repare, options, decision_name='couteau_suisse_repair')
             if objet_repare is None:
                 self.destroy(joueur, Jeu, log_details)
                 return
@@ -896,8 +907,9 @@ class GantsDeGaia(Objet):
             # on s'assure qu'on a deja joue tous nos actifs avant de piocher la suite
             if (len(objets_brisés) >= 2) or (len(objets_brisés) == 1 and len(objets_actifs_intacts) == 1 and objets_actifs_intacts[0] == self):
                 nombre_a_defausser = min(2, len(objets_brisés))
-                policy, view = _policy_view(joueur, Jeu, phase='gants_de_gaia')
-                objets_choisis = policy.choose_gants_de_gaia_discards(view, tuple(objets_brisés), nombre_a_defausser)
+                options = tuple(objets_brisés)
+                objets_choisis = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECTS, 'gants_de_gaia_discards', options=options, metadata={'count': nombre_a_defausser, 'log_details': log_details})
+                objets_choisis = require_options(objets_choisis, options, min_count=nombre_a_defausser, max_count=nombre_a_defausser, allow_empty=False, decision_name='gants_de_gaia_discards')
                 for objet_brisé in objets_choisis:
                     joueur.objets.remove(objet_brisé)
                     log_details.append(f"{joueur.nom} utilise {self.nom} pour défausser objet brisé: {objet_brisé.nom}")
@@ -1008,10 +1020,12 @@ class EnclumeInstable(Objet):
         if self.intact:
             objets_brisés_autres_joueurs = [obj for j in Jeu.joueurs if (j != joueur and j.dans_le_dj) for obj in j.objets if not obj.intact]
             if objets_brisés_autres_joueurs:
-                policy, view = _policy_view(joueur, Jeu, phase='enclume_instable')
-                objet_vole = policy.choose_enclume_instable_object(view, tuple(objets_brisés_autres_joueurs))
-                if objet_vole is None:
+                use = _decide(joueur, Jeu, DecisionKind.USE_ACTIVE_OBJECT, 'enclume_instable_use', options=(self,), metadata={'objet': self, 'log_details': log_details})
+                if not require_bool(use, 'enclume_instable_use'):
                     return
+                options = tuple(objets_brisés_autres_joueurs)
+                objet_vole = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT_TO_REPAIR, 'enclume_instable', options=options, metadata={'source': self, 'log_details': log_details})
+                objet_vole = require_option(objet_vole, options, decision_name='enclume_instable')
                 ancien_proprietaire = next(j for j in Jeu.joueurs if objet_vole in j.objets)
                 ancien_proprietaire.objets.remove(objet_vole)
                 joueur.ajouter_objet(objet_vole)
@@ -1252,10 +1266,9 @@ class CorneDAbordage(Objet):
         autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
         for autre_joueur in autres_joueurs_dans_le_dj:
             if autre_joueur.pile_monstres_vaincus:
-                policy, view = _policy_view(joueur, Jeu, phase='corne_dabordage')
-                monstre_volee = policy.choose_corne_dabordage_monster(view, autre_joueur, tuple(autre_joueur.pile_monstres_vaincus))
-                if monstre_volee is None:
-                    continue
+                options = tuple(autre_joueur.pile_monstres_vaincus)
+                monstre_volee = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'corne_dabordage', options=options, metadata={'victim': autre_joueur, 'source': self, 'log_details': log_details})
+                monstre_volee = require_option(monstre_volee, options, decision_name='corne_dabordage')
                 autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
                 joueur.ajouter_monstre_vaincu(monstre_volee)
                 log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}{' en ' + contexte if contexte else ''}")
@@ -1323,19 +1336,17 @@ class EspritDuDonjon(Objet):
                 log_details.append(f"{joueur.nom} utilise {self.nom}")
                 for autre_joueur in autres_joueurs_dans_le_dj:
                     if autre_joueur.pile_monstres_vaincus:
-                        policy, view = _policy_view(autre_joueur, Jeu, phase='esprit_du_donjon')
-                        monstre_remis = policy.choose_esprit_du_donjon_monster(view, autre_joueur, tuple(autre_joueur.pile_monstres_vaincus))
-                        if monstre_remis is None:
-                            continue
+                        options = tuple(autre_joueur.pile_monstres_vaincus)
+                        monstre_remis = _decide(autre_joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'esprit_du_donjon', options=options, metadata={'victim': autre_joueur, 'source': self, 'log_details': log_details})
+                        monstre_remis = require_option(monstre_remis, options, decision_name='esprit_du_donjon')
                         autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
                         Jeu.donjon.ajouter_monstre(monstre_remis)
                         log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
                 for autre_joueur in autres_joueurs_dans_le_dj:
                     if autre_joueur.pile_monstres_vaincus:
-                        policy, view = _policy_view(autre_joueur, Jeu, phase='esprit_du_donjon')
-                        monstre_remis = policy.choose_esprit_du_donjon_monster(view, autre_joueur, tuple(autre_joueur.pile_monstres_vaincus))
-                        if monstre_remis is None:
-                            continue
+                        options = tuple(autre_joueur.pile_monstres_vaincus)
+                        monstre_remis = _decide(autre_joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'esprit_du_donjon', options=options, metadata={'victim': autre_joueur, 'source': self, 'log_details': log_details})
+                        monstre_remis = require_option(monstre_remis, options, decision_name='esprit_du_donjon')
                         autre_joueur.pile_monstres_vaincus.remove(monstre_remis)
                         Jeu.donjon.ajouter_monstre(monstre_remis)
                         log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
@@ -1665,10 +1676,9 @@ class CanneAChep(Objet):
                 if not autre_joueur.vivant:
                     objets_intacts = [objet for objet in autre_joueur.objets if objet.intact]
                     if objets_intacts:
-                        policy, view = _policy_view(joueur, Jeu, phase='canne_a_chep')
-                        objet_vole = policy.choose_canne_a_chep_object(view, autre_joueur, tuple(objets_intacts))
-                        if objet_vole is None:
-                            continue
+                        options = tuple(objets_intacts)
+                        objet_vole = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT, 'canne_a_chep', options=options, metadata={'dead_player': autre_joueur, 'source': self, 'log_details': log_details})
+                        objet_vole = require_option(objet_vole, options, decision_name='canne_a_chep')
                         autre_joueur.objets.remove(objet_vole)
                         joueur.ajouter_objet(objet_vole)
                         log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {objet_vole.nom} de {autre_joueur.nom}.")
@@ -1939,8 +1949,9 @@ class PelleDuFossoyeur(Objet):
         log_details.append(f"{joueur.nom} utilise {self.nom}")
 
         MAX_CHOIX = 4 # Should always be 4 now
-        policy, view = _policy_view(joueur, Jeu, phase='pelle_du_fossoyeur')
-        monstres_choisis = list(policy.choose_pelle_du_fossoyeur_monsters(view, tuple(monstres_defausse), MAX_CHOIX))
+        options = tuple(monstres_defausse)
+        monstres_choisis = list(_decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTERS, 'pelle_du_fossoyeur', options=options, metadata={'max_count': MAX_CHOIX, 'source': self, 'log_details': log_details}))
+        monstres_choisis = list(require_options(monstres_choisis, options, max_count=MAX_CHOIX, decision_name='pelle_du_fossoyeur'))
         noms_choisis = [m.titre for m in monstres_choisis]
         log_details.append(f"--> Récupère {len(monstres_choisis)} monstres (priorité GolemOr>Dragon>Autre): {noms_choisis}")
 
@@ -2340,10 +2351,9 @@ class SacDeConstantinople(Objet):
             dragons = [monstre for monstre in autre_joueur.pile_monstres_vaincus
                        if any("Dragon" in type_carte for type_carte in monstre.types)]
             if dragons:
-                policy, view = _policy_view(joueur, Jeu, phase='sac_de_constantinople')
-                monstre_volee = policy.choose_sac_de_constantinople_dragon(view, autre_joueur, tuple(dragons))
-                if monstre_volee is None:
-                    continue
+                options = tuple(dragons)
+                monstre_volee = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'sac_de_constantinople', options=options, metadata={'victim': autre_joueur, 'source': self, 'log_details': log_details})
+                monstre_volee = require_option(monstre_volee, options, decision_name='sac_de_constantinople')
                 autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
                 joueur.ajouter_monstre_vaincu(monstre_volee)
                 log_details.append(f"{joueur.nom} vole {monstre_volee.titre} (Dragon) de {autre_joueur.nom}{' en ' + contexte if contexte else ''}")
@@ -2475,8 +2485,8 @@ def _choisir_objet_a_sacrifier(joueur, Jeu, exclus):
     candidats = [o for o in joueur.objets if o.intact and o not in exclus and o.pv_bonus < joueur.pv_total]
     if not candidats:
         return None
-    policy, view = _policy_view(joueur, Jeu, phase='object_sacrifice')
-    return policy.choose_object_to_sacrifice(view, tuple(candidats))
+    decision = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE, 'object_sacrifice', options=tuple(candidats))
+    return require_option(decision, tuple(candidats), decision_name='object_sacrifice')
 
 def _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, exclus):
     # Meme ordre de preference que le Limon glouton, mais on n'autorise pas
@@ -2484,15 +2494,16 @@ def _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, exclus):
     candidats = [o for o in joueur.objets if o.intact and o not in exclus and o.pv_bonus < joueur.pv_total]
     if not candidats:
         return None
-    policy, view = _policy_view(joueur, Jeu, phase='object_sacrifice_limon')
-    return policy.choose_object_to_sacrifice_like_limon(view, tuple(candidats))
+    decision = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE, 'object_sacrifice_limon', options=tuple(candidats), metadata={'reason': 'limon'})
+    return require_option(decision, tuple(candidats), decision_name='object_sacrifice_limon')
 
 
 def _pioche_deux_objets_garde_le_meilleur(joueur, Jeu, log_details, source):
     if len(Jeu.objets_dispo) >= 2:
         choix = random.sample(Jeu.objets_dispo, 2)
-        policy, view = _policy_view(joueur, Jeu, phase='draw_two_keep_one')
-        garde = policy.choose_draw_two_keep_object(view, tuple(choix), source)
+        options = tuple(choix)
+        garde = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT, 'draw_two_keep_one', options=options, metadata={'source': source, 'log_details': log_details})
+        garde = require_option(garde, options, decision_name='draw_two_keep_one')
         if garde is None:
             return
         jete = choix[0] if garde is choix[1] else choix[1]
@@ -2522,10 +2533,9 @@ def _repare_un_objet(joueur, Jeu, exclus, log_details, source):
     brises = [o for o in joueur.objets if not o.intact and o not in exclus]
     if not brises:
         return None
-    policy, view = _policy_view(joueur, Jeu, phase='repair_object')
-    objet_repare = policy.choose_repair_object(joueur, Jeu, log_details, tuple(brises))
-    if objet_repare is None:
-        return None
+    options = tuple(brises)
+    objet_repare = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT_TO_REPAIR, 'repair_object', options=options, metadata={'source': source, 'log_details': log_details})
+    objet_repare = require_option(objet_repare, options, decision_name='repair_object')
     objet_repare.repare()
     if objet_repare.pv_bonus:
         joueur.pv_total += objet_repare.pv_bonus
@@ -2604,13 +2614,9 @@ def _choisir_cible_sceptre_changeur(joueur, carte_courante, Jeu):
     ]
     if not restants:
         return None
-    policy, view = _policy_view(joueur, Jeu, phase='sceptre_changeur', card=carte_courante)
-    return policy.choose_sceptre_changeur_target(
-        view,
-        carte_courante,
-        tuple(restants),
-        lambda c: _score_sceptre_changeur(c, joueur, Jeu),
-    )
+    options = tuple(restants)
+    decision = _decide(joueur, Jeu, DecisionKind.CHOOSE_CARD, 'sceptre_changeur', subject=carte_courante, options=options, metadata={'score_key': lambda c: _score_sceptre_changeur(c, joueur, Jeu)})
+    return require_option(decision, options, allow_none=True, decision_name='sceptre_changeur')
 
 
 def _retire_du_donjon_et_melange(Jeu, carte):
@@ -2645,8 +2651,7 @@ def _choisir_puissance_epee_vengeresse(joueur, Jeu, objet_exclu):
         p = carte.puissance_initiale
         scores[p] = scores.get(p, 0) + joueur._degats_attendus(carte, Jeu)
         comptes[p] = comptes.get(p, 0) + 1
-    policy, view = _policy_view(joueur, Jeu, phase='epee_vengeresse')
-    return policy.choose_epee_vengeresse_power(view, scores, comptes, puissances_couvertes)
+    return _decide(joueur, Jeu, DecisionKind.CHOOSE_POWER, 'epee_vengeresse', metadata={'scores': scores, 'counts': comptes, 'covered_powers': puissances_couvertes})
 
 
 def _choisir_type_dague_vengeresse(joueur, Jeu, objet_exclu):
@@ -2661,8 +2666,7 @@ def _choisir_type_dague_vengeresse(joueur, Jeu, objet_exclu):
         for t in carte.types_initiaux:
             scores[t] = scores.get(t, 0) + danger
             comptes[t] = comptes.get(t, 0) + 1
-    policy, view = _policy_view(joueur, Jeu, phase='dague_vengeresse')
-    return policy.choose_dague_vengeresse_type(view, scores, comptes, types_couverts)
+    return _decide(joueur, Jeu, DecisionKind.CHOOSE_TYPE, 'dague_vengeresse', metadata={'scores': scores, 'counts': comptes, 'covered_types': types_couverts})
 
 # --- 1ere edition ---
 
@@ -2700,10 +2704,9 @@ class Imprimante(Objet):
         autres = [o for o in joueur.objets if o is not self and o.intact and type(o) is not Imprimante]
         if not autres:
             return
-        policy, view = _policy_view(joueur, Jeu, phase='imprimante')
-        modele = policy.choose_imprimante_model(view, tuple(autres))
-        if modele is None:
-            return
+        options = tuple(autres)
+        modele = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT, 'imprimante', options=options, metadata={'log_details': log_details})
+        modele = require_option(modele, options, decision_name='imprimante')
         copie = type(modele)()
         joueur.objets.remove(self)
         joueur.ajouter_objet(copie)
@@ -2905,8 +2908,8 @@ class AnneauDuVent(Objet):
         return carte.dommages >= joueur.pv_total
     def combat_effet(self, joueur, carte, Jeu, log_details):
         # remet le monstre dans le Donjon a la position de son choix (IA: tout en dessous)
-        policy, view = _policy_view(joueur, Jeu, phase='anneau_du_vent', card=carte)
-        destination = policy.choose_anneau_du_vent_destination(view, carte)
+        destination = _decide(joueur, Jeu, DecisionKind.CHOOSE_DESTINATION, 'anneau_du_vent', subject=carte, options=('top', 'bottom'), metadata={'log_details': log_details})
+        destination = require_option(destination, ('top', 'bottom'), decision_name='anneau_du_vent')
         self.remetDansDonjon(joueur, carte, Jeu, log_details, en_bas=(destination == 'bottom'))
         self.destroy(joueur, Jeu, log_details)
 
@@ -2930,8 +2933,8 @@ class BouleDeCristal(Objet):
             if isinstance(c, CarteMonstre) and not c.is_X:
                 comptes[c.puissance_initiale] = comptes.get(c.puissance_initiale, 0) + 1
         _, puissances_couvertes = _couverture_sans_objet(joueur, self)
-        policy, view = _policy_view(joueur, Jeu, phase='boule_de_cristal')
-        self.annonce = policy.choose_boule_de_cristal_power(view, comptes, puissances_couvertes)
+        self.annonce = _decide(joueur, Jeu, DecisionKind.CHOOSE_POWER, 'boule_de_cristal', options=tuple(comptes), metadata={'counts': comptes, 'covered_powers': puissances_couvertes})
+        self.annonce = require_option(self.annonce, tuple(comptes), allow_none=True, decision_name='boule_de_cristal')
         if self.annonce is not None:
             log_details.append(f"{joueur.nom} annonce la puissance {self.annonce} avec {self.nom}.")
     def rules(self, joueur, carte, Jeu, log_details):
@@ -2953,10 +2956,9 @@ class CraneDuNecromancien(Objet):
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages >= 3
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        policy, view = _policy_view(joueur, Jeu, phase='crane_du_necromancien', card=carte)
-        monstre = policy.choose_crane_du_necromancien_monster(view, tuple(self._candidats(joueur, carte)))
-        if monstre is None:
-            return
+        options = tuple(self._candidats(joueur, carte))
+        monstre = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTER, 'crane_du_necromancien', subject=carte, options=options, metadata={'source': self, 'log_details': log_details})
+        monstre = require_option(monstre, options, decision_name='crane_du_necromancien')
         joueur.pile_monstres_vaincus.remove(monstre)
         Jeu.defausse.append(monstre)
         log_details.append(f"{joueur.nom} défausse {monstre.titre} pour {self.nom}.")
@@ -3516,8 +3518,12 @@ class CoursierVolant(Objet):
             inutiles = [o for o in joueur.objets
                         if o.intact and o is not self and not o.actif and o.pv_bonus == 0]
             if inutiles:
-                policy, view = _policy_view(joueur, Jeu, phase='coursier_volant')
-                jete = policy.choose_coursier_volant_discard(view, tuple(inutiles))
+                options = tuple(inutiles)
+                use = _decide(joueur, Jeu, DecisionKind.USE_ACTIVE_OBJECT, 'coursier_volant_use', options=(self,), metadata={'objet': self, 'log_details': log_details})
+                if not require_bool(use, 'coursier_volant_use'):
+                    return
+                jete = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT, 'coursier_volant_discard', options=options, metadata={'source': self, 'log_details': log_details})
+                jete = require_option(jete, options, allow_none=True, decision_name='coursier_volant_discard')
                 if jete is None:
                     return
                 joueur.objets.remove(jete)
@@ -3578,8 +3584,8 @@ class SceptreDuMaharal(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         # (IA: garde le Golem dans sa pile plutot que de le remettre sur le Donjon)
         self.perdPV(1, joueur, log_details)
-        policy, view = _policy_view(joueur, Jeu, phase='sceptre_du_maharal', card=carte)
-        if policy.should_keep_sceptre_du_maharal_monster(view, carte):
+        keep = _decide(joueur, Jeu, DecisionKind.SHOULD_KEEP_SPECIAL_MONSTER, 'sceptre_du_maharal', subject=carte, metadata={'source': self, 'log_details': log_details})
+        if require_bool(keep, 'sceptre_du_maharal'):
             self.execute(joueur, carte, log_details)
         else:
             self.remetDansDonjon(joueur, carte, Jeu, log_details, en_bas=False, melange=True)
@@ -3628,10 +3634,9 @@ class DagueDeBrutus(Objet):
         self.gagnePV(2, joueur, log_details)
         adversaires = [j for j in Jeu.joueurs if j is not joueur and j.dans_le_dj]
         if adversaires:
-            policy, view = _policy_view(joueur, Jeu, phase='dague_de_brutus', card=carte)
-            beneficiaire = policy.choose_dague_de_brutus_beneficiary(view, tuple(adversaires))
-            if beneficiaire is None:
-                beneficiaire = joueur
+            options = tuple(adversaires + [joueur])
+            beneficiaire = _decide(joueur, Jeu, DecisionKind.CHOOSE_PLAYER, 'dague_de_brutus', subject=carte, options=options, metadata={'source': self, 'log_details': log_details})
+            beneficiaire = require_option(beneficiaire, options, decision_name='dague_de_brutus')
             beneficiaire.ajouter_monstre_vaincu(carte)
             log_details.append(f"{joueur.nom} exécute {carte.titre} avec {self.nom} et l'offre à {beneficiaire.nom}.")
         else:

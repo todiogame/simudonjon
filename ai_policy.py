@@ -2,61 +2,293 @@ import math
 import random
 from collections import Counter
 
-
-class PlayerKnowledgeView:
-    """Read-oriented view of game state for one acting player.
-
-    It intentionally exposes derived deck knowledge, not raw hidden deck order.
-    """
-
-    def __init__(self, joueur, Jeu, phase=None, card=None):
-        self._joueur = joueur
-        self._jeu = Jeu
-        self.phase = phase
-        self.card = card
-
-    @property
-    def player(self):
-        return self._joueur
-
-    @property
-    def players(self):
-        return tuple(self._jeu.joueurs)
-
-    @property
-    def discard(self):
-        return tuple(self._jeu.defausse)
-
-    @property
-    def known_cards(self):
-        return frozenset(getattr(self._joueur, 'cartes_connues', set()))
-
-    def known_next_card(self):
-        return self._joueur.connait_prochaine_carte(self._jeu)
-
-    def remaining_deck_profile(self):
-        donjon = self._jeu.donjon
-        cards = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
-        return {
-            'titles': Counter(getattr(c, 'titre', None) for c in cards),
-            'effects': Counter(getattr(c, 'effet', None) for c in cards),
-            'powers': Counter(getattr(c, 'puissance_initiale', getattr(c, 'puissance', None)) for c in cards
-                              if not getattr(c, 'event', False)),
-            'types': Counter(t for c in cards for t in getattr(c, 'types_initiaux', getattr(c, 'types', ()))),
-            'events': sum(1 for c in cards if getattr(c, 'event', False)),
-            'total': len(cards),
-        }
-
-
-def player_view(joueur, Jeu, phase=None, card=None):
-    return PlayerKnowledgeView(joueur, Jeu, phase, card)
-
+from ai_decisions import DecisionKind
 
 class DefaultDungeonPolicy:
     """Default behavior-preserving dungeon AI policy.
 
     The engine applies returned decisions; this class should only choose.
     """
+
+    def decide(self, context):
+        method_name = f"decide_{context.kind.name.lower()}"
+        method = getattr(self, method_name, None)
+        if method is None:
+            raise NotImplementedError(f"No policy handler for {context.kind}")
+        return method(context)
+
+    def decide_should_replay(self, context):
+        return self.should_replay(context.actor, context.game, context.meta('log_details', []))
+
+    def decide_should_flee(self, context):
+        return self.should_flee(context.actor, context.game, context.meta('log_details', []))
+
+    def decide_use_object_in_combat(self, context):
+        objet = context.meta('objet') or (context.options[0] if context.options else None)
+        return bool(objet.worthit(context.actor, context.subject, context.game, context.meta('log_details', [])))
+
+    def decide_use_hero_ability(self, context):
+        phase = context.phase
+        actor = context.actor
+        subject = context.subject
+        if phase in {
+            'ninja_flee_bonus',
+            'princess_draw',
+            'tricheur_debut_tour',
+            'chevalier_dragon',
+            'docteur_de_peste',
+            'inventeur_genial',
+            'flutiste',
+            'berserker_survive',
+        }:
+            return True
+        if phase == 'avatar':
+            return subject.dommages > (actor.pv_total / 2)
+        if phase == 'prophete':
+            hero = actor.perso_obj
+            seuil = 4 if getattr(hero, 'level', 1) == 2 else 6
+            return actor.pv_total <= seuil
+        if phase == 'shaman_reroll':
+            return (
+                not context.meta('rerolled', False)
+                and not context.meta('reversed', False)
+                and context.meta('jet') <= 2
+                and context.meta('jet') < context.meta('jet_voulu')
+            )
+        if phase == 'lapin_skip_turn':
+            prochaine = context.meta('prochaine')
+            return (
+                hasattr(prochaine, 'types')
+                and not getattr(prochaine, 'event', False)
+                and prochaine.puissance >= actor.pv_total
+            )
+        return True
+
+    def decide_use_active_object(self, context):
+        return True
+
+    def decide_should_face_special_card(self, context):
+        effect = getattr(context.subject, 'effet', None)
+        if effect == 'KRAKEN':
+            return any(objet.intact and 10 in objet.puissance_tags for objet in context.actor.objets)
+        if effect == 'GUARDIAN_ANGEL':
+            return any(
+                objet.intact and (8 in objet.puissance_tags or objet.nom == "Attrape-RÃªves")
+                for objet in context.actor.objets
+            )
+        return True
+
+    def decide_should_keep_special_monster(self, context):
+        return True
+
+    def decide_pay_traquenard(self, context):
+        return self.should_pay_traquenard(
+            context.actor,
+            context.subject,
+            context.game,
+            context.meta('candidate'),
+            context.meta('log_details', []),
+        )
+
+    def decide_choose_object(self, context):
+        phase = context.phase
+        options = context.options
+        if not options:
+            return None
+        if phase in {'couteau_suisse_repair', 'enclume_instable', 'canne_a_chep'}:
+            return random.choice(list(options))
+        if phase == 'draw_two_keep_one':
+            return max(options, key=lambda o: o.priorite)
+        if phase == 'repair_object':
+            return max(options, key=lambda o: o.pv_bonus)
+        if phase == 'shop_discard':
+            echangeables = [o for o in options if o.pv_bonus <= 2]
+            if not echangeables or not len(context.game.objets_dispo):
+                return None
+            return min(echangeables, key=lambda o: o.priorite)
+        if phase == 'imprimante':
+            return max(options, key=lambda o: o.priorite)
+        if phase == 'coursier_volant_discard':
+            inutiles = [o for o in options if o.priorite < 40]
+            return min(inutiles, key=lambda o: o.priorite) if inutiles else None
+        if phase in {'kraken_confidence_object', 'guardian_angel_confidence_object'}:
+            power = 10 if phase.startswith('kraken') else 8
+            for objet in options:
+                if objet.intact and (power in objet.puissance_tags or objet.nom == "Attrape-RÃªves"):
+                    return objet
+            return None
+        return options[0]
+
+    def decide_choose_objects(self, context):
+        options = context.options
+        phase = context.phase
+        if phase == 'gants_de_gaia_discards':
+            count = context.meta('count', 0)
+            return tuple(list(options)[-count:][::-1])
+        if phase == 'inventeur_discards':
+            return tuple(random.sample(list(options), min(2, len(options))))
+        return tuple(options)
+
+    def decide_choose_object_to_sacrifice(self, context):
+        options = context.options
+        if not options:
+            return None
+        if context.meta('reason') == 'limon' or context.phase == 'object_sacrifice_limon':
+            game = context.game
+
+            def value(objet):
+                if not (objet.types_tags or objet.puissance_tags):
+                    return objet.priorite
+                donjon = game.donjon
+                restants = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
+                cibles = sum(
+                    1
+                    for carte in restants
+                    if any(t in getattr(carte, 'types_initiaux', ()) for t in objet.types_tags)
+                    or getattr(carte, 'puissance_initiale', None) in objet.puissance_tags
+                )
+                return objet.priorite * cibles / (1 + cibles)
+
+            return min(options, key=lambda o: (o.pv_bonus >= context.actor.pv_total, value(o)))
+        return min(options, key=lambda o: (o.pv_bonus, o.priorite))
+
+    def decide_choose_object_to_repair(self, context):
+        return max(context.options, key=lambda o: o.pv_bonus) if context.options else None
+
+    def decide_choose_monster(self, context):
+        options = context.options
+        if not options:
+            return None
+        phase = context.phase
+        if phase in {'repair_payment_monster', 'fortune_wheel_monster', 'crane_du_necromancien'}:
+            return min(options, key=lambda m: m.puissance)
+        if phase == 'soulstorm_monster':
+            joueur = context.actor
+            couverts = [m for m in options if self._passive_line_covers_card(joueur, m)]
+            if couverts:
+                return max(
+                    couverts,
+                    key=lambda m: (
+                        joueur._degats_attendus(m, context.game),
+                        getattr(m, 'puissance_initiale', getattr(m, 'puissance', 0)),
+                        len(getattr(m, 'types_initiaux', getattr(m, 'types', ()))),
+                    ),
+                )
+            return min(
+                options,
+                key=lambda m: (
+                    joueur._degats_attendus(m, context.game),
+                    getattr(m, 'puissance_initiale', getattr(m, 'puissance', 0)),
+                    len(getattr(m, 'types_initiaux', getattr(m, 'types', ()))),
+                ),
+            )
+        return random.choice(list(options))
+
+    def decide_choose_monsters(self, context):
+        options = context.options
+        if context.phase == 'pelle_du_fossoyeur':
+            max_count = context.meta('max_count', len(options))
+            golem_or = []
+            dragons = []
+            others = []
+            for monster in options:
+                if getattr(monster, 'effet', None) == "GOLD":
+                    golem_or.append(monster)
+                elif "Dragon" in getattr(monster, 'types', ()):
+                    dragons.append(monster)
+                else:
+                    others.append(monster)
+
+            chosen = []
+            if golem_or:
+                chosen.append(golem_or[0])
+            random.shuffle(dragons)
+            while len(chosen) < max_count and dragons:
+                chosen.append(dragons.pop())
+            random.shuffle(others)
+            while len(chosen) < max_count and others:
+                chosen.append(others.pop())
+            return tuple(chosen)
+        return tuple(options)
+
+    def decide_choose_card(self, context):
+        options = context.options
+        if not options:
+            return None
+        if context.phase == 'sceptre_changeur':
+            score_key = context.meta('score_key')
+            current_card = context.subject
+            best = min(options, key=score_key)
+            return best if score_key(best) < score_key(current_card) else None
+        if context.phase == 'event_beast_target':
+            preferred_effects = context.meta('preferred_effects', ())
+            level = context.meta('level', 1)
+            if level == 2:
+                for effet in preferred_effects:
+                    candidats = [c for c in options if c.effet == effet]
+                    if candidats:
+                        return candidats[-1]
+                return None
+            return options[-1] if options and options[-1].effet in preferred_effects else None
+        return options[0]
+
+    def decide_choose_cards(self, context):
+        return tuple(context.options)
+
+    def decide_choose_cards_split(self, context):
+        actor = context.actor
+        discard = []
+        repose = []
+        for card in context.options:
+            if hasattr(card, 'types') and not getattr(card, 'event', False) and card.puissance >= actor.pv_total:
+                discard.append(card)
+            else:
+                repose.append(card)
+        return tuple(discard), tuple(repose)
+
+    def decide_choose_player(self, context):
+        if not context.options:
+            return None
+        if context.phase == 'dague_de_brutus':
+            return min(context.options, key=lambda j: len(j.pile_monstres_vaincus))
+        return context.options[0]
+
+    def decide_choose_power(self, context):
+        counts = context.meta('counts') or {}
+        scores = context.meta('scores') or counts
+        covered = context.meta('covered_powers') or set()
+        if not scores:
+            return None if context.phase == 'boule_de_cristal' else 5
+        candidates = [p for p in scores if p not in covered] or list(scores)
+        if context.phase == 'boule_de_cristal':
+            return max(candidates, key=lambda p: (counts[p] * p, p, counts[p]))
+        return max(candidates, key=lambda p: (scores[p], p, counts[p]))
+
+    def decide_choose_type(self, context):
+        scores = context.meta('scores') or {}
+        counts = context.meta('counts') or {}
+        covered = context.meta('covered_types') or set()
+        if not scores:
+            return "Golem"
+        candidates = [t for t in scores if t not in covered] or list(scores)
+        return max(candidates, key=lambda t: (scores[t], counts[t], t == "Golem", t))
+
+    def decide_choose_category(self, context):
+        return context.options[0] if context.options else None
+
+    def decide_choose_destination(self, context):
+        if context.phase == 'anneau_du_vent':
+            return 'bottom'
+        return context.options[0] if context.options else None
+
+    def decide_choose_order(self, context):
+        return tuple(context.options)
+
+    def decide_order_objects(self, context):
+        return tuple(sorted(context.options, key=lambda obj: obj.priorite, reverse=True))
+
+    def decide_order_cards(self, context):
+        return tuple(context.options)
 
     def should_replay(self, joueur, Jeu, log_details):
         if not joueur.dans_le_dj or Jeu.donjon.vide or Jeu.traquenard_actif or joueur.doit_passer:
@@ -311,7 +543,14 @@ class DefaultDungeonPolicy:
         return min(echangeables, key=lambda o: o.priorite)
 
     def order_player_objects(self, joueur, objects, phase='inventory'):
-        return tuple(sorted(objects, key=lambda obj: obj.priorite, reverse=True))
+        from ai_decisions import DecisionContext, DecisionKind
+        return self.decide(DecisionContext(
+            kind=DecisionKind.ORDER_OBJECTS,
+            actor=joueur,
+            game=None,
+            phase=phase,
+            options=tuple(objects),
+        ))
 
     # Object decisions. Object hooks define legal timing/options; policy chooses.
     def should_use_object_in_combat(self, view, objet, carte, log_details):
@@ -547,6 +786,39 @@ class DefaultDungeonPolicy:
 
 
 class DefaultDraftPolicy:
+    def decide(self, context):
+        method_name = f"decide_{context.kind.name.lower()}"
+        method = getattr(self, method_name, None)
+        if method is None:
+            raise NotImplementedError(f"No policy handler for {context.kind}")
+        return method(context)
+
+    def decide_draft_pick(self, context):
+        if context.phase == 'fast_draft':
+            return self.choose_fast_draft_object(
+                context.options,
+                context.meta('perso'),
+                context.meta('priors'),
+                context.meta('epsilon', 0.0),
+            )
+        if context.phase == 'party_draft':
+            return self.choose_party_draft_object(
+                context.options,
+                context.meta('perso'),
+                context.meta('priors'),
+                context.meta('mes_medailles'),
+                context.meta('medailles_adverses'),
+            )
+        if context.phase == 'legacy_draft':
+            return self.choose_draft_object(
+                context.meta('player_index'),
+                context.meta('objets_joueurs'),
+                context.meta('mains_joueurs'),
+                context.meta('personnages_assigner'),
+                context.meta('log'),
+            )
+        return context.options[0]
+
     def choose_fast_draft_object(self, hand, perso, priors, epsilon=0.0):
         if epsilon and random.random() < epsilon:
             return random.choice(hand)

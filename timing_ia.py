@@ -30,7 +30,7 @@ def chrono(politique):
             j = Joueur(f"J{i}", persos[i], objs)
             j.politique_fuite = politique
             joueurs.append(j)
-        ordonnanceur(joueurs, DonjonDeck(), 6, objets_simu, False)
+        ordonnanceur(joueurs, DonjonDeck(), objets_simu, False)
     return time.perf_counter() - debut
 
 if __name__ == "__main__":

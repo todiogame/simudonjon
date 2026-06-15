@@ -15,7 +15,6 @@ from heros import persos_disponibles
 
 # Nombre de simulations par round d'optimisation
 total_simulations = 30000
-seuil_pv_essai_fuite = 5
 NB_ROUNDS = 100
 
 
@@ -49,7 +48,7 @@ def _simuler_batch(args):
                 objets_disponibles_simu.remove(objet)
             joueurs.append(Joueur(nom, personnages_assigner[i], objets_joueur))
 
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), seuil_pv_essai_fuite, objets_disponibles_simu, False)
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), objets_disponibles_simu, False)
 
         if vainqueur and vainqueur.score_final > highscore:
             highscore = vainqueur.score_final

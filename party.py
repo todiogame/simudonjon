@@ -33,12 +33,12 @@ from monstres import DonjonDeck
 from heros import _classes_persos
 from draft import calculer_priors, _charger_priors, score_pick
 from ai_policy import default_draft_policy
+from ai_decisions import DecisionContext, DecisionKind, require_option
 
 # ==============================================
 # Configuration
 # ==============================================
 NB_SOIREES = 2000000               # nombre total de soirées à simuler
-SEUIL_PV_ESSAI_FUITE = 6
 MANCHES_MIN, MANCHES_MAX = 2, 5    # nombre de manches prévues (uniforme)
 MAX_MANCHES_PAR_SOIREE = 30        # garde-fou si le départage s'éternise
 TAILLE_MAIN_DRAFT = 7
@@ -138,8 +138,22 @@ def draft_soiree(persos, medailles, log=False, draft_policy=None):
         for i in range(nb):
             if len(builds[i]) < NB_OBJETS_PAR_JOUEUR and mains[i]:
                 adverses = total_medailles - medailles[i]
-                choix = draft_policy.choose_party_draft_object(
-                    mains[i], persos[i], priors, medailles[i], adverses)
+                options = tuple(mains[i])
+                choix = draft_policy.decide(DecisionContext(
+                    kind=DecisionKind.DRAFT_PICK,
+                    actor=None,
+                    game=None,
+                    phase='party_draft',
+                    options=options,
+                    metadata={
+                        'player_index': i,
+                        'perso': persos[i],
+                        'priors': priors,
+                        'mes_medailles': medailles[i],
+                        'medailles_adverses': adverses,
+                    },
+                ))
+                choix = require_option(choix, options, decision_name='party_draft')
                 builds[i].append(choix)
                 mains[i].remove(choix)
                 if log:
@@ -194,7 +208,7 @@ def jouer_soiree(log=False, draft_policy=None, dungeon_policy=None):
         builds, objets_restants = draft_soiree(persos, medailles, log, draft_policy)
         joueurs = [Joueur(noms[i], persos[i], builds[i], medailles=medailles[i])
                    for i in range(nb_joueurs)]
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), SEUIL_PV_ESSAI_FUITE, objets_restants, log, policy=dungeon_policy)
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), objets_restants, log, policy=dungeon_policy)
 
         enregistrement = []
         for i, j in enumerate(joueurs):

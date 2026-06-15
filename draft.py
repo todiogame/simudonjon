@@ -15,6 +15,7 @@ from simu import ordonnanceur         # Moteur de simulation de partie
 from monstres import DonjonDeck       # Gestion du deck de donjon
 from heros import persos_disponibles # Liste globale des instances Perso
 from ai_policy import default_draft_policy
+from ai_decisions import DecisionContext, DecisionKind, require_option
 
 # ==============================================
 # Configuration
@@ -97,7 +98,21 @@ def _draft_rapide(persos, priors_par_joueur, epsilon=0.0, draft_policy=None):
         for i in range(nb):
             if len(builds[i]) < 6 and mains[i]:
                 priors = priors_par_joueur[i]
-                choix = draft_policy.choose_fast_draft_object(mains[i], persos[i], priors, epsilon)
+                options = tuple(mains[i])
+                choix = draft_policy.decide(DecisionContext(
+                    kind=DecisionKind.DRAFT_PICK,
+                    actor=None,
+                    game=None,
+                    phase='fast_draft',
+                    options=options,
+                    metadata={
+                        'player_index': i,
+                        'perso': persos[i],
+                        'priors': priors,
+                        'epsilon': epsilon,
+                    },
+                ))
+                choix = require_option(choix, options, decision_name='fast_draft')
                 builds[i].append(choix)
                 mains[i].remove(choix)
             suivantes[(i + 1) % nb] = mains[i]
@@ -133,7 +148,7 @@ def _priors_batch(args):
         else:
             builds, restants = _draft_rapide(persos, [priors] * nb_joueurs, epsilon)
         joueurs = [Joueur(noms[i], persos[i], builds[i]) for i in range(nb_joueurs)]
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), 6, restants, False)
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), restants, False)
         for joueur in joueurs:
             v = 1 if joueur is vainqueur else 0
             pnom = joueur.personnage_nom
@@ -208,7 +223,6 @@ def calculWinrate(combinaison, objets_autres_joueurs, perso_joueur, persos_autre
 
     seed_base (optionnel) : graines communes (CRN) — chaque iteration j est jouee avec la meme
     graine pour tous les candidats compares, ce qui reduit fortement le bruit de la comparaison."""
-    seuil_pv_essai_fuite = 6
     victoires = 0
     if iterations <= 0: return 0.0
 
@@ -264,7 +278,7 @@ def calculWinrate(combinaison, objets_autres_joueurs, perso_joueur, persos_autre
             joueurs.append(joueur_cree)
 
         objets_restants = objets_disponibles_pour_complement
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), seuil_pv_essai_fuite, objets_restants, False)
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), objets_restants, False)
 
         if vainqueur and vainqueur.nom == nom_joueur_teste:
             victoires += 1
@@ -334,7 +348,22 @@ def _choisirObjet_legacy(i, objets_joueurs, mains_joueurs, personnages_assigner,
 
 def choisirObjet(i, objets_joueurs, mains_joueurs, personnages_assigner, log, draft_policy=None):
     draft_policy = draft_policy or default_draft_policy()
-    return draft_policy.choose_draft_object(i, objets_joueurs, mains_joueurs, personnages_assigner, log)
+    options = tuple(mains_joueurs[i])
+    choix = draft_policy.decide(DecisionContext(
+        kind=DecisionKind.DRAFT_PICK,
+        actor=None,
+        game=None,
+        phase='legacy_draft',
+        options=options,
+        metadata={
+            'player_index': i,
+            'objets_joueurs': objets_joueurs,
+            'mains_joueurs': mains_joueurs,
+            'personnages_assigner': personnages_assigner,
+            'log': log,
+        },
+    ))
+    return require_option(choix, options, decision_name='legacy_draft')
 
 
 # --- Simulation d'un draft complet ---
@@ -409,7 +438,7 @@ def jouerLaGame(objets_disponibles, noms_joueurs, objets_joueurs_listes, personn
 
     objets_disponibles_simu = list(objets_disponibles); [o.repare() for o in objets_disponibles_simu]
     for j in joueurs: j.perso_obj.capacite_utilisee = False
-    vainqueur, joueurs_finaux = ordonnanceur(joueurs, DonjonDeck(), 6, objets_disponibles_simu, log)
+    vainqueur, joueurs_finaux = ordonnanceur(joueurs, DonjonDeck(), objets_disponibles_simu, log)
     return vainqueur, joueurs_finaux
 
 

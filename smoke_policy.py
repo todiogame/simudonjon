@@ -7,7 +7,7 @@ from draft import _charger_priors, _draft_rapide
 from heros import Princesse, persos_disponibles
 from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck
-from objets import ArmureEnCuir, CouteauSuisse, HacheDeGlace, objets_disponibles
+from objets import ArmureEnCuir, CouteauSuisse, HacheDeGlace, Objet, objets_disponibles
 from party import draft_soiree
 from simu import GameState, ordonnanceur
 
@@ -49,11 +49,11 @@ def _state(joueurs, vainqueur):
 
 def smoke_ordonnanceur_policy_equivalence():
     joueurs_a, objets_a = _build_players(77)
-    vainqueur_a, joueurs_a = ordonnanceur(joueurs_a, DonjonDeck(), 5, objets_a, False)
+    vainqueur_a, joueurs_a = ordonnanceur(joueurs_a, DonjonDeck(), objets_a, False)
 
     joueurs_b, objets_b = _build_players(77)
     vainqueur_b, joueurs_b = ordonnanceur(
-        joueurs_b, DonjonDeck(), 5, objets_b, False, policy=default_dungeon_policy()
+        joueurs_b, DonjonDeck(), objets_b, False, policy=default_dungeon_policy()
     )
 
     assert _state(joueurs_a, vainqueur_a) == _state(joueurs_b, vainqueur_b)
@@ -104,8 +104,10 @@ def smoke_draft_policy_equivalence():
 
 def smoke_hero_policy_can_decline():
     class DeclinePrincessPolicy(DefaultDungeonPolicy):
-        def should_use_princess_draw(self, view):
-            return False
+        def decide_use_hero_ability(self, context):
+            if context.phase == 'princess_draw':
+                return False
+            return super().decide_use_hero_ability(context)
 
     objets_simu = list(objets_disponibles)
     for objet in objets_simu:
@@ -121,7 +123,7 @@ def smoke_hero_policy_can_decline():
 
 def smoke_object_policy_can_decline_combat_use():
     class DeclineObjectsPolicy(DefaultDungeonPolicy):
-        def should_use_object_in_combat(self, view, objet, carte, log_details):
+        def decide_use_object_in_combat(self, context):
             return False
 
     hache = HacheDeGlace()
@@ -140,8 +142,10 @@ def smoke_object_policy_can_decline_combat_use():
 
 def smoke_object_policy_can_choose_target():
     class ChooseHachePolicy(DefaultDungeonPolicy):
-        def choose_couteau_suisse_repair(self, view, broken_objects):
-            return next(o for o in broken_objects if o.nom == "Hache de Glace")
+        def decide_choose_object_to_repair(self, context):
+            if context.phase == 'couteau_suisse_repair':
+                return next(o for o in context.options if o.nom == "Hache de Glace")
+            return super().decide_choose_object_to_repair(context)
 
     couteau = CouteauSuisse()
     hache = HacheDeGlace()
@@ -160,8 +164,8 @@ def smoke_object_policy_can_choose_target():
 
 def smoke_policy_controls_object_order():
     class ReverseInventoryPolicy(DefaultDungeonPolicy):
-        def order_player_objects(self, joueur, objects, phase='inventory'):
-            return tuple(reversed(objects))
+        def decide_order_objects(self, context):
+            return tuple(reversed(context.options))
 
     joueur = Joueur("R", Princesse(1), [])
     jeu = GameState([joueur], DonjonDeck(), [], ReverseInventoryPolicy())
@@ -175,6 +179,50 @@ def smoke_policy_controls_object_order():
     assert joueur.objets == [armure, hache]
 
 
+def smoke_invalid_policy_rejected():
+    class InvalidBoolPolicy(DefaultDungeonPolicy):
+        def decide_use_object_in_combat(self, context):
+            return None
+
+    hache = HacheDeGlace()
+    joueur = Joueur("I", Princesse(1), [hache])
+    carte = CarteMonstre("Dragon test", 9, ["Dragon"])
+    carte.dommages = 10
+    jeu = GameState([joueur], DonjonDeck(), [], InvalidBoolPolicy())
+
+    try:
+        hache.en_combat(joueur, carte, jeu, [])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid bool policy return was not rejected")
+
+    assert not carte.executed
+    assert hache.intact
+
+
+def smoke_default_policy_normalizes_legacy_worthit():
+    class LegacyListWorthitObject(Objet):
+        def __init__(self):
+            super().__init__("Legacy list worthit", True)
+
+        def worthit(self, joueur, carte, Jeu, log_details):
+            return [carte]
+
+    objet = LegacyListWorthitObject()
+    joueur = Joueur("L", Princesse(1), [objet])
+    carte = CarteMonstre("Rat test", 1, ["Rat"])
+    jeu = GameState([joueur], DonjonDeck(), [], default_dungeon_policy())
+
+    assert objet.condition(joueur, carte, jeu, []) is True
+
+
+def smoke_donjon_worker_batch_runs():
+    import donjon
+
+    donjon._simuler_batch((2, 12345))
+
+
 if __name__ == "__main__":
     smoke_ordonnanceur_policy_equivalence()
     smoke_legacy_wrappers()
@@ -183,4 +231,7 @@ if __name__ == "__main__":
     smoke_object_policy_can_decline_combat_use()
     smoke_object_policy_can_choose_target()
     smoke_policy_controls_object_order()
+    smoke_invalid_policy_rejected()
+    smoke_default_policy_normalizes_legacy_worthit()
+    smoke_donjon_worker_batch_runs()
     print("policy smoke ok")

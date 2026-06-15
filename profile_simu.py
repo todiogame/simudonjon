@@ -22,7 +22,7 @@ def run_games(n, collect_rows=False):
             objs = random.sample(objets_simu, 6)
             for o in objs: objets_simu.remove(o)
             joueurs.append(Joueur(nom, persos[i], objs, int(random.random() < 0.3)))
-        vainqueur, js = ordonnanceur(joueurs, DonjonDeck(), 5, objets_simu, False)
+        vainqueur, js = ordonnanceur(joueurs, DonjonDeck(), objets_simu, False)
         if collect_rows:
             for j in js:
                 for o in j.objets_initiaux:

@@ -19,7 +19,6 @@ from heros import persos_disponibles
 
 # Nombre de simulations souhaitées
 total_simulations = 3000000
-seuil_pv_essai_fuite=5
 
 def _simuler_batch(args):
     """Worker (multiprocessing) : simule nb_sims parties et retourne des compteurs agrégés.
@@ -65,7 +64,8 @@ def _simuler_batch(args):
             joueurs.append(Joueur(nom_base, personnages_assigner[i], objets_joueur))
 
         # Exécution de l'ordonnanceur sans afficher les logs
-        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), seuil_pv_essai_fuite, objets_disponibles_simu, False)
+
+        vainqueur, _ = ordonnanceur(joueurs, DonjonDeck(), objets_disponibles_simu, False)
 
         if vainqueur and vainqueur.score_final > highscore:
             highscore = vainqueur.score_final
