@@ -20,6 +20,7 @@ from smoke_policy import (
     smoke_defausse_monstre_de_pile_policy_choice,
     smoke_barbecue_du_ponceur_policy_target,
     smoke_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases,
+    smoke_custom_policy_controls_newly_routed_item_decisions,
     smoke_default_policy_cloche_du_deja_vu_split_choices,
     smoke_default_policy_couteaux_de_lancer_targets_strongest,
     smoke_default_policy_divination_destinations_preserve_keep_bottom_rules,
@@ -28,6 +29,7 @@ from smoke_policy import (
     smoke_default_policy_tambour_de_kui_discards_dangerous_visible_monsters,
     smoke_fruit_du_destin_policy_category,
     smoke_fruit_du_destin_invalid_category_rejected,
+    smoke_invalid_policy_rejected_for_newly_routed_item_decisions,
 )
 
 
@@ -145,3 +147,11 @@ def test_default_policy_cloche_du_deja_vu_split_choices():
 
 def test_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases():
     smoke_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases()
+
+
+def test_custom_policy_controls_newly_routed_item_decisions():
+    smoke_custom_policy_controls_newly_routed_item_decisions()
+
+
+def test_invalid_policy_rejected_for_newly_routed_item_decisions():
+    smoke_invalid_policy_rejected_for_newly_routed_item_decisions()

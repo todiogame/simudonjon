@@ -2,7 +2,7 @@ import random
 import json
 import numpy as np
 from monstres import CarteMonstre
-from ai_decisions import DecisionContext, DecisionKind, require_bool, require_option, require_options
+from ai_decisions import DecisionContext, DecisionKind, require_bool, require_option, require_options, require_permutation
 # Lire le fichier JSON une fois au début
 with open('priorites_objets.json', 'r') as json_file:
     priorites_objets = json.load(json_file)
@@ -2525,14 +2525,6 @@ def _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=False, pha
     Jeu.defausse.append(monstre)
     return monstre
 
-def _choisir_objet_a_sacrifier(joueur, Jeu, exclus):
-    # objet intact le moins precieux, sans tuer le joueur en perdant ses PV bonus
-    candidats = [o for o in joueur.objets if o.intact and o not in exclus and o.pv_bonus < joueur.pv_total]
-    if not candidats:
-        return None
-    decision = _decide(joueur, Jeu, DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE, 'object_sacrifice', options=tuple(candidats))
-    return require_option(decision, tuple(candidats), decision_name='object_sacrifice')
-
 def _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, exclus):
     # Meme ordre de preference que le Limon glouton, mais on n'autorise pas
     # un sacrifice qui tuerait le joueur avant la resolution de l'objet.
@@ -4086,8 +4078,7 @@ class FilDuDestin(Objet):
         cartes = [donjon.cartes[donjon.ordre[p]] for p in positions]
         options = tuple(cartes)
         nouvel_ordre = _decide(joueur, Jeu, DecisionKind.ORDER_CARDS, 'fil_du_destin', subject=self, options=options, metadata={'log_details': log_details})
-        if set(map(id, nouvel_ordre)) != set(map(id, options)) or len(nouvel_ordre) != len(options):
-            raise ValueError('Policy returned invalid permutation for fil_du_destin')
+        nouvel_ordre = require_permutation(nouvel_ordre, options, decision_name='fil_du_destin')
         for p, c in zip(positions, nouvel_ordre):
             donjon.ordre[p] = c.index
         for c in cartes:

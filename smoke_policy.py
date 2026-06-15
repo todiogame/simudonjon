@@ -8,7 +8,22 @@ from draft import _charger_priors, _draft_rapide
 from heros import BeteDeLEvenement, Princesse, SANS_HOOK_PERSO, persos_disponibles
 from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
-from objets import ArmureEnCuir, AttrapeReves, ClocheDuDejaVu, CouteauSuisse, HacheDeGlace, Objet, SANS_HOOK_OBJET, objets_disponibles
+from objets import (
+    ArmureEnCuir,
+    AttrapeReves,
+    ClocheDuDejaVu,
+    CouteauSuisse,
+    CouteauxDeLancer,
+    FilDuDestin,
+    FouetDuFourbe,
+    HacheDeGlace,
+    Objet,
+    OeilDHorus,
+    OiseauDeMauvaisAugure,
+    SANS_HOOK_OBJET,
+    TambourDeKui,
+    objets_disponibles,
+)
 from party import draft_soiree
 from simu import GameState, _premier_candidat_traquenard, ordonnanceur
 
@@ -292,6 +307,14 @@ def _deck_with_cards(*cards):
     deck.ordre = np.arange(len(cards))
     deck.index = 0
     return deck
+
+
+def _assert_raises_value_error(callable_):
+    try:
+        callable_()
+    except ValueError:
+        return
+    raise AssertionError("Expected ValueError")
 
 
 def smoke_fortune_wheel_policy_can_decline():
@@ -725,6 +748,211 @@ def smoke_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases():
     assert deck.cartes[deck.ordre[deck.index]] is pile_faible
 
 
+def smoke_custom_policy_controls_newly_routed_item_decisions():
+    class CustomRoutedPolicy(DefaultDungeonPolicy):
+        def decide_choose_monsters(self, context):
+            if context.phase == 'couteaux_de_lancer':
+                return (min(context.options, key=lambda m: m.puissance_initiale),)
+            return super().decide_choose_monsters(context)
+
+        def decide_choose_cards(self, context):
+            if context.phase == 'tambour_de_kui':
+                return tuple(c for c in context.options if getattr(c, 'event', False))
+            return super().decide_choose_cards(context)
+
+        def decide_choose_destination(self, context):
+            if context.phase == 'oeil_d_horus':
+                return 'bottom'
+            if context.phase == 'oiseau_de_mauvais_augure':
+                return 'keep'
+            return super().decide_choose_destination(context)
+
+        def decide_order_cards(self, context):
+            if context.phase == 'fil_du_destin':
+                return tuple(reversed(context.options))
+            return super().decide_order_cards(context)
+
+        def decide_choose_monster(self, context):
+            if context.phase in {'fouet_du_fourbe', 'cloche_du_deja_vu_urgence_defausse'}:
+                return context.options[-1]
+            return super().decide_choose_monster(context)
+
+    policy = CustomRoutedPolicy()
+    joueur = Joueur("S", Princesse(1), [])
+    faible = CarteMonstre("Rat faible", 2, ["Rat"])
+    moyen = CarteMonstre("Golem moyen", 5, ["Golem"])
+    fort = CarteMonstre("Dragon fort", 9, ["Dragon"])
+    jeu = GameState([joueur], _deck_with_cards(faible, moyen, fort), [], policy)
+    CouteauxDeLancer().combat_effet(joueur, CarteMonstre("Attaque", 3, ["Orc"]), jeu, [])
+    assert faible in jeu.defausse
+    assert moyen not in jeu.defausse
+    assert fort not in jeu.defausse
+
+    joueur = Joueur("T", Princesse(1), [])
+    joueur.pv_total = 4
+    event = CarteEvent("Event test", "", "HEAL")
+    monstre = CarteMonstre("Dragon test", 9, ["Dragon"])
+    jeu = GameState([joueur], _deck_with_cards(event, monstre), [], policy)
+    pv_pre = joueur.pv_total
+    TambourDeKui().combat_effet(joueur, CarteMonstre("Attaque", 3, ["Orc"]), jeu, [])
+    assert event in jeu.defausse
+    assert monstre not in jeu.defausse
+    assert joueur.pv_total == pv_pre + 1
+
+    joueur = Joueur("U", Princesse(1), [])
+    faible = CarteMonstre("Squelette faible", 2, ["Squelette"])
+    suivant = CarteMonstre("Orc suivant", 3, ["Orc"])
+    jeu = GameState([joueur], _deck_with_cards(faible, suivant), [], policy)
+    OeilDHorus().vaincu_effet(joueur, joueur, CarteMonstre("Vaincu", 1, ["Rat"]), jeu, [])
+    assert jeu.donjon.cartes[jeu.donjon.ordre[jeu.donjon.index]] is suivant
+
+    joueur = Joueur("V", Princesse(1), [])
+    autre = Joueur("W", Princesse(1), [])
+    event = CarteEvent("Event garde", "", "HEAL")
+    jeu = GameState([joueur, autre], _deck_with_cards(event), [], policy)
+    OiseauDeMauvaisAugure().fin_tour(joueur, jeu, [])
+    assert event in joueur.cartes_connues
+    assert jeu.donjon.cartes[jeu.donjon.ordre[jeu.donjon.index]] is event
+
+    joueur = Joueur("X", Princesse(1), [])
+    joueur.tour = 2
+    cartes = [CarteMonstre(f"Carte {i}", i + 1, ["Orc"]) for i in range(4)]
+    jeu = GameState([joueur], _deck_with_cards(*cartes), [], policy)
+    FilDuDestin().debut_tour(joueur, jeu, [])
+    assert [jeu.donjon.cartes[jeu.donjon.ordre[i]] for i in range(4)] == list(reversed(cartes))
+
+    joueur = Joueur("Y", Princesse(1), [])
+    victime = Joueur("Z", Princesse(1), [])
+    premier = CarteMonstre("Squelette premier", 2, ["Squelette"])
+    second = CarteMonstre("Squelette second", 6, ["Squelette"])
+    victime.pile_monstres_vaincus = [premier, second]
+    jeu = GameState([joueur, victime], DonjonDeck(), [], policy)
+    FouetDuFourbe().combat_effet(joueur, CarteMonstre("Attaque squelette", 3, ["Squelette"]), jeu, [])
+    assert second in jeu.defausse
+    assert premier in victime.pile_monstres_vaincus
+
+    joueur = Joueur("AA", Princesse(1), [])
+    premier = CarteMonstre("Gobelin premier", 1, ["Gobelin"])
+    second = CarteMonstre("Gobelin second", 1, ["Gobelin"])
+    attaque = CarteMonstre("Attaque", 9, ["Dragon"])
+    attaque.dommages = 9
+    jeu = GameState([joueur], _deck_with_cards(attaque, premier, second), [], policy)
+    jeu.defausse.extend([premier, second])
+    ClocheDuDejaVu().combat_effet(joueur, attaque, jeu, [])
+    assert jeu.donjon.cartes[jeu.donjon.ordre[jeu.donjon.index]] is second
+
+
+def smoke_invalid_policy_rejected_for_newly_routed_item_decisions():
+    invalid_monster = CarteMonstre("Intrus monstre", 1, ["Rat"])
+    invalid_card = CarteEvent("Intrus event", "", "HEAL")
+
+    class InvalidRoutedPolicy(DefaultDungeonPolicy):
+        def decide_choose_monsters(self, context):
+            if context.phase == 'couteaux_de_lancer':
+                return (invalid_monster,)
+            return super().decide_choose_monsters(context)
+
+        def decide_choose_cards(self, context):
+            if context.phase == 'tambour_de_kui':
+                return (invalid_card,)
+            return super().decide_choose_cards(context)
+
+        def decide_choose_destination(self, context):
+            if context.phase in {'oeil_d_horus', 'oiseau_de_mauvais_augure'}:
+                return 'sideways'
+            return super().decide_choose_destination(context)
+
+        def decide_order_cards(self, context):
+            if context.phase == 'fil_du_destin':
+                return (context.options[0], context.options[0], context.options[1], context.options[2])
+            return super().decide_order_cards(context)
+
+        def decide_choose_monster(self, context):
+            if context.phase in {
+                'fouet_du_fourbe',
+                'cloche_du_deja_vu_urgence_defausse',
+                'cloche_du_deja_vu_urgence_pile',
+            }:
+                return invalid_monster
+            return super().decide_choose_monster(context)
+
+    policy = InvalidRoutedPolicy()
+
+    def game_with(player, *cards):
+        return GameState([player], _deck_with_cards(*cards), [], policy)
+
+    joueur = Joueur("AB", Princesse(1), [])
+    _assert_raises_value_error(lambda: CouteauxDeLancer().combat_effet(
+        joueur,
+        CarteMonstre("Attaque", 3, ["Orc"]),
+        game_with(joueur, CarteMonstre("Rat option", 1, ["Rat"])),
+        [],
+    ))
+
+    joueur = Joueur("AC", Princesse(1), [])
+    _assert_raises_value_error(lambda: TambourDeKui().combat_effet(
+        joueur,
+        CarteMonstre("Attaque", 3, ["Orc"]),
+        game_with(joueur, CarteMonstre("Rat option", 1, ["Rat"])),
+        [],
+    ))
+
+    joueur = Joueur("AD", Princesse(1), [])
+    _assert_raises_value_error(lambda: OeilDHorus().vaincu_effet(
+        joueur,
+        joueur,
+        CarteMonstre("Vaincu", 1, ["Rat"]),
+        game_with(joueur, CarteMonstre("Rat option", 1, ["Rat"])),
+        [],
+    ))
+
+    joueur = Joueur("AE", Princesse(1), [])
+    autre = Joueur("AF", Princesse(1), [])
+    _assert_raises_value_error(lambda: OiseauDeMauvaisAugure().fin_tour(
+        joueur,
+        GameState([joueur, autre], _deck_with_cards(CarteMonstre("Rat option", 1, ["Rat"])), [], policy),
+        [],
+    ))
+
+    joueur = Joueur("AG", Princesse(1), [])
+    joueur.tour = 2
+    cards = [CarteMonstre(f"Carte invalid {i}", i + 1, ["Orc"]) for i in range(4)]
+    _assert_raises_value_error(lambda: FilDuDestin().debut_tour(
+        joueur,
+        game_with(joueur, *cards),
+        [],
+    ))
+
+    joueur = Joueur("AH", Princesse(1), [])
+    victime = Joueur("AI", Princesse(1), [])
+    victime.pile_monstres_vaincus = [CarteMonstre("Squelette option", 2, ["Squelette"])]
+    _assert_raises_value_error(lambda: FouetDuFourbe().combat_effet(
+        joueur,
+        CarteMonstre("Attaque squelette", 3, ["Squelette"]),
+        GameState([joueur, victime], DonjonDeck(), [], policy),
+        [],
+    ))
+
+    joueur = Joueur("AJ", Princesse(1), [])
+    attaque = CarteMonstre("Attaque", 9, ["Dragon"])
+    attaque.dommages = 9
+    fodder = CarteMonstre("Gobelin fodder", 1, ["Gobelin"])
+    jeu = game_with(joueur, attaque, fodder)
+    jeu.defausse.append(fodder)
+    _assert_raises_value_error(lambda: ClocheDuDejaVu().combat_effet(joueur, attaque, jeu, []))
+
+    joueur = Joueur("AK", Princesse(1), [])
+    attaque = CarteMonstre("Attaque", 9, ["Dragon"])
+    attaque.dommages = 9
+    joueur.pile_monstres_vaincus = [CarteMonstre("Squelette option", 2, ["Squelette"])]
+    _assert_raises_value_error(lambda: ClocheDuDejaVu().combat_effet(
+        joueur,
+        attaque,
+        game_with(joueur, attaque),
+        [],
+    ))
+
+
 if __name__ == "__main__":
     smoke_traquenard_detects_chevalier_dragon_candidate()
     smoke_traquenard_detects_docteur_de_peste_candidate()
@@ -740,6 +968,8 @@ if __name__ == "__main__":
     smoke_default_policy_fouet_du_fourbe_preserves_first_matching_choice()
     smoke_default_policy_cloche_du_deja_vu_split_choices()
     smoke_cloche_du_deja_vu_routes_distinct_fodder_and_pile_phases()
+    smoke_custom_policy_controls_newly_routed_item_decisions()
+    smoke_invalid_policy_rejected_for_newly_routed_item_decisions()
     smoke_ordonnanceur_policy_equivalence()
     smoke_legacy_wrappers()
     smoke_draft_policy_equivalence()
