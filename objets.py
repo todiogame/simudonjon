@@ -3523,15 +3523,24 @@ class CouteauxDeLancer(Objet):
         restants = list(donjon.ordre[donjon.index:])
         monstres = [(pos, donjon.cartes[idx]) for pos, idx in enumerate(restants)
                     if isinstance(donjon.cartes[idx], CarteMonstre)]
-        cibles = sorted(monstres, key=lambda pc: pc[1].puissance_initiale, reverse=True)[:3]
-        for pos in sorted([pos for pos, c in cibles], reverse=True):
-            idx = restants.pop(pos)
-            Jeu.defausse.append(donjon.cartes[idx])
-            log_details.append(f"{donjon.cartes[idx].titre} est défaussé du Donjon ({self.nom}).")
-        donjon.ordre = np.concatenate((donjon.ordre[:donjon.index],
-                                       np.array(restants, dtype=donjon.ordre.dtype)))
-        donjon.nb_cartes = len(donjon.ordre)
-        donjon.remelange()
+        if monstres:
+            options = tuple(m[1] for m in monstres)
+            cibles = _decide(joueur, Jeu, DecisionKind.CHOOSE_MONSTERS, 'couteaux_de_lancer', subject=carte, options=options, metadata={'max_count': 3, 'source': self, 'log_details': log_details})
+            cibles = list(require_options(cibles, options, max_count=3, decision_name='couteaux_de_lancer'))
+            positions_a_defausser = []
+            for c in cibles:
+                for pos, idx in enumerate(restants):
+                    if donjon.cartes[idx] is c:
+                        positions_a_defausser.append(pos)
+                        break
+            for pos in sorted(positions_a_defausser, reverse=True):
+                idx = restants.pop(pos)
+                Jeu.defausse.append(donjon.cartes[idx])
+                log_details.append(f"{donjon.cartes[idx].titre} est défaussé du Donjon ({self.nom}).")
+            donjon.ordre = np.concatenate((donjon.ordre[:donjon.index],
+                                           np.array(restants, dtype=donjon.ordre.dtype)))
+            donjon.nb_cartes = len(donjon.ordre)
+            donjon.remelange()
         self.destroy(joueur, Jeu, log_details)
 
 class PierreDePressentiment(Objet):
@@ -3805,10 +3814,15 @@ class TambourDeKui(Objet):
         # regarde les 4 premieres cartes, defausse les monstres trop dangereux, gagne 1 PV par carte gardee
         donjon = Jeu.donjon
         nb = min(4, donjon.nb_cartes - donjon.index)
+        visible = [donjon.cartes[donjon.ordre[donjon.index + i]] for i in range(nb)]
+        options = tuple(visible)
+        a_defausser = _decide(joueur, Jeu, DecisionKind.CHOOSE_CARDS, 'tambour_de_kui', subject=carte, options=options, metadata={'pv_total': joueur.pv_total, 'source': self, 'log_details': log_details})
+        a_defausser = list(require_options(a_defausser, options, decision_name='tambour_de_kui'))
+        discard_ids = set(map(id, a_defausser))
         positions_a_defausser = []
         for i in range(nb):
             c = donjon.cartes[donjon.ordre[donjon.index + i]]
-            if isinstance(c, CarteMonstre) and c.puissance_initiale >= joueur.pv_total + 3:
+            if id(c) in discard_ids:
                 positions_a_defausser.append(donjon.index + i)
                 Jeu.defausse.append(c)
                 log_details.append(f"{c.titre} est défaussé du Donjon ({self.nom}).")
@@ -4031,8 +4045,9 @@ class OeilDHorus(Objet):
             prochaine = _peek_prochaine_carte(Jeu)
             if prochaine is None:
                 return
-            if (isinstance(prochaine, CarteMonstre) and not prochaine.is_X
-                    and prochaine.puissance_initiale >= max(4, joueur.pv_total)):
+            destination = _decide(joueur, Jeu, DecisionKind.CHOOSE_DESTINATION, 'oeil_d_horus', subject=self, options=('keep', 'bottom'), metadata={'prochaine': prochaine, 'log_details': log_details})
+            destination = require_option(destination, ('keep', 'bottom'), decision_name='oeil_d_horus')
+            if destination == 'bottom':
                 Jeu.donjon.prochaine_carte()
                 Jeu.donjon.rajoute_en_bas_de_la_pile(prochaine)
                 log_details.append(f"{joueur.nom} remet {prochaine.titre} sous le Donjon ({self.nom}).")
@@ -4049,10 +4064,9 @@ class OiseauDeMauvaisAugure(Objet):
             prochaine = _peek_prochaine_carte(Jeu)
             if prochaine is None:
                 return
-            bonne_carte = getattr(prochaine, 'event', False) or (
-                isinstance(prochaine, CarteMonstre) and not prochaine.is_X
-                and prochaine.puissance_initiale <= 2)
-            if bonne_carte:
+            destination = _decide(joueur, Jeu, DecisionKind.CHOOSE_DESTINATION, 'oiseau_de_mauvais_augure', subject=self, options=('keep', 'bottom'), metadata={'prochaine': prochaine, 'log_details': log_details})
+            destination = require_option(destination, ('keep', 'bottom'), decision_name='oiseau_de_mauvais_augure')
+            if destination == 'bottom':
                 Jeu.donjon.prochaine_carte()
                 Jeu.donjon.rajoute_en_bas_de_la_pile(prochaine)
                 log_details.append(f"{joueur.nom} envoie {prochaine.titre} sous le Donjon ({self.nom}).")
@@ -4079,8 +4093,12 @@ class FilDuDestin(Objet):
         tri = sorted(range(4), key=lambda i: danger(cartes[i]))
         nouvel_ordre = [tri[0]] + sorted(tri[1:], key=lambda i: -danger(cartes[i]))
         anciens = [donjon.ordre[p] for p in positions]
-        for p, i in zip(positions, nouvel_ordre):
-            donjon.ordre[p] = anciens[i]
+        options = tuple(cartes)
+        nouvel_ordre = _decide(joueur, Jeu, DecisionKind.ORDER_CARDS, 'fil_du_destin', subject=self, options=options, metadata={'log_details': log_details})
+        if set(map(id, nouvel_ordre)) != set(map(id, options)) or len(nouvel_ordre) != len(options):
+            raise ValueError('Policy returned invalid permutation for fil_du_destin')
+        for p, c in zip(positions, nouvel_ordre):
+            donjon.ordre[p] = c.index
         for c in cartes:
             joueur.cartes_connues.add(c)
         log_details.append(f"{joueur.nom} réordonne les 4 prochaines cartes du Donjon ({self.nom}).")

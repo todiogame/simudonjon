@@ -172,6 +172,10 @@ class DefaultDungeonPolicy:
             return min(options, key=lambda m: 0 if m.is_X else m.puissance)
         if phase == 'barbecue_du_ponceur':
             return max(options, key=lambda m: 0 if m.is_X else m.puissance)
+        if phase in {'cloche_du_deja_vu_debut', 'cloche_du_deja_vu_urgence'}:
+            return min(options, key=lambda m: 0 if m.is_X else m.puissance)
+        if phase == 'fouet_du_fourbe':
+            return max(options, key=lambda m: 0 if m.is_X else m.puissance)
         if phase == 'soulstorm_monster':
             joueur = context.actor
             couverts = [m for m in options if self._passive_line_covers_card(joueur, m)]
