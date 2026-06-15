@@ -2,9 +2,9 @@ import random
 
 import numpy as np
 
-from ai_policy import default_draft_policy, default_dungeon_policy
+from ai_policy import DefaultDungeonPolicy, default_draft_policy, default_dungeon_policy
 from draft import _charger_priors, _draft_rapide
-from heros import persos_disponibles
+from heros import Princesse, persos_disponibles
 from joueurs import Joueur
 from monstres import DonjonDeck
 from objets import objets_disponibles
@@ -102,8 +102,26 @@ def smoke_draft_policy_equivalence():
     assert [o.nom for o in restants_c] == [o.nom for o in restants_d]
 
 
+def smoke_hero_policy_can_decline():
+    class DeclinePrincessPolicy(DefaultDungeonPolicy):
+        def should_use_princess_draw(self, view):
+            return False
+
+    objets_simu = list(objets_disponibles)
+    for objet in objets_simu:
+        objet.repare()
+    joueur = Joueur("P", Princesse(1), [])
+    jeu = GameState([joueur], DonjonDeck(), objets_simu, DeclinePrincessPolicy())
+
+    joueur.perso_obj.debut_tour(joueur, jeu, [])
+
+    assert not joueur.perso_obj.capacite_utilisee
+    assert joueur.objets == []
+
+
 if __name__ == "__main__":
     smoke_ordonnanceur_policy_equivalence()
     smoke_legacy_wrappers()
     smoke_draft_policy_equivalence()
+    smoke_hero_policy_can_decline()
     print("policy smoke ok")

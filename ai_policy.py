@@ -1,5 +1,55 @@
 import math
 import random
+from collections import Counter
+
+
+class PlayerKnowledgeView:
+    """Read-oriented view of game state for one acting player.
+
+    It intentionally exposes derived deck knowledge, not raw hidden deck order.
+    """
+
+    def __init__(self, joueur, Jeu, phase=None, card=None):
+        self._joueur = joueur
+        self._jeu = Jeu
+        self.phase = phase
+        self.card = card
+
+    @property
+    def player(self):
+        return self._joueur
+
+    @property
+    def players(self):
+        return tuple(self._jeu.joueurs)
+
+    @property
+    def discard(self):
+        return tuple(self._jeu.defausse)
+
+    @property
+    def known_cards(self):
+        return frozenset(getattr(self._joueur, 'cartes_connues', set()))
+
+    def known_next_card(self):
+        return self._joueur.connait_prochaine_carte(self._jeu)
+
+    def remaining_deck_profile(self):
+        donjon = self._jeu.donjon
+        cards = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
+        return {
+            'titles': Counter(getattr(c, 'titre', None) for c in cards),
+            'effects': Counter(getattr(c, 'effet', None) for c in cards),
+            'powers': Counter(getattr(c, 'puissance_initiale', getattr(c, 'puissance', None)) for c in cards
+                              if not getattr(c, 'event', False)),
+            'types': Counter(t for c in cards for t in getattr(c, 'types_initiaux', getattr(c, 'types', ()))),
+            'events': sum(1 for c in cards if getattr(c, 'event', False)),
+            'total': len(cards),
+        }
+
+
+def player_view(joueur, Jeu, phase=None, card=None):
+    return PlayerKnowledgeView(joueur, Jeu, phase, card)
 
 
 class DefaultDungeonPolicy:
@@ -259,6 +309,75 @@ class DefaultDungeonPolicy:
         if not echangeables or not len(Jeu.objets_dispo):
             return None
         return min(echangeables, key=lambda o: o.priorite)
+
+    # Hero ability decisions. Hero hooks define legal timing/options; policy chooses.
+    def should_use_ninja_flee_bonus(self, view):
+        return True
+
+    def should_use_princess_draw(self, view):
+        return True
+
+    def choose_princess_keep_object(self, view, choices):
+        return max(choices, key=lambda o: o.priorite)
+
+    def should_use_tricheur(self, view):
+        return True
+
+    def should_use_chevalier_dragon(self, view, carte):
+        return True
+
+    def should_use_docteur_de_peste(self, view, carte):
+        return True
+
+    def should_use_inventeur_genial(self, view, carte, broken_objects):
+        return True
+
+    def choose_inventeur_discards(self, view, broken_objects):
+        return tuple(random.sample(list(broken_objects), 2))
+
+    def should_use_flutiste(self, view, carte):
+        return True
+
+    def should_use_avatar(self, view, carte):
+        joueur = view.player
+        return carte.dommages > (joueur.pv_total / 2)
+
+    def should_use_berserker_survive(self, view, carte):
+        return True
+
+    def should_use_prophete(self, view):
+        joueur = view.player
+        hero = joueur.perso_obj
+        seuil = 4 if getattr(hero, 'level', 1) == 2 else 6
+        return joueur.pv_total <= seuil
+
+    def choose_prophete_cards(self, view, cards):
+        joueur = view.player
+        discard = []
+        repose = []
+        for card in cards:
+            if hasattr(card, 'types') and not getattr(card, 'event', False) and card.puissance >= joueur.pv_total:
+                discard.append(card)
+            else:
+                repose.append(card)
+        return tuple(discard), tuple(repose)
+
+    def should_shaman_reroll(self, view, jet, jet_voulu, reversed, rerolled):
+        return not rerolled and not reversed and jet <= 2 and jet < jet_voulu
+
+    def should_lapin_skip_turn(self, view, prochaine):
+        joueur = view.player
+        return (hasattr(prochaine, 'types') and not getattr(prochaine, 'event', False)
+                and prochaine.puissance >= joueur.pv_total)
+
+    def choose_event_beast_target(self, view, events, preferred_effects, level):
+        if level == 2:
+            for effet in preferred_effects:
+                candidats = [c for c in events if c.effet == effet]
+                if candidats:
+                    return candidats[-1]
+            return None
+        return events[-1] if events and events[-1].effet in preferred_effects else None
 
     def should_face_kraken(self, joueur, carte, Jeu, log_details):
         for objet in joueur.objets:

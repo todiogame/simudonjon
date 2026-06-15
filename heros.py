@@ -1,5 +1,6 @@
 import random
 import json
+from ai_policy import player_view
 # Lire le fichier JSON une fois au début
 with open('priorites_objets.json', 'r') as json_file:
     priorites_objets = json.load(json_file)
@@ -175,7 +176,8 @@ class Ninja(Perso):
 
     def en_fuite(self, joueur, Jeu, log_details):
         # Une fois par partie: jet de fuite +3 (N2: +5) jusqu'a la fin du tour
-        if not self.capacite_utilisee:
+        if (not self.capacite_utilisee
+                and Jeu.policy.should_use_ninja_flee_bonus(player_view(joueur, Jeu, 'en_fuite'))):
             self.capacite_utilisee = True
             bonus = 5 if self.level == 2 else 3
             joueur.jet_fuite += bonus
@@ -188,12 +190,13 @@ class Princesse(Perso):
 
     def debut_tour(self, joueur, Jeu, log_details):
         # Une fois par partie: pioche un objet (N2: pioche 2, defausse 1)
-        if not self.capacite_utilisee:
+        view = player_view(joueur, Jeu, 'debut_tour')
+        if not self.capacite_utilisee and Jeu.policy.should_use_princess_draw(view):
             self.capacite_utilisee = True
             if self.level == 2 and len(Jeu.objets_dispo) >= 2:
                 choix = random.sample(Jeu.objets_dispo, 2)
                 # TODO: heuristique moteur temporaire; la politique IA devra choisir quel objet garder.
-                garde = max(choix, key=lambda o: o.priorite)
+                garde = Jeu.policy.choose_princess_keep_object(view, tuple(choix))
                 jete = choix[0] if garde is choix[1] else choix[1]
                 Jeu.objets_dispo.remove(garde)
                 Jeu.objets_dispo.remove(jete)
@@ -220,7 +223,8 @@ class ChevalierDragon(Perso):
         # N1: execute les Dragons (et les garde) si pas de Dragon dans la pile. N2: sans condition.
         if "Dragon" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
             if self.level == 2 or not any("Dragon" in m.types for m in joueur.pile_monstres_vaincus):
-                self.execute(joueur, carte, log_details)
+                if Jeu.policy.should_use_chevalier_dragon(player_view(joueur, Jeu, 'en_combat', carte), carte):
+                    self.execute(joueur, carte, log_details)
 
 class PersoUseless2PV(Perso):
     def __init__(self):
@@ -240,7 +244,8 @@ class Tricheur(Perso):
     def debut_tour(self, joueur, Jeu, log_details):
         # Une fois par partie: pioche une carte cachee (N2: deux). Si monstre -> sa pile, sinon repose.
         # (simplification IA : resolution immediate au lieu de garder la carte cachee)
-        if not self.capacite_utilisee and not Jeu.donjon.vide:
+        if (not self.capacite_utilisee and not Jeu.donjon.vide
+                and Jeu.policy.should_use_tricheur(player_view(joueur, Jeu, 'debut_tour'))):
             self.capacite_utilisee = True
             nb = 2 if self.level == 2 else 1
             a_reposer = []
@@ -264,7 +269,8 @@ class DocteurDePeste(Perso):
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if "Rat" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
-            self.execute(joueur, carte, log_details)
+            if Jeu.policy.should_use_docteur_de_peste(player_view(joueur, Jeu, 'en_combat', carte), carte):
+                self.execute(joueur, carte, log_details)
 
     def en_fuite(self, joueur, Jeu, log_details):
         # N2: jet de fuite +1 par Rat dans la pile
@@ -301,13 +307,16 @@ class InventeurGenial(Perso):
             objets_brises = [o for o in joueur.objets if not getattr(o, 'intact', True)]
 
             # Condition: au moins 2 objets brisés
-            if len(objets_brises) >= 2:
+            if (len(objets_brises) >= 2
+                    and Jeu.policy.should_use_inventeur_genial(
+                        player_view(joueur, Jeu, 'en_combat', carte), carte, tuple(objets_brises))):
                 # Décision IA : on utilise dès que possible
                 self.compteur += 1
                 log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité ({self.compteur}/{self.level}).")
 
                 # Choisir 2 objets brisés au hasard à défausser
-                objets_a_defausser = random.sample(objets_brises, 2)
+                objets_a_defausser = list(Jeu.policy.choose_inventeur_discards(
+                    player_view(joueur, Jeu, 'en_combat', carte), tuple(objets_brises)))
                 noms_defausse = [o.nom for o in objets_a_defausser]
                 log_details.append(f"--> Défausse {noms_defausse}.")
 
@@ -334,8 +343,9 @@ class Flutiste(Perso):
         return ("Gobelin" in carte.types) and not Jeu.traquenard_actif
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        self.execute(joueur, carte, log_details)
-        self.gagnePV(1, joueur, log_details)
+        if Jeu.policy.should_use_flutiste(player_view(joueur, Jeu, 'en_combat', carte), carte):
+            self.execute(joueur, carte, log_details)
+            self.gagnePV(1, joueur, log_details)
 
 class SavantFou(Perso):
     def __init__(self, level=1):
@@ -362,7 +372,8 @@ class Avatar(Perso):
 
     def combat_effet_late(self, joueur, carte, Jeu, log_details):
         # Une fois par partie: execute et defausse un monstre (N2: execute et le garde)
-        if not self.capacite_utilisee and not Jeu.traquenard_actif and not carte.executed and carte.dommages > (joueur.pv_total / 2) :
+        if (not self.capacite_utilisee and not Jeu.traquenard_actif and not carte.executed
+                and Jeu.policy.should_use_avatar(player_view(joueur, Jeu, 'combat_late', carte), carte)):
             self.capacite_utilisee = True
             if self.level == 2:
                 self.execute(joueur, carte, log_details)
@@ -376,7 +387,8 @@ class Berserker(Perso):
 
     def survie_effet(self, joueur, carte, Jeu, log_details):
         # Une fois par partie, survivez avec 1 PV (N2: 3 PV)
-        if not self.capacite_utilisee and joueur.pv_total <= 0:
+        if (not self.capacite_utilisee and joueur.pv_total <= 0
+                and Jeu.policy.should_use_berserker_survive(player_view(joueur, Jeu, 'en_survie', carte), carte)):
             self.capacite_utilisee = True
             self.survit(3 if self.level == 2 else 1, joueur, carte, log_details)
 
@@ -387,23 +399,31 @@ class Prophete(Perso):
     def debut_tour(self, joueur, Jeu, log_details):
         # N2: deux fois par partie, regarde les 2 prochaines cartes et peut les defausser ou les reposer.
         # IA: utilise quand ses PV sont bas, defausse les monstres qui le tueraient.
-        if self.level == 2 and self.compteur < 2 and joueur.pv_total <= 4 and not Jeu.donjon.vide:
+        view = player_view(joueur, Jeu, 'debut_tour')
+        if (self.level == 2 and self.compteur < 2 and not Jeu.donjon.vide
+                and Jeu.policy.should_use_prophete(view)):
             self.compteur += 1
             log_details.append(f"{joueur.nom} ({self.nom}) consulte les 2 prochaines cartes du Donjon ({self.compteur}/2).")
-            a_reposer = []
+            cartes_vues = []
             for _ in range(2):
                 if Jeu.donjon.vide:
                     break
-                c = Jeu.donjon.prochaine_carte()
+                cartes_vues.append(Jeu.donjon.prochaine_carte())
+                continue
                 if hasattr(c, 'types') and not getattr(c, 'event', False) and c.puissance >= joueur.pv_total:
                     Jeu.defausse.append(c)
                     log_details.append(f"{joueur.nom} ({self.nom}) défausse {c.titre} (trop dangereux).")
                 else:
                     a_reposer.append(c)
+            a_defausser, a_reposer = Jeu.policy.choose_prophete_cards(view, tuple(cartes_vues))
+            for c in a_defausser:
+                Jeu.defausse.append(c)
+                log_details.append(f"{joueur.nom} ({self.nom}) dÃ©fausse {c.titre} (trop dangereux).")
             for c in reversed(a_reposer):
                 Jeu.donjon.rajoute_en_haut_de_la_pile(c)
                 joueur.cartes_connues.add(c)  # il sait ce qui arrive (exploite par l'IA de fuite/repioche)
-        elif self.level == 1 and self.compteur < 2 and joueur.pv_total <= 6 and not Jeu.donjon.vide:
+        elif (self.level == 1 and self.compteur < 2 and not Jeu.donjon.vide
+              and Jeu.policy.should_use_prophete(view)):
             # N1: deux fois par partie, regarde secretement les 2 prochaines cartes
             # (memorisees dans cartes_connues, exploitees par l'IA de fuite/repioche)
             self.compteur += 1
@@ -422,7 +442,8 @@ class Shaman(Perso):
         if self.level == 2 and jet == 6:
             self.gagnePV(1, joueur, log_details)
         # Quand vous obtenez 1 ou 2 avec le de, vous pouvez le relancer une fois
-        if not rerolled and not reversed and jet <= 2 and jet < jet_voulu:
+        if Jeu.policy.should_shaman_reroll(
+                player_view(joueur, Jeu, 'en_roll'), jet, jet_voulu, reversed, rerolled):
             log_details.append(f"{joueur.nom} ({self.nom}) relance son dé de {jet}.")
             return joueur.rollDice(Jeu, log_details, jet_voulu, reversed, True)
         return jet
@@ -438,7 +459,7 @@ class LapinBlanc(Perso):
             # du Donjon et peut passer son tour (enfin une utilisation de l'info !)
             if joueur.tour <= 3 and not joueur.pile_monstres_vaincus and not Jeu.donjon.vide:
                 prochaine = Jeu.donjon.cartes[Jeu.donjon.ordre[Jeu.donjon.index]]
-                if hasattr(prochaine, 'types') and not getattr(prochaine, 'event', False) and prochaine.puissance >= joueur.pv_total:
+                if Jeu.policy.should_lapin_skip_turn(player_view(joueur, Jeu, 'debut_tour'), prochaine):
                     joueur.passe_son_tour = True
                     log_details.append(f"{joueur.nom} ({self.nom}) voit {prochaine.titre} arriver et passe son tour.")
         elif joueur.tour == 1:
@@ -497,15 +518,8 @@ class BeteDeLEvenement(Perso):
         if not self.capacite_utilisee:
             bons = self._ordre_evenements_benefiques(joueur)
             events = [c for c in Jeu.defausse if getattr(c, 'event', False)]
-            if self.level == 2:
-                cible = None
-                for effet in bons:
-                    candidats = [c for c in events if c.effet == effet]
-                    if candidats:
-                        cible = candidats[-1]
-                        break
-            else:
-                cible = events[-1] if events and events[-1].effet in bons else None
+            cible = Jeu.policy.choose_event_beast_target(
+                player_view(joueur, Jeu, 'debut_tour'), tuple(events), tuple(bons), self.level)
             if cible:
                 self.capacite_utilisee = True
                 Jeu.defausse.remove(cible)
