@@ -6,8 +6,8 @@ from ai_policy import DefaultDungeonPolicy, default_draft_policy, default_dungeo
 from draft import _charger_priors, _draft_rapide
 from heros import Princesse, persos_disponibles
 from joueurs import Joueur
-from monstres import DonjonDeck
-from objets import objets_disponibles
+from monstres import CarteMonstre, DonjonDeck
+from objets import ArmureEnCuir, CouteauSuisse, HacheDeGlace, objets_disponibles
 from party import draft_soiree
 from simu import GameState, ordonnanceur
 
@@ -119,9 +119,50 @@ def smoke_hero_policy_can_decline():
     assert joueur.objets == []
 
 
+def smoke_object_policy_can_decline_combat_use():
+    class DeclineObjectsPolicy(DefaultDungeonPolicy):
+        def should_use_object_in_combat(self, view, objet, carte, log_details):
+            return False
+
+    hache = HacheDeGlace()
+    joueur = Joueur("O", Princesse(1), [hache])
+    joueur.pv_total = 5
+    carte = CarteMonstre("Dragon test", 9, ["Dragon"])
+    carte.dommages = 10
+    jeu = GameState([joueur], DonjonDeck(), [], DeclineObjectsPolicy())
+
+    hache.en_combat(joueur, carte, jeu, [])
+
+    assert not carte.executed
+    assert hache.intact
+    assert joueur.pile_monstres_vaincus == []
+
+
+def smoke_object_policy_can_choose_target():
+    class ChooseHachePolicy(DefaultDungeonPolicy):
+        def choose_couteau_suisse_repair(self, view, broken_objects):
+            return next(o for o in broken_objects if o.nom == "Hache de Glace")
+
+    couteau = CouteauSuisse()
+    hache = HacheDeGlace()
+    armure = ArmureEnCuir()
+    hache.intact = False
+    armure.intact = False
+    joueur = Joueur("T", Princesse(1), [couteau, hache, armure])
+    jeu = GameState([joueur], DonjonDeck(), [], ChooseHachePolicy())
+    carte = CarteMonstre("Dragon test", 9, ["Dragon"])
+
+    couteau.combat_effet(joueur, carte, jeu, [])
+
+    assert hache.intact
+    assert not armure.intact
+
+
 if __name__ == "__main__":
     smoke_ordonnanceur_policy_equivalence()
     smoke_legacy_wrappers()
     smoke_draft_policy_equivalence()
     smoke_hero_policy_can_decline()
+    smoke_object_policy_can_decline_combat_use()
+    smoke_object_policy_can_choose_target()
     print("policy smoke ok")

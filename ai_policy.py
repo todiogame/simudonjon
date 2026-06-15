@@ -310,6 +310,105 @@ class DefaultDungeonPolicy:
             return None
         return min(echangeables, key=lambda o: o.priorite)
 
+    # Object decisions. Object hooks define legal timing/options; policy chooses.
+    def should_use_object_in_combat(self, view, objet, carte, log_details):
+        return objet.worthit(view.player, carte, view._jeu, log_details)
+
+    def choose_couteau_suisse_repair(self, view, broken_objects):
+        return random.choice(list(broken_objects)) if broken_objects else None
+
+    def choose_gants_de_gaia_discards(self, view, broken_objects, count):
+        return tuple(list(broken_objects)[-count:][::-1])
+
+    def choose_enclume_instable_object(self, view, broken_objects):
+        return random.choice(list(broken_objects)) if broken_objects else None
+
+    def choose_corne_dabordage_monster(self, view, victim, monsters):
+        return random.choice(list(monsters)) if monsters else None
+
+    def choose_esprit_du_donjon_monster(self, view, victim, monsters):
+        return random.choice(list(monsters)) if monsters else None
+
+    def choose_canne_a_chep_object(self, view, dead_player, intact_objects):
+        return random.choice(list(intact_objects)) if intact_objects else None
+
+    def choose_sac_de_constantinople_dragon(self, view, victim, dragons):
+        return random.choice(list(dragons)) if dragons else None
+
+    def choose_pelle_du_fossoyeur_monsters(self, view, discard_monsters, max_count):
+        golem_or = []
+        dragons = []
+        others = []
+        for monster in discard_monsters:
+            if getattr(monster, 'effet', None) == "GOLD":
+                golem_or.append(monster)
+            elif "Dragon" in getattr(monster, 'types', ()):
+                dragons.append(monster)
+            else:
+                others.append(monster)
+
+        chosen = []
+        if golem_or:
+            chosen.append(golem_or[0])
+        random.shuffle(dragons)
+        while len(chosen) < max_count and dragons:
+            chosen.append(dragons.pop())
+        random.shuffle(others)
+        while len(chosen) < max_count and others:
+            chosen.append(others.pop())
+        return tuple(chosen)
+
+    def choose_draw_two_keep_object(self, view, choices, source):
+        return max(choices, key=lambda o: o.priorite) if choices else None
+
+    def choose_sceptre_changeur_target(self, view, current_card, candidates, score_key):
+        if not candidates:
+            return None
+        best = min(candidates, key=score_key)
+        return best if score_key(best) < score_key(current_card) else None
+
+    def choose_epee_vengeresse_power(self, view, scores, counts, covered_powers):
+        if not scores:
+            return 5
+        candidates = [p for p in scores if p not in covered_powers] or list(scores)
+        return max(candidates, key=lambda p: (scores[p], p, counts[p]))
+
+    def choose_dague_vengeresse_type(self, view, scores, counts, covered_types):
+        if not scores:
+            return "Golem"
+        candidates = [t for t in scores if t not in covered_types] or list(scores)
+        return max(candidates, key=lambda t: (scores[t], counts[t], t == "Golem", t))
+
+    def choose_imprimante_model(self, view, models):
+        return max(models, key=lambda o: o.priorite) if models else None
+
+    def choose_object_to_sacrifice(self, view, candidates):
+        return min(candidates, key=lambda o: (o.pv_bonus, o.priorite)) if candidates else None
+
+    def choose_object_to_sacrifice_like_limon(self, view, candidates, value_key):
+        return min(candidates, key=value_key) if candidates else None
+
+    def choose_anneau_du_vent_destination(self, view, card):
+        return 'bottom'
+
+    def choose_boule_de_cristal_power(self, view, counts, covered_powers):
+        if not counts:
+            return None
+        candidates = [p for p in counts if p not in covered_powers] or list(counts)
+        return max(candidates, key=lambda p: (counts[p] * p, p, counts[p]))
+
+    def choose_crane_du_necromancien_monster(self, view, candidates):
+        return min(candidates, key=lambda m: m.puissance) if candidates else None
+
+    def choose_coursier_volant_discard(self, view, candidates):
+        return min(candidates, key=lambda o: o.priorite) if candidates else None
+
+    def should_keep_sceptre_du_maharal_monster(self, view, card):
+        return True
+
+    def choose_dague_de_brutus_beneficiary(self, view, opponents):
+        return min(opponents, key=lambda j: len(j.pile_monstres_vaincus)) if opponents else None
+
     # Hero ability decisions. Hero hooks define legal timing/options; policy chooses.
     def should_use_ninja_flee_bonus(self, view):
         return True
