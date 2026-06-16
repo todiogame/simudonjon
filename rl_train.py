@@ -192,6 +192,8 @@ class TrainResult:
 
 
 class ObservationEncoder:
+    derived_candidate_size = 16
+
     def __init__(self, max_objects=8, max_candidates=8):
         self.max_objects = max_objects
         self.max_candidates = max_candidates
@@ -200,7 +202,7 @@ class ObservationEncoder:
         self.item_tag_size = len(ITEM_GAMEPLAY_TAGS)
         self.binary_size = 39 + self.item_tag_size + self.kind_size + self.phase_size
         self.combat_global_size = 33 + self.kind_size + self.phase_size
-        self.candidate_size = 12 + self.item_tag_size
+        self.candidate_size = 12 + self.item_tag_size + self.derived_candidate_size
         self.object_type_vocab_size = len(OBJECT_TYPE_INDEX) + 1
 
     def observation_spec(self):
@@ -443,7 +445,50 @@ class ObservationEncoder:
         power_match = subject_power in puissance_tags
         covers_lethal = (type_match or power_match) and subject_damage >= actor.pv_total
         gameplay_tags = set(getattr(objet, 'gameplay_tags', ()))
+        has = gameplay_tags.__contains__
         tag_features = [float(tag in gameplay_tags) for tag in ITEM_GAMEPLAY_TAGS]
+        actor_hp = float(actor.pv_total)
+        actor_base_hp = float(max(1, getattr(actor, 'pv_base', actor.pv_total)))
+        hp_bonus = float(getattr(objet, 'pv_bonus', 0))
+        lethal = subject_damage >= actor.pv_total
+        low_hp = actor_hp <= max(3.0, actor_base_hp * 0.5)
+        survival_tags = {
+            "EXECUTE",
+            "ABSORB",
+            "REDUCE_DAMAGE",
+            "DISCARD_MONSTER",
+            "PUT_BACK_MONSTER",
+            "REROLL",
+            "DICE_6_WIN",
+            "SURVIVE",
+            "SET_HP",
+        }
+        healing = has("HEAL_NOW") or has("HEAL_CONDITIONAL") or has("SET_HP")
+        monster_control = has("EXECUTE") or has("DISCARD_MONSTER") or has("PUT_BACK_MONSTER") or has("STEAL_MONSTER")
+        condition_count = sum(1 for tag in ("TYPE_CONDITION", "POWER_CONDITION", "HP_CONDITION") if has(tag))
+        condition_hits = (
+            int(has("TYPE_CONDITION") and type_match)
+            + int(has("POWER_CONDITION") and power_match)
+            + int(has("HP_CONDITION") and low_hp)
+        )
+        derived_features = [
+            float(lethal),
+            float(lethal and bool(gameplay_tags.intersection(survival_tags))),
+            float(lethal and monster_control),
+            float(lethal and healing),
+            float(healing and actor_hp < actor_base_hp),
+            float(has("RAW_HP") and hp_bonus > 0),
+            max(-1.0, min(1.0, (actor_hp + max(0.0, hp_bonus) - subject_damage) / 20.0)),
+            float(has("LOSE_HP") and actor_hp <= 2.0),
+            float(has("ESCAPE_BONUS") and (low_hp or lethal)),
+            float(has("ESCAPE_PENALTY") and (low_hp or lethal)),
+            float(has("VP_BONUS") and not lethal),
+            float(has("VP_PENALTY")),
+            float(condition_count == 0 or condition_hits > 0),
+            condition_hits / 3.0,
+            float(has("PICK_NEW_ITEM") and len(actor.objets) <= self.max_objects),
+            float(has("BREAK_SELF") or has("EN_MOUSSE")),
+        ]
         return (
             float(getattr(objet, 'intact', False)),
             float(getattr(objet, 'actif', False)),
@@ -458,6 +503,7 @@ class ObservationEncoder:
             float(power_match),
             float(covers_lethal),
             *tag_features,
+            *derived_features,
         )
 
 
@@ -847,14 +893,15 @@ def _load_compatible_state_dict(model, state_dict):
             compatible[key] = value
         elif key == 'combat_candidate_encoder.0.weight' and value.ndim == 2 and current_value.ndim == 2:
             merged = current_value.clone()
-            old_candidate_size = 12
-            embed_cols = value.shape[1] - old_candidate_size
+            embed_cols = model.object_embedding.embedding_dim
+            old_feature_cols = value.shape[1] - embed_cols
+            current_feature_cols = current_value.shape[1] - embed_cols
             if (
                 value.shape[0] == current_value.shape[0]
-                and embed_cols > 0
-                and current_value.shape[1] >= value.shape[1]
+                and old_feature_cols > 0
+                and current_feature_cols >= old_feature_cols
             ):
-                merged[:, :old_candidate_size] = value[:, :old_candidate_size]
+                merged[:, :old_feature_cols] = value[:, :old_feature_cols]
                 merged[:, -embed_cols:] = value[:, -embed_cols:]
                 compatible[key] = merged
         elif value.ndim == current_value.ndim == 2 and value.shape[0] == current_value.shape[0]:
