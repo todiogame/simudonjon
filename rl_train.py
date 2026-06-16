@@ -132,6 +132,7 @@ class CurriculumMix:
 @dataclass
 class RewardConfig:
     enabled: bool = False
+    placement_mode: str = 'ranked'
     score_coef: float = 0.02
     monster_coef: float = 0.01
     death_penalty: float = 0.20
@@ -592,6 +593,16 @@ def _placement_rewards(players):
     return {id(player): schedule[index] for index, player in enumerate(ranked)}
 
 
+def _training_base_rewards(players, reward_config):
+    if reward_config.placement_mode == 'ranked':
+        return _placement_rewards(players)
+    if reward_config.placement_mode == 'winner_take_all':
+        ranked = _ranking(players)
+        winner = ranked[0]
+        return {id(player): (1.0 if player is winner else 0.0) for player in ranked}
+    raise ValueError(f"Unknown reward placement_mode: {reward_config.placement_mode}")
+
+
 def _player_rank(players, target):
     for index, player in enumerate(_ranking(players), start=1):
         if player is target:
@@ -786,7 +797,7 @@ def _collect_rollout_worker(args):
 
         policy.clear_records()
         ordonnanceur(joueurs, DonjonDeck(), objets_simu, False, policy=policies)
-        rewards = _placement_rewards(joueurs)
+        rewards = _training_base_rewards(joueurs, reward_config)
         for joueur in joueurs:
             player_reward = _player_reward(joueur, reward_config, rewards)
             player_steps = policy.take_records(joueur)
@@ -1611,6 +1622,7 @@ def _customize_stages(
     max_stage_iterations=None,
     managed_kind_names=None,
     reward_shaping=None,
+    winner_take_all=None,
     lr=None,
     entropy_coef=None,
 ):
@@ -1624,6 +1636,8 @@ def _customize_stages(
             ppo.entropy_coef = entropy_coef
         if reward_shaping is not None:
             reward.enabled = reward_shaping
+        if winner_take_all is not None:
+            reward.placement_mode = 'winner_take_all' if winner_take_all else 'ranked'
         customized.append(StageConfig(
             name=stage.name,
             max_iterations=max_stage_iterations if max_stage_iterations is not None else stage.max_iterations,
@@ -1746,6 +1760,11 @@ def main():
         action='store_true',
         help='Enable dense score/monster/death shaping for all selected stages.',
     )
+    train_parser.add_argument(
+        '--winner-take-all',
+        action='store_true',
+        help='Train with 1.0 reward for the winner and 0.0 for all other players.',
+    )
     train_parser.add_argument('--lr', type=float, default=None)
     train_parser.add_argument('--entropy-coef', type=float, default=None)
     train_parser.add_argument(
@@ -1781,6 +1800,7 @@ def main():
             max_stage_iterations=args.max_stage_iterations,
             managed_kind_names=_parse_managed_kind_names(args.managed_kinds),
             reward_shaping=True if args.reward_shaping else None,
+            winner_take_all=True if args.winner_take_all else None,
             lr=args.lr,
             entropy_coef=args.entropy_coef,
         )

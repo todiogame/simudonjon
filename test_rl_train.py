@@ -12,9 +12,11 @@ from rl_train import (
     ObservationEncoder,
     CurriculumMix,
     PolicyValueNet,
+    RewardConfig,
     _load_compatible_state_dict,
     _customize_stages,
     _parse_curriculum_mix,
+    _training_base_rewards,
     progressive_stages,
     run_smoke_training,
     smoke_checkpoint_reproducibility,
@@ -152,5 +154,20 @@ def test_training_customization_overrides_curriculum_and_stage_knobs():
 
     assert stage.managed_kinds == ("CHOOSE_COMBAT_OBJECT",)
     assert stage.reward.enabled is True
+    assert stage.reward.placement_mode == "ranked"
     assert stage.ppo.lr == 5e-5
     assert stage.ppo.entropy_coef == 0.03
+
+
+def test_winner_take_all_training_rewards_only_the_winner():
+    players = [
+        SimpleNamespace(score_final=5, vivant=True, dans_le_dj=True, pv_total=1),
+        SimpleNamespace(score_final=12, vivant=True, dans_le_dj=True, pv_total=1),
+        SimpleNamespace(score_final=8, vivant=True, dans_le_dj=True, pv_total=1),
+    ]
+
+    rewards = _training_base_rewards(players, RewardConfig(placement_mode="winner_take_all"))
+
+    assert rewards[id(players[1])] == 1.0
+    assert rewards[id(players[0])] == 0.0
+    assert rewards[id(players[2])] == 0.0
