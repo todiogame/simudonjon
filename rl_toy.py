@@ -50,18 +50,18 @@ arises is logged and asserted to be in the allowed set.
 
 Reward
 ------
-Terminal, score-based: +1 for winning the game, otherwise a score credit
-(``SURVIVE_SCORE_COEF * score``, capped below a win) for the monsters cleared --
-and that credit is divided by ``DEATH_SCORE_DIVISOR`` (3) if you died. Rationale:
-  - A flat +1/0/-1 outcome reward leaves a flat valley -- while the agent keeps
-    losing, every episode returns the same value, PPO sees no gradient, and it
-    freezes at "flee immediately" (scaling the win reward does nothing: a win is
-    ~never sampled).
-  - Rewarding *score* gives a gradient out of that valley (drawing one more safe
-    monster is worth a little more). Crediting score even on death -- but only a
-    third of what surviving earns -- makes drawing worthwhile (so the agent stops
-    fleeing turn 1) while keeping survival clearly preferable to dying with the
-    same pile. The dungeon need not be clearable.
+Terminal: +1 for winning the game; a small flat negative (``DEATH_REWARD``) if you
+die; otherwise a score credit (``SURVIVE_SCORE_COEF * score``, capped below a win)
+for the monsters cleared. The shape was tuned against two failure modes:
+  - A flat +1/0/-1 outcome reward leaves a flat valley -- while losing, every
+    episode returns the same value, PPO sees no gradient, and it freezes at "flee
+    immediately" (scaling the win reward does nothing: a win is ~never sampled).
+  - So we credit *score* (drawing one more safe monster pays). But crediting score
+    on death (e.g. /3) makes "die with a big pile" attractive -> draw-into-death.
+A small *negative* death (forfeiting the score credit) is the balance: drawing is
+worth it while safe, dying is mildly bad, so the optimal line is "draw while the
+remaining deck is safe, stop before the risk" -- exactly what the deck-aware
+observation lets the agent judge. The dungeon need not be clearable.
 
 Diagnostic findings (what the toy taught us)
 --------------------------------------------
@@ -138,19 +138,22 @@ from rl_train import (
 )
 
 
-# Terminal reward, score-based so the agent is rewarded for the monsters it
-# clears (this is what pulls it out of the flat "flee immediately" valley -- a
-# flat outcome reward gives a near-zero gradient there):
+# Terminal reward, tuned to make the EV-balanced line (the heuristic's) optimal:
 #   win the game = +1
-#   else         = SURVIVE_SCORE_COEF * score (capped below a win), and that
-#                  score credit is DIVIDED BY DEATH_SCORE_DIVISOR if you died.
-# So you still earn credit for what you killed even when you die, but only ~1/3
-# of what you'd earn by surviving with the same score -> drawing is worth it
-# (escapes flee-immediately) while surviving stays clearly preferable.
+#   survive-lose = SURVIVE_SCORE_COEF * score (capped below a win) -- you keep a
+#                  credit for the monsters you cleared, so drawing pays (this is
+#                  what escapes the flat "flee immediately" valley)
+#   die          = DEATH_REWARD (small flat negative) -- death FORFEITS the score
+#                  credit and costs a little, so over-drawing is bad.
+# The two earlier extremes both failed: death = -1 (flat) -> too scared to draw
+# (flee immediately); death = +score/3 -> dying with a big pile is rewarded
+# (draw into death). A small negative makes "draw while the remaining deck is
+# safe, then stop before the risk" the best line -- exactly what the deck-aware
+# observation lets the agent judge.
 WIN_REWARD = 1.0
-SURVIVE_SCORE_COEF = 0.05   # partial credit per monster scored
+SURVIVE_SCORE_COEF = 0.05   # partial credit per monster scored while surviving
 SURVIVE_REWARD_CAP = 0.5    # keep the score credit strictly below a win (+1)
-DEATH_SCORE_DIVISOR = 3.0   # dying earns score credit, but a third of fleeing/surviving
+DEATH_REWARD = -0.25        # small flat penalty for dying (forfeits the score credit)
 
 
 # --- Guardrail policy --------------------------------------------------------
@@ -267,15 +270,14 @@ def _make_toy_policy(model, encoder, *, sample, record, device='cpu'):
 # --- Rollouts / evaluation (single process: deterministic and simple) --------
 
 def _terminal_reward(joueur, winner):
-    """Game outcome from a player's view: +1 win / score credit / score credit / 3
-    if dead (see the Reward note). Shared by RL rollouts and the value targets
-    used to warm the critic during behaviour cloning."""
+    """Game outcome from a player's view: +1 win / small negative if dead /
+    else a score credit for the monsters cleared (see the Reward note). Shared by
+    RL rollouts and the value targets that warm the critic during cloning."""
     if joueur is winner:
         return WIN_REWARD
-    reward = min(SURVIVE_REWARD_CAP, SURVIVE_SCORE_COEF * joueur.score_final)
     if not joueur.vivant:
-        reward /= DEATH_SCORE_DIVISOR
-    return reward
+        return DEATH_REWARD
+    return min(SURVIVE_REWARD_CAP, SURVIVE_SCORE_COEF * joueur.score_final)
 
 
 def _opponent_policy(kind):
