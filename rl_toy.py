@@ -25,10 +25,11 @@ Toy specification
     - ``Hache de Glace``    : active ONE-SHOT executor of any monster (incl. Dragon),
                               consumed on use -- the scarce, decisive tool
     - ``Armure en cuir``    : pure passive +5 PV (start HP = 7 hero + 5 = 12)
-* Fixed dungeon: the full set of "standard" monsters (Gobelin..Dragon, the base
-  DonjonDeck composition), in ascending power -- no rats, no special-rule /
-  effect / X cards -- so the only decisions raised stay the encodable binary /
-  1-of-N kinds. The lone source of residual randomness is the seedable flee roll.
+* Fixed dungeon *composition* (the full standard monster set, Gobelin..Dragon --
+  no rats, no special-rule / effect / X cards) but the order is **shuffled every
+  game**, so the agent must learn a state-based policy (read the current card, HP
+  and cards-left) rather than memorise a sequence. Only the encodable binary /
+  1-of-N decision kinds are ever raised; randomness (shuffle + flee roll) is seeded.
 * The planted skill: only the one-shot Hache de Glace can execute the big
   Hache-only monsters, and the Dragon (power 9) is the worst of them. The agent
   should *spend the Hache on a Dragon* (not waste it on a weakling it can kill

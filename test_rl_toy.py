@@ -72,13 +72,22 @@ def test_toy_match_is_fixed_and_two_players_with_four_objects():
         assert kinds == {MarteauDeGuerre, TorcheBleue, HacheDeGlace, ArmureEnCuir}
 
 
-def test_toy_dungeon_order_is_fixed():
+def test_toy_dungeon_is_shuffled_with_fixed_composition():
+    import numpy as np
+
+    n = len(env.TOY_DUNGEON_SEQUENCE)
     a = env.ToyDonjon()
-    b = env.ToyDonjon()
+    np.random.seed(1)
     a.melange()
+    b = env.ToyDonjon()
+    np.random.seed(2)
     b.melange()
-    assert list(a.ordre) == list(b.ordre) == list(range(len(env.TOY_DUNGEON_SEQUENCE)))
-    assert [c.titre for c in a.cartes] == [nom for nom, _, _ in env.TOY_DUNGEON_SEQUENCE]
+    # Every game draws all cards (a permutation), but the order is shuffled, not
+    # fixed -- different seeds give different orders (so no sequence to memorise).
+    assert sorted(a.ordre) == list(range(n))
+    assert list(a.ordre) != list(b.ordre)
+    # The composition is fixed regardless of order.
+    assert sorted(c.titre for c in a.cartes) == sorted(nom for nom, _, _ in env.TOY_DUNGEON_SEQUENCE)
 
 
 def test_toy_games_only_raise_allowed_kinds():

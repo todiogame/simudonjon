@@ -42,10 +42,11 @@ TOY_MANAGED_KINDS = (
 TOY_STRUCTURAL_KINDS = (DecisionKind.ORDER_OBJECTS,)
 TOY_ALLOWED_KINDS = frozenset(TOY_MANAGED_KINDS) | frozenset(TOY_STRUCTURAL_KINDS)
 
-# Fixed dungeon, drawn in this exact order every game. The full set of "standard"
-# monsters (no rats, no special-rule / effect / X cards), in ascending power so
-# the difficulty ramps. Plain monsters only => the only decisions raised stay the
-# encodable binary / 1-of-N kinds.
+# Fixed *composition* (re-shuffled each game): the full set of "standard"
+# monsters (no rats, no special-rule / effect / X cards). Listed here ascending
+# by power for readability only -- the order is randomised per game (see
+# ToyDonjon), so the agent cannot memorise a sequence. Plain monsters only =>
+# the only decisions raised stay the encodable binary / 1-of-N kinds.
 #   Gobelin(1)/Squelette(2) : free kills (Torche; Marteau also kills Squelette)
 #   Golem(5)                : Marteau (type) or Hache
 #   Orc/Vampire/Liche/Demon : Hache-only (or tank); not coverable by Marteau/Torche
@@ -90,7 +91,11 @@ def make_toy_hero():
 
 
 class ToyDonjon(DonjonDeck):
-    """DonjonDeck with a fixed card list and a fixed (identity) draw order."""
+    """DonjonDeck restricted to the fixed toy *composition*. The draw order is
+    shuffled every game (inherited DonjonDeck.melange), so the agent must learn a
+    state-based policy -- decide from the current card, its HP and the number of
+    cards left -- rather than memorise a fixed sequence. The shuffle is seeded in
+    build_toy_match, so each (seed) is reproducible and the eval bank is fixed."""
 
     def __init__(self):
         self.cartes = [
@@ -102,11 +107,6 @@ class ToyDonjon(DonjonDeck):
             carte.ordre = index
         self.nb_cartes = len(self.cartes)
         self.ordre = None
-        self.index = 0
-
-    def melange(self):
-        # No shuffle: the toy dungeon order is fixed and reproducible.
-        self.ordre = np.arange(self.nb_cartes)
         self.index = 0
 
 
