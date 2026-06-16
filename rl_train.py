@@ -18,7 +18,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.distributions import Categorical
+from torch.distributions import Bernoulli, Categorical
 
 from ai_decisions import CombatObjectChoice, DecisionKind
 from ai_policy import default_dungeon_policy, random_dungeon_policy
@@ -32,14 +32,31 @@ from simu import ordonnanceur
 PLAYER_NAMES = ("Sagarex", "Francis", "Mastho", "Mr.Adam")
 INITIAL_MANAGED_KINDS = (
     DecisionKind.SHOULD_FLEE,
+    DecisionKind.USE_OBJECT_IN_COMBAT,
+    DecisionKind.USE_ACTIVE_OBJECT,
+    DecisionKind.USE_HERO_ABILITY,
+    DecisionKind.CHOOSE_OBJECT,
+    DecisionKind.CHOOSE_OBJECTS,
     DecisionKind.CHOOSE_COMBAT_OBJECT,
+    DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE,
+    DecisionKind.CHOOSE_OBJECT_TO_REPAIR,
+    DecisionKind.ORDER_OBJECTS,
 )
-DECISION_EXPANSION_ORDER = (
-    DecisionKind.PAY_TRAQUENARD,
-    DecisionKind.SHOULD_FACE_SPECIAL_CARD,
-    DecisionKind.USE_EVENT_EFFECT,
+DECISION_EXPANSION_ORDER = ()
+BINARY_KINDS = (
+    DecisionKind.SHOULD_FLEE,
+    DecisionKind.USE_OBJECT_IN_COMBAT,
+    DecisionKind.USE_ACTIVE_OBJECT,
     DecisionKind.USE_HERO_ABILITY,
 )
+SINGLE_OBJECT_KINDS = (
+    DecisionKind.CHOOSE_COMBAT_OBJECT,
+    DecisionKind.CHOOSE_OBJECT,
+    DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE,
+    DecisionKind.CHOOSE_OBJECT_TO_REPAIR,
+)
+MULTI_OBJECT_KINDS = (DecisionKind.CHOOSE_OBJECTS,)
+ORDER_OBJECT_KINDS = (DecisionKind.ORDER_OBJECTS,)
 KIND_VOCAB = INITIAL_MANAGED_KINDS + DECISION_EXPANSION_ORDER
 PHASE_VOCAB = (
     'flee',
@@ -61,6 +78,18 @@ PHASE_VOCAB = (
     'prophete',
     'shaman_reroll',
     'lapin_skip_turn',
+    'repair_object',
+    'shop_discard',
+    'kraken_confidence_object',
+    'guardian_angel_confidence_object',
+    'break_object_limon',
+    'object_sacrifice',
+    'object_sacrifice_limon',
+    'draw_two_keep_one',
+    'couteau_suisse_repair',
+    'inventeur_discards',
+    'gants_de_gaia_discards',
+    'inventory',
 )
 PHASE_INDEX = {phase: index for index, phase in enumerate(PHASE_VOCAB)}
 KIND_INDEX = {kind: index for index, kind in enumerate(KIND_VOCAB)}
@@ -168,10 +197,10 @@ class ObservationEncoder:
         self.max_candidates = max_candidates
         self.kind_size = len(KIND_VOCAB)
         self.phase_size = len(PHASE_VOCAB) + 1  # last slot = unknown
-        self.binary_size = 40 + self.kind_size + self.phase_size
-        self.combat_global_size = 34 + self.kind_size + self.phase_size
         self.item_tag_size = len(ITEM_GAMEPLAY_TAGS)
-        self.candidate_size = 14 + self.item_tag_size
+        self.binary_size = 39 + self.item_tag_size + self.kind_size + self.phase_size
+        self.combat_global_size = 33 + self.kind_size + self.phase_size
+        self.candidate_size = 12 + self.item_tag_size
         self.object_type_vocab_size = len(OBJECT_TYPE_INDEX) + 1
 
     def observation_spec(self):
@@ -184,20 +213,26 @@ class ObservationEncoder:
         }
 
     def encode(self, context):
-        if context.kind == DecisionKind.CHOOSE_COMBAT_OBJECT:
-            return self._encode_combat_choice(context)
+        if context.kind in SINGLE_OBJECT_KINDS:
+            return self._encode_object_choice(context)
+        if context.kind in MULTI_OBJECT_KINDS:
+            return self._encode_object_choice(context, mode='multi_object')
+        if context.kind in ORDER_OBJECT_KINDS:
+            return self._encode_object_choice(context, mode='order_objects')
         return self._encode_binary(context)
 
     def _encode_binary(self, context):
         actor = context.actor
         game = context.game
         subject = context.subject
-        candidate = context.meta('objet') or (context.options[0] if context.options else None)
+        candidate = self._binary_candidate(context)
 
         remaining_cards, players_alive, players_in_dungeon, player_count, game_turn = self._game_stats(game)
         subject_types = tuple(getattr(subject, 'types', ()) or ())
         candidate_types = tuple(getattr(candidate, 'types_tags', ()) or ())
         candidate_powers = tuple(getattr(candidate, 'puissance_tags', ()) or ())
+        gameplay_tags = set(getattr(candidate, 'gameplay_tags', ()) or ())
+        tag_features = [float(tag in gameplay_tags) for tag in ITEM_GAMEPLAY_TAGS]
         subject_power = getattr(subject, 'puissance_initiale', getattr(subject, 'puissance', 0))
         subject_damage = getattr(subject, 'dommages', getattr(subject, 'puissance', 0))
         score_now = _score_now(actor)
@@ -245,7 +280,6 @@ class ObservationEncoder:
             float(candidate is not None and getattr(candidate, 'intact', False)),
             getattr(candidate, 'pv_bonus', 0) / 10.0,
             getattr(candidate, 'modificateur_de', 0) / 6.0,
-            getattr(candidate, 'priorite', 0) / 100.0,
             float(any(card_type in candidate_types for card_type in subject_types)),
             float(subject_power in candidate_powers),
             len(candidate_types) / 4.0,
@@ -253,24 +287,35 @@ class ObservationEncoder:
             float(any(10 in objet.puissance_tags for objet in intact_objects)),
             float(any(8 in objet.puissance_tags for objet in intact_objects)),
             float(any("Attrape" in getattr(objet, 'nom', '') and objet.intact for objet in actor.objets)),
+            *tag_features,
         ]
         return {
             'mode': 'binary',
             'obs': np.asarray(features, dtype=np.float32),
         }
 
-    def _encode_combat_choice(self, context):
+    def _binary_candidate(self, context):
+        if context.kind == DecisionKind.USE_HERO_ABILITY:
+            return (
+                context.meta('hero')
+                or context.meta('source')
+                or (context.subject if context.subject is not None and not hasattr(context.subject, 'dommages') else None)
+                or getattr(context.actor, 'perso_obj', None)
+            )
+        return context.meta('objet') or context.meta('source') or (context.options[0] if context.options else None)
+
+    def _encode_object_choice(self, context, mode=None):
         actor = context.actor
         game = context.game
         subject = context.subject
         options = tuple(context.options[:self.max_candidates])
+        option_count = len(options)
         remaining_cards, players_alive, players_in_dungeon, player_count, game_turn = self._game_stats(game)
         subject_types = tuple(getattr(subject, 'types', ()) or ())
         subject_power = getattr(subject, 'puissance_initiale', getattr(subject, 'puissance', 0))
         subject_damage = getattr(subject, 'dommages', getattr(subject, 'puissance', 0))
         score_now = _score_now(actor)
         intact_objects = [objet for objet in actor.objets if objet.intact]
-        worthit_flags = [self._heuristic_worthit(objet, actor, subject, game) for objet in options]
 
         kind_features = [0.0] * self.kind_size
         kind_slot = KIND_INDEX.get(context.kind)
@@ -312,7 +357,6 @@ class ObservationEncoder:
             len(subject_types) / 4.0,
             float(getattr(subject, 'effet', None) is not None),
             min(1.0, context.meta('combat_step', 0) / 6.0),
-            sum(1.0 for flag in worthit_flags if flag) / float(self.max_candidates),
             float(any(10 in objet.puissance_tags for objet in intact_objects)),
             float(any(8 in objet.puissance_tags for objet in intact_objects)),
             float(any("Attrape" in getattr(objet, 'nom', '') and objet.intact for objet in actor.objets)),
@@ -320,7 +364,9 @@ class ObservationEncoder:
 
         candidate_obs = np.zeros((self.max_candidates, self.candidate_size), dtype=np.float32)
         candidate_ids = np.zeros(self.max_candidates, dtype=np.int64)
-        action_mask = np.zeros(self.max_candidates + 1, dtype=np.float32)
+        has_null_action = self._has_null_action(context)
+        mask_size = self.max_candidates + 1 if context.kind in SINGLE_OBJECT_KINDS else self.max_candidates
+        action_mask = np.zeros(mask_size, dtype=np.float32)
 
         for index, objet in enumerate(options):
             candidate_obs[index] = self._encode_candidate(
@@ -329,20 +375,50 @@ class ObservationEncoder:
                 subject_power,
                 subject_damage,
                 actor,
-                worthit_flags[index],
             )
             candidate_ids[index] = OBJECT_TYPE_INDEX.get(type(objet).__name__, 0)
             action_mask[index] = 1.0
-        action_mask[self.max_candidates] = 1.0
+        if context.kind in SINGLE_OBJECT_KINDS and has_null_action:
+            action_mask[self.max_candidates] = 1.0
 
-        return {
-            'mode': 'combat_object',
+        if mode is None:
+            mode = 'combat_object' if context.kind == DecisionKind.CHOOSE_COMBAT_OBJECT else 'single_object'
+        result = {
+            'mode': mode,
             'global_obs': np.asarray(global_features, dtype=np.float32),
             'candidate_obs': candidate_obs,
             'candidate_ids': candidate_ids,
             'action_mask': action_mask,
-            'option_count': len(options),
+            'option_count': option_count,
+            'full_option_count': len(context.options),
         }
+        if mode == 'multi_object':
+            min_count, max_count = self._multi_count_bounds(context, option_count)
+            result.update({'min_count': min_count, 'max_count': max_count})
+        return result
+
+    @staticmethod
+    def _has_null_action(context):
+        if context.kind == DecisionKind.CHOOSE_COMBAT_OBJECT:
+            return context.meta('allow_resolve_now', True)
+        if context.kind == DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE and context.phase == 'break_object_limon':
+            return True
+        if context.kind == DecisionKind.CHOOSE_OBJECT and context.phase == 'coursier_volant_discard':
+            return True
+        return context.meta('allow_none', False)
+
+    @staticmethod
+    def _multi_count_bounds(context, option_count):
+        target_count = context.meta('count')
+        default_min = target_count if target_count is not None else 0
+        default_max = target_count if target_count is not None else option_count
+        if context.phase == 'inventeur_discards':
+            default_min = default_max = 2
+        min_count = int(context.meta('min_count', default_min))
+        max_count = int(context.meta('max_count', default_max))
+        min_count = max(0, min(min_count, option_count))
+        max_count = max(min_count, min(max_count, option_count))
+        return min_count, max_count
 
     def _game_stats(self, game):
         remaining_cards = 0
@@ -360,35 +436,29 @@ class ObservationEncoder:
             game_turn = game.tour
         return remaining_cards, players_alive, players_in_dungeon, player_count, game_turn
 
-    def _encode_candidate(self, objet, subject_types, subject_power, subject_damage, actor, heuristic_worthit):
-        type_match = any(card_type in objet.types_tags for card_type in subject_types)
-        power_match = subject_power in objet.puissance_tags
+    def _encode_candidate(self, objet, subject_types, subject_power, subject_damage, actor):
+        types_tags = tuple(getattr(objet, 'types_tags', ()) or ())
+        puissance_tags = tuple(getattr(objet, 'puissance_tags', ()) or ())
+        type_match = any(card_type in types_tags for card_type in subject_types)
+        power_match = subject_power in puissance_tags
         covers_lethal = (type_match or power_match) and subject_damage >= actor.pv_total
         gameplay_tags = set(getattr(objet, 'gameplay_tags', ()))
         tag_features = [float(tag in gameplay_tags) for tag in ITEM_GAMEPLAY_TAGS]
         return (
-            float(objet.intact),
-            float(objet.actif),
-            objet.pv_bonus / 10.0,
-            objet.modificateur_de / 6.0,
-            objet.priorite / 100.0,
-            len(objet.types_tags) / 4.0,
-            len(objet.puissance_tags) / 4.0,
-            float(8 in objet.puissance_tags),
-            float(10 in objet.puissance_tags),
-            (objet.couleur or 0) / 5.0,
+            float(getattr(objet, 'intact', False)),
+            float(getattr(objet, 'actif', False)),
+            getattr(objet, 'pv_bonus', 0) / 10.0,
+            getattr(objet, 'modificateur_de', 0) / 6.0,
+            len(types_tags) / 4.0,
+            len(puissance_tags) / 4.0,
+            float(8 in puissance_tags),
+            float(10 in puissance_tags),
+            (getattr(objet, 'couleur', 0) or 0) / 5.0,
             float(type_match),
             float(power_match),
             float(covers_lethal),
             *tag_features,
-            float(heuristic_worthit),
         )
-
-    def _heuristic_worthit(self, objet, actor, subject, game):
-        try:
-            return bool(objet.worthit(actor, subject, game, []))
-        except Exception:
-            return False
 
 
 class PolicyValueNet(nn.Module):
@@ -419,12 +489,14 @@ class PolicyValueNet(nn.Module):
             nn.ReLU(),
         )
         self.combat_policy_head = nn.Linear(hidden_dim * 2, 1)
+        self.multi_policy_head = nn.Linear(hidden_dim * 2, 1)
+        self.order_policy_head = nn.Linear(hidden_dim * 2, 1)
         self.combat_resolve_head = nn.Linear(hidden_dim * 3, 1)
         self.combat_value_head = nn.Linear(hidden_dim, 1)
 
     @staticmethod
-    def _masked_candidate_summary(candidate_hidden, action_mask):
-        valid_candidates = (action_mask[:, :-1] > 0.5).unsqueeze(-1)
+    def _masked_candidate_summary(candidate_hidden, candidate_mask):
+        valid_candidates = (candidate_mask > 0.5).unsqueeze(-1)
         candidate_count = valid_candidates.sum(dim=1).clamp(min=1)
         masked_candidates = candidate_hidden * valid_candidates
         pooled_mean = masked_candidates.sum(dim=1) / candidate_count
@@ -439,17 +511,41 @@ class PolicyValueNet(nn.Module):
         hidden = self.binary_trunk(obs)
         return self.binary_policy_head(hidden), self.binary_value_head(hidden).squeeze(-1)
 
-    def forward_combat(self, global_obs, candidate_obs, candidate_ids, action_mask):
+    def _candidate_parts(self, global_obs, candidate_obs, candidate_ids):
         global_hidden = self.combat_global_encoder(global_obs)
         candidate_emb = self.object_embedding(candidate_ids)
         candidate_hidden = self.combat_candidate_encoder(torch.cat((candidate_obs, candidate_emb), dim=-1))
+        return global_hidden, candidate_hidden
+
+    @staticmethod
+    def _candidate_logits(global_hidden, candidate_hidden, head):
         global_expanded = global_hidden.unsqueeze(1).expand(-1, candidate_hidden.shape[1], -1)
-        candidate_logits = self.combat_policy_head(torch.cat((global_expanded, candidate_hidden), dim=-1)).squeeze(-1)
-        pooled_mean, pooled_max = self._masked_candidate_summary(candidate_hidden, action_mask)
+        return head(torch.cat((global_expanded, candidate_hidden), dim=-1)).squeeze(-1)
+
+    def forward_combat(self, global_obs, candidate_obs, candidate_ids, action_mask):
+        global_hidden, candidate_hidden = self._candidate_parts(global_obs, candidate_obs, candidate_ids)
+        candidate_logits = self._candidate_logits(global_hidden, candidate_hidden, self.combat_policy_head)
+        candidate_mask = action_mask[:, :-1]
+        pooled_mean, pooled_max = self._masked_candidate_summary(candidate_hidden, candidate_mask)
         resolve_logits = self.combat_resolve_head(torch.cat((global_hidden, pooled_mean, pooled_max), dim=-1))
         logits = torch.cat((candidate_logits, resolve_logits), dim=1)
         valid_mask = action_mask > 0.5
         logits = logits.masked_fill(~valid_mask, -1e9)
+        return logits, self.combat_value_head(global_hidden).squeeze(-1)
+
+    def forward_single_object(self, global_obs, candidate_obs, candidate_ids, action_mask):
+        return self.forward_combat(global_obs, candidate_obs, candidate_ids, action_mask)
+
+    def forward_multi_object(self, global_obs, candidate_obs, candidate_ids, action_mask):
+        global_hidden, candidate_hidden = self._candidate_parts(global_obs, candidate_obs, candidate_ids)
+        logits = self._candidate_logits(global_hidden, candidate_hidden, self.multi_policy_head)
+        logits = logits.masked_fill(action_mask <= 0.5, 0.0)
+        return logits, self.combat_value_head(global_hidden).squeeze(-1)
+
+    def forward_order_objects(self, global_obs, candidate_obs, candidate_ids, action_mask):
+        global_hidden, candidate_hidden = self._candidate_parts(global_obs, candidate_obs, candidate_ids)
+        logits = self._candidate_logits(global_hidden, candidate_hidden, self.order_policy_head)
+        logits = logits.masked_fill(action_mask <= 0.5, -1e9)
         return logits, self.combat_value_head(global_hidden).squeeze(-1)
 
 
@@ -480,56 +576,147 @@ class HybridNeuralPolicy:
             return self.fallback.decide(context)
 
         encoded = self.encoder.encode(context)
-        with torch.no_grad():
-            if encoded['mode'] == 'combat_object':
-                global_obs = torch.from_numpy(encoded['global_obs']).unsqueeze(0).to(self.device)
-                candidate_obs = torch.from_numpy(encoded['candidate_obs']).unsqueeze(0).to(self.device)
-                candidate_ids = torch.from_numpy(encoded['candidate_ids']).unsqueeze(0).to(self.device)
-                action_mask = torch.from_numpy(encoded['action_mask']).unsqueeze(0).to(self.device)
-                logits, value = self.model.forward_combat(global_obs, candidate_obs, candidate_ids, action_mask)
-            else:
-                obs_tensor = torch.from_numpy(encoded['obs']).unsqueeze(0).to(self.device)
-                logits, value = self.model.forward_binary(obs_tensor)
-            dist = Categorical(logits=logits.squeeze(0))
-            if self.sample:
-                action_index = dist.sample()
-            else:
-                action_index = torch.argmax(logits.squeeze(0), dim=-1)
-            log_prob = dist.log_prob(action_index)
+        if encoded['mode'] == 'binary':
+            action_value, action_record, value, log_prob = self._decide_binary(encoded)
+        elif encoded['mode'] in ('combat_object', 'single_object'):
+            action_value, action_record, value, log_prob = self._decide_single_object(context, encoded)
+        elif encoded['mode'] == 'multi_object':
+            action_value, action_record, value, log_prob = self._decide_multi_object(context, encoded)
+        elif encoded['mode'] == 'order_objects':
+            action_value, action_record, value, log_prob = self._decide_order_objects(context, encoded)
+        else:
+            raise ValueError(f"Unknown encoded action mode: {encoded['mode']}")
 
-        action_idx = int(action_index.item())
         counts = self._action_counts[context.kind.name]
         if encoded['mode'] == 'combat_object':
-            if action_idx < encoded['option_count']:
-                action_value = context.options[action_idx]
-                counts['object'] += 1
-            else:
-                action_value = CombatObjectChoice.RESOLVE_NOW
-                counts['resolve_now'] += 1
+            counts['object' if action_value is not CombatObjectChoice.RESOLVE_NOW else 'resolve_now'] += 1
+        elif encoded['mode'] == 'single_object':
+            counts['object' if action_value is not None else 'none'] += 1
+        elif encoded['mode'] == 'multi_object':
+            counts[f'count_{len(action_value)}'] += 1
+        elif encoded['mode'] == 'order_objects':
+            counts['ordered'] += 1
         else:
-            action_value = bool(action_idx)
             counts['true' if action_value else 'false'] += 1
 
         if self.record:
             record = {
                 'mode': encoded['mode'],
-                'action': action_idx,
-                'logprob': float(log_prob.item()),
-                'value': float(value.item()),
+                'action': action_record,
+                'logprob': float(log_prob),
+                'value': float(value),
                 'kind': context.kind.name,
                 'phase': context.phase,
             }
-            if encoded['mode'] == 'combat_object':
+            if encoded['mode'] in ('combat_object', 'single_object', 'multi_object', 'order_objects'):
                 record.update({
                     'global_obs': encoded['global_obs'],
                     'candidate_obs': encoded['candidate_obs'],
                     'candidate_ids': encoded['candidate_ids'],
                     'action_mask': encoded['action_mask'],
                 })
+                if encoded['mode'] == 'multi_object':
+                    record['multi_action'] = action_record
+                elif encoded['mode'] == 'order_objects':
+                    record['action_sequence'] = action_record
             else:
                 record['obs'] = encoded['obs']
             self._records.setdefault(id(context.actor), []).append(record)
         return action_value
+
+    def _candidate_tensors(self, encoded):
+        return (
+            torch.from_numpy(encoded['global_obs']).unsqueeze(0).to(self.device),
+            torch.from_numpy(encoded['candidate_obs']).unsqueeze(0).to(self.device),
+            torch.from_numpy(encoded['candidate_ids']).unsqueeze(0).to(self.device),
+            torch.from_numpy(encoded['action_mask']).unsqueeze(0).to(self.device),
+        )
+
+    def _decide_binary(self, encoded):
+        with torch.no_grad():
+            obs_tensor = torch.from_numpy(encoded['obs']).unsqueeze(0).to(self.device)
+            logits, value = self.model.forward_binary(obs_tensor)
+            dist = Categorical(logits=logits.squeeze(0))
+            action_index = dist.sample() if self.sample else torch.argmax(logits.squeeze(0), dim=-1)
+            log_prob = dist.log_prob(action_index)
+        action_idx = int(action_index.item())
+        return bool(action_idx), action_idx, float(value.item()), float(log_prob.item())
+
+    def _decide_single_object(self, context, encoded):
+        with torch.no_grad():
+            tensors = self._candidate_tensors(encoded)
+            if encoded['mode'] == 'combat_object':
+                logits, value = self.model.forward_combat(*tensors)
+            else:
+                logits, value = self.model.forward_single_object(*tensors)
+            dist = Categorical(logits=logits.squeeze(0))
+            action_index = dist.sample() if self.sample else torch.argmax(logits.squeeze(0), dim=-1)
+            log_prob = dist.log_prob(action_index)
+        action_idx = int(action_index.item())
+        if action_idx < encoded['option_count']:
+            return context.options[action_idx], action_idx, float(value.item()), float(log_prob.item())
+        if encoded['mode'] == 'combat_object':
+            return CombatObjectChoice.RESOLVE_NOW, action_idx, float(value.item()), float(log_prob.item())
+        return None, action_idx, float(value.item()), float(log_prob.item())
+
+    def _decide_multi_object(self, context, encoded):
+        with torch.no_grad():
+            logits, value = self.model.forward_multi_object(*self._candidate_tensors(encoded))
+            logits = logits.squeeze(0)
+            action_mask = torch.from_numpy(encoded['action_mask']).to(self.device) > 0.5
+            probs = torch.sigmoid(logits)
+            if self.sample:
+                selected = Bernoulli(probs=probs).sample().bool() & action_mask
+            else:
+                selected = (probs >= 0.5) & action_mask
+            selected = self._enforce_multi_bounds(selected, logits, action_mask, encoded['min_count'], encoded['max_count'])
+            targets = selected.float()
+            log_probs = -F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+            log_prob = (log_probs * action_mask.float()).sum()
+        selection = selected.detach().cpu().numpy().astype(np.float32)
+        values = tuple(context.options[index] for index in range(encoded['option_count']) if selection[index] > 0.5)
+        return values, selection, float(value.item()), float(log_prob.item())
+
+    @staticmethod
+    def _enforce_multi_bounds(selected, logits, action_mask, min_count, max_count):
+        selected = selected.clone()
+        current_count = int(selected.sum().item())
+        if current_count > max_count:
+            chosen = torch.where(selected)[0]
+            keep = chosen[torch.topk(logits[chosen], k=max_count).indices] if max_count else torch.empty(0, dtype=torch.long, device=logits.device)
+            selected[:] = False
+            selected[keep] = True
+        current_count = int(selected.sum().item())
+        if current_count < min_count:
+            candidates = action_mask & ~selected
+            needed = min_count - current_count
+            if needed > 0 and candidates.any():
+                candidate_indexes = torch.where(candidates)[0]
+                add = candidate_indexes[torch.topk(logits[candidate_indexes], k=min(needed, len(candidate_indexes))).indices]
+                selected[add] = True
+        return selected
+
+    def _decide_order_objects(self, context, encoded):
+        with torch.no_grad():
+            logits, value = self.model.forward_order_objects(*self._candidate_tensors(encoded))
+            logits = logits.squeeze(0)
+            remaining = torch.from_numpy(encoded['action_mask']).to(self.device) > 0.5
+            chosen_indexes = []
+            log_probs = []
+            while remaining.any():
+                masked_logits = logits.masked_fill(~remaining, -1e9)
+                dist = Categorical(logits=masked_logits)
+                action_index = dist.sample() if self.sample else torch.argmax(masked_logits, dim=-1)
+                log_probs.append(dist.log_prob(action_index))
+                idx = int(action_index.item())
+                chosen_indexes.append(idx)
+                remaining[idx] = False
+            log_prob = torch.stack(log_probs).sum() if log_probs else torch.tensor(0.0, device=self.device)
+        ordered = [context.options[index] for index in chosen_indexes]
+        ordered.extend(context.options[index] for index in range(encoded['option_count'], len(context.options)))
+        sequence = np.full(self.encoder.max_candidates, -1, dtype=np.int64)
+        sequence[:len(chosen_indexes)] = np.asarray(chosen_indexes, dtype=np.int64)
+        return tuple(ordered), sequence, float(value.item()), float(log_prob.item())
 
     def clear_records(self):
         self._records.clear()
@@ -660,7 +847,7 @@ def _load_compatible_state_dict(model, state_dict):
             compatible[key] = value
         elif key == 'combat_candidate_encoder.0.weight' and value.ndim == 2 and current_value.ndim == 2:
             merged = current_value.clone()
-            old_candidate_size = 14
+            old_candidate_size = 12
             embed_cols = value.shape[1] - old_candidate_size
             if (
                 value.shape[0] == current_value.shape[0]
@@ -1060,6 +1247,26 @@ def format_policy_report(rows):
     return "\n".join(lines)
 
 
+def _order_logprobs_and_entropy(logits, action_mask, sequences):
+    logprobs = []
+    entropies = []
+    for row_index in range(logits.shape[0]):
+        remaining = action_mask[row_index] > 0.5
+        row_logprob = logits[row_index].new_tensor(0.0)
+        row_entropy = logits[row_index].new_tensor(0.0)
+        for action_index in sequences[row_index]:
+            if action_index.item() < 0:
+                break
+            masked_logits = logits[row_index].masked_fill(~remaining, -1e9)
+            dist = Categorical(logits=masked_logits)
+            row_logprob = row_logprob + dist.log_prob(action_index)
+            row_entropy = row_entropy + dist.entropy()
+            remaining[action_index] = False
+        logprobs.append(row_logprob)
+        entropies.append(row_entropy)
+    return torch.stack(logprobs), torch.stack(entropies).mean()
+
+
 def ppo_update(model, optimizer, steps, config, *, device='cpu'):
     if not steps:
         return {
@@ -1068,7 +1275,6 @@ def ppo_update(model, optimizer, steps, config, *, device='cpu'):
             'entropy': 0.0,
         }
 
-    actions = torch.tensor([step['action'] for step in steps], dtype=torch.long, device=device)
     old_logprobs = torch.tensor([step['logprob'] for step in steps], dtype=torch.float32, device=device)
     returns = torch.tensor([step['reward'] for step in steps], dtype=torch.float32, device=device)
     old_values = torch.tensor([step['value'] for step in steps], dtype=torch.float32, device=device)
@@ -1089,24 +1295,48 @@ def ppo_update(model, optimizer, steps, config, *, device='cpu'):
             np.random.shuffle(batch_order)
             for start in range(0, len(batch_order), config.minibatch_size):
                 batch_indexes = batch_order[start:start + config.minibatch_size]
-                batch_action_tensor = actions[batch_indexes]
                 batch_old_logprobs = old_logprobs[batch_indexes]
                 batch_returns = returns[batch_indexes]
                 batch_advantages = advantages[batch_indexes]
 
-                if mode == 'combat_object':
+                if mode in ('combat_object', 'single_object'):
+                    batch_action_tensor = torch.tensor([steps[i]['action'] for i in batch_indexes], dtype=torch.long, device=device)
                     global_obs = torch.from_numpy(np.stack([steps[i]['global_obs'] for i in batch_indexes])).to(device)
                     candidate_obs = torch.from_numpy(np.stack([steps[i]['candidate_obs'] for i in batch_indexes])).to(device)
                     candidate_ids = torch.from_numpy(np.stack([steps[i]['candidate_ids'] for i in batch_indexes])).to(device)
                     action_mask = torch.from_numpy(np.stack([steps[i]['action_mask'] for i in batch_indexes])).to(device)
-                    logits, values = model.forward_combat(global_obs, candidate_obs, candidate_ids, action_mask)
+                    if mode == 'combat_object':
+                        logits, values = model.forward_combat(global_obs, candidate_obs, candidate_ids, action_mask)
+                    else:
+                        logits, values = model.forward_single_object(global_obs, candidate_obs, candidate_ids, action_mask)
+                    dist = Categorical(logits=logits)
+                    new_logprobs = dist.log_prob(batch_action_tensor)
+                    entropy = dist.entropy().mean()
+                elif mode == 'multi_object':
+                    global_obs = torch.from_numpy(np.stack([steps[i]['global_obs'] for i in batch_indexes])).to(device)
+                    candidate_obs = torch.from_numpy(np.stack([steps[i]['candidate_obs'] for i in batch_indexes])).to(device)
+                    candidate_ids = torch.from_numpy(np.stack([steps[i]['candidate_ids'] for i in batch_indexes])).to(device)
+                    action_mask = torch.from_numpy(np.stack([steps[i]['action_mask'] for i in batch_indexes])).to(device)
+                    targets = torch.from_numpy(np.stack([steps[i]['multi_action'] for i in batch_indexes])).to(device)
+                    logits, values = model.forward_multi_object(global_obs, candidate_obs, candidate_ids, action_mask)
+                    log_probs = -F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+                    new_logprobs = (log_probs * action_mask).sum(dim=1)
+                    entropy = (Bernoulli(logits=logits).entropy() * action_mask).sum(dim=1).mean()
+                elif mode == 'order_objects':
+                    global_obs = torch.from_numpy(np.stack([steps[i]['global_obs'] for i in batch_indexes])).to(device)
+                    candidate_obs = torch.from_numpy(np.stack([steps[i]['candidate_obs'] for i in batch_indexes])).to(device)
+                    candidate_ids = torch.from_numpy(np.stack([steps[i]['candidate_ids'] for i in batch_indexes])).to(device)
+                    action_mask = torch.from_numpy(np.stack([steps[i]['action_mask'] for i in batch_indexes])).to(device)
+                    sequences = torch.from_numpy(np.stack([steps[i]['action_sequence'] for i in batch_indexes])).long().to(device)
+                    logits, values = model.forward_order_objects(global_obs, candidate_obs, candidate_ids, action_mask)
+                    new_logprobs, entropy = _order_logprobs_and_entropy(logits, action_mask, sequences)
                 else:
+                    batch_action_tensor = torch.tensor([steps[i]['action'] for i in batch_indexes], dtype=torch.long, device=device)
                     obs = torch.from_numpy(np.stack([steps[i]['obs'] for i in batch_indexes])).to(device)
                     logits, values = model.forward_binary(obs)
-
-                dist = Categorical(logits=logits)
-                new_logprobs = dist.log_prob(batch_action_tensor)
-                entropy = dist.entropy().mean()
+                    dist = Categorical(logits=logits)
+                    new_logprobs = dist.log_prob(batch_action_tensor)
+                    entropy = dist.entropy().mean()
 
                 ratio = torch.exp(new_logprobs - batch_old_logprobs)
                 unclipped = ratio * batch_advantages
@@ -1141,60 +1371,60 @@ def post_random_curriculum():
 
 
 def progressive_stages():
-    initial = tuple(kind.name for kind in INITIAL_MANAGED_KINDS)
-    plus_traquenard = initial + (DecisionKind.PAY_TRAQUENARD.name,)
-    plus_special = plus_traquenard + (DecisionKind.SHOULD_FACE_SPECIAL_CARD.name,)
-    plus_event = plus_special + (DecisionKind.USE_EVENT_EFFECT.name,)
-    plus_hero = plus_event + (DecisionKind.USE_HERO_ABILITY.name,)
+    flee_and_combat = (
+        DecisionKind.SHOULD_FLEE.name,
+        DecisionKind.CHOOSE_COMBAT_OBJECT.name,
+        DecisionKind.USE_OBJECT_IN_COMBAT.name,
+    )
+    plus_single_objects = flee_and_combat + (
+        DecisionKind.CHOOSE_OBJECT.name,
+        DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE.name,
+        DecisionKind.CHOOSE_OBJECT_TO_REPAIR.name,
+        DecisionKind.USE_ACTIVE_OBJECT.name,
+    )
+    plus_multi_objects = plus_single_objects + (DecisionKind.CHOOSE_OBJECTS.name,)
+    all_object_hero = tuple(kind.name for kind in INITIAL_MANAGED_KINDS)
 
     return [
         StageConfig(
-            name='loop1_binary',
+            name='flee_combat_objects',
             max_iterations=20,
             hidden_dim=128,
-            managed_kinds=initial,
+            managed_kinds=flee_and_combat,
             ppo=PPOConfig(lr=3e-4, entropy_coef=0.01, minibatch_size=4096),
             reward=RewardConfig(enabled=False),
             restart_from_scratch=True,
         ),
         StageConfig(
-            name='loop1_restart_binary',
+            name='single_object_cluster',
             max_iterations=20,
             hidden_dim=256,
-            managed_kinds=initial,
+            managed_kinds=plus_single_objects,
             ppo=PPOConfig(lr=1e-4, entropy_coef=0.02, minibatch_size=4096),
             reward=RewardConfig(enabled=False),
             restart_from_scratch=True,
         ),
         StageConfig(
-            name='expand_pay_traquenard',
+            name='multi_object_cluster',
             max_iterations=20,
             hidden_dim=256,
-            managed_kinds=plus_traquenard,
+            managed_kinds=plus_multi_objects,
             ppo=PPOConfig(lr=1e-4, entropy_coef=0.02, minibatch_size=4096),
             reward=RewardConfig(enabled=True),
         ),
         StageConfig(
-            name='expand_special_card',
+            name='order_objects',
             max_iterations=20,
             hidden_dim=256,
-            managed_kinds=plus_special,
+            managed_kinds=all_object_hero,
             ppo=PPOConfig(lr=1e-4, entropy_coef=0.02, minibatch_size=4096),
             reward=RewardConfig(enabled=True),
         ),
         StageConfig(
-            name='expand_event_effect',
+            name='all_object_hero',
             max_iterations=20,
             hidden_dim=256,
-            managed_kinds=plus_event,
-            ppo=PPOConfig(lr=1e-4, entropy_coef=0.02, minibatch_size=4096),
-            reward=RewardConfig(enabled=True),
-        ),
-        StageConfig(
-            name='expand_hero_ability',
-            max_iterations=20,
-            hidden_dim=256,
-            managed_kinds=plus_hero,
+            managed_kinds=all_object_hero,
             ppo=PPOConfig(lr=1e-4, entropy_coef=0.02, minibatch_size=4096),
             reward=RewardConfig(enabled=True),
         ),
@@ -1588,8 +1818,12 @@ def train_progressive(
 def load_checkpoint_for_eval(checkpoint_path, *, device='cpu'):
     checkpoint = _load_checkpoint(checkpoint_path)
     stage_index = checkpoint['stage_index']
-    stages = progressive_stages()
-    managed_kinds = tuple(DecisionKind[name] for name in stages[stage_index].managed_kinds)
+    managed_kind_names = None
+    if checkpoint.get('history'):
+        managed_kind_names = checkpoint['history'][-1].get('managed_kinds')
+    if managed_kind_names is None:
+        managed_kind_names = progressive_stages()[stage_index].managed_kinds
+    managed_kinds = tuple(DecisionKind[name] for name in managed_kind_names)
     model, _ = _make_model_and_policy(checkpoint['model_state_dict'], managed_kinds, sample=False, record=False, device=device)
     return checkpoint, model, managed_kinds
 

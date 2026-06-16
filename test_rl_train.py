@@ -1,5 +1,6 @@
 import pytest
 from types import SimpleNamespace
+import inspect
 
 
 try:
@@ -11,6 +12,8 @@ from ai_decisions import DecisionContext, DecisionKind
 from rl_train import (
     ObservationEncoder,
     CurriculumMix,
+    HybridNeuralPolicy,
+    INITIAL_MANAGED_KINDS,
     PolicyValueNet,
     RewardConfig,
     _load_compatible_state_dict,
@@ -21,6 +24,11 @@ from rl_train import (
     run_smoke_training,
     smoke_checkpoint_reproducibility,
 )
+
+
+class RaisingFallback:
+    def decide(self, context):
+        raise AssertionError(f"fallback used for managed kind {context.kind.name}")
 
 
 def test_rl_smoke_training_runs():
@@ -60,19 +68,23 @@ def test_combat_resolve_logit_depends_on_candidates():
     assert not torch.allclose(logits_a[:, -1], logits_b[:, -1])
 
 
-def test_combat_encoder_exposes_worthit_signal():
+def test_managed_object_encoder_does_not_consume_heuristic_signals():
     class DummyObject:
         intact = True
         actif = False
         pv_bonus = 0
         modificateur_de = 0
-        priorite = 42
         types_tags = []
         puissance_tags = []
         couleur = 1
+        gameplay_tags = ()
+
+        @property
+        def priorite(self):
+            raise AssertionError("priority must not be consumed by PPO encoder")
 
         def worthit(self, joueur, carte, jeu, log_details):
-            return True
+            raise AssertionError("worthit must not be consumed by PPO encoder")
 
     actor = SimpleNamespace(
         pv_total=10,
@@ -113,8 +125,105 @@ def test_combat_encoder_exposes_worthit_signal():
     encoder = ObservationEncoder()
     encoded = encoder.encode(context)
 
-    assert encoded['candidate_obs'][0, -1] == 1.0
-    assert encoded['global_obs'][-4] == 1.0 / encoder.max_candidates
+    assert encoded['mode'] == 'combat_object'
+    assert encoded['candidate_obs'][0].shape == (encoder.candidate_size,)
+
+
+def test_managed_object_and_hero_kinds_do_not_use_fallback_and_return_legal_actions():
+    class DummyObject:
+        def __init__(self, name):
+            self.nom = name
+            self.intact = True
+            self.actif = False
+            self.pv_bonus = 0
+            self.modificateur_de = 0
+            self.types_tags = ()
+            self.puissance_tags = ()
+            self.couleur = 1
+            self.gameplay_tags = ()
+
+    objects = tuple(DummyObject(f"object-{index}") for index in range(3))
+    hero = SimpleNamespace(
+        nom='hero',
+        pv_bonus=2,
+        modificateur_de=0,
+        effet=None,
+        gameplay_tags=(),
+    )
+    actor = SimpleNamespace(
+        pv_total=10,
+        pv_base=10,
+        medailles=0,
+        pile_monstres_vaincus=[],
+        objets=list(objects),
+        vivant=True,
+        dans_le_dj=True,
+        fuite_reussie=False,
+        perso_obj=hero,
+    )
+    game = SimpleNamespace(
+        donjon=SimpleNamespace(ordre=[0], index=0),
+        joueurs=[actor],
+        tour=1,
+        traquenard_actif=False,
+        traquenard_paye=False,
+        execute_next_monster=False,
+    )
+    subject = SimpleNamespace(
+        types=[],
+        puissance_initiale=3,
+        dommages=3,
+        event=False,
+        is_X=False,
+        effet=None,
+    )
+    encoder = ObservationEncoder()
+    model = PolicyValueNet(encoder, hidden_dim=32)
+    policy = HybridNeuralPolicy(
+        model,
+        encoder,
+        managed_kinds=INITIAL_MANAGED_KINDS,
+        fallback=RaisingFallback(),
+        sample=False,
+        record=True,
+    )
+
+    contexts = [
+        DecisionContext(DecisionKind.USE_OBJECT_IN_COMBAT, actor, game, 'object_combat', subject, (objects[0],), {'objet': objects[0]}),
+        DecisionContext(DecisionKind.USE_ACTIVE_OBJECT, actor, game, 'enclume_instable_use', subject, (objects[0],), {'objet': objects[0]}),
+        DecisionContext(DecisionKind.USE_HERO_ABILITY, actor, game, 'avatar', subject, metadata={'hero': hero}),
+        DecisionContext(DecisionKind.CHOOSE_OBJECT, actor, game, 'draw_two_keep_one', subject, objects),
+        DecisionContext(DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE, actor, game, 'object_sacrifice', subject, objects),
+        DecisionContext(DecisionKind.CHOOSE_OBJECT_TO_REPAIR, actor, game, 'repair_object', subject, objects),
+        DecisionContext(DecisionKind.CHOOSE_OBJECTS, actor, game, 'gants_de_gaia_discards', subject, objects, {'count': 2}),
+        DecisionContext(DecisionKind.ORDER_OBJECTS, actor, game, 'inventory', options=objects),
+    ]
+
+    results = [policy.decide(context) for context in contexts]
+
+    assert type(results[0]) is bool
+    assert type(results[1]) is bool
+    assert type(results[2]) is bool
+    assert results[3] in objects
+    assert results[4] in objects
+    assert results[5] in objects
+    assert len(results[6]) == 2
+    assert all(value in objects for value in results[6])
+    assert set(map(id, results[7])) == set(map(id, objects))
+
+
+def test_encoder_source_excludes_heuristic_feature_symbols():
+    sources = "\n".join(
+        inspect.getsource(member)
+        for member in (
+            ObservationEncoder._encode_binary,
+            ObservationEncoder._encode_object_choice,
+            ObservationEncoder._encode_candidate,
+        )
+    )
+    assert 'worthit' not in sources
+    assert 'worth_it' not in sources
+    assert 'priorite' not in sources
 
 
 def test_compatible_load_preserves_candidate_embedding_columns_when_tags_expand():
@@ -126,7 +235,7 @@ def test_compatible_load_preserves_candidate_embedding_columns_when_tags_expand(
     target_initial = target.state_dict()['combat_candidate_encoder.0.weight'].clone()
     source_state = source.state_dict()
     full_weight = source_state['combat_candidate_encoder.0.weight']
-    old_candidate_size = 14
+    old_candidate_size = 12
     embed_cols = 16
     old_weight = torch.cat((full_weight[:, :old_candidate_size], full_weight[:, -embed_cols:]), dim=1)
     source_state['combat_candidate_encoder.0.weight'] = old_weight
