@@ -1,5 +1,6 @@
 import random
 import json
+import inspect
 import numpy as np
 from monstres import CarteMonstre
 from ai_decisions import DecisionContext, DecisionKind, require_bool, require_option, require_options
@@ -9,6 +10,41 @@ with open('priorites_objets.json', 'r') as json_file:
 
 # Couleurs des objets (tableur, colonne Color) : 1=rouge, 2=vert, 3=bleu, 4=violet, 5=jaune
 COULEUR_NOMS = {1: 'rouge', 2: 'vert', 3: 'bleu', 4: 'violet', 5: 'jaune'}
+ITEM_GAMEPLAY_TAGS = (
+    "ACTIVE",
+    "EXECUTE",
+    "EXECUTE_AND_DISCARD",
+    "ABSORB",
+    "REDUCE_DAMAGE",
+    "HEAL_NOW",
+    "HEAL_CONDITIONAL",
+    "REROLL",
+    "REPAIR",
+    "BREAK_SELF",
+    "DISCARD_MONSTER",
+    "PUT_BACK_MONSTER",
+    "ROLL_DICE",
+    "DICE_6_WIN",
+    "DICE_1_FAIL",
+    "NEEDS_MONSTER_IN_PILE",
+    "ESCAPE_BONUS",
+    "ESCAPE_PENALTY",
+    "VP_BONUS",
+    "VP_PENALTY",
+    "RAW_HP",
+    "LOSE_HP",
+    "TYPE_CONDITION",
+    "POWER_CONDITION",
+    "HP_CONDITION",
+    "PICK_NEW_ITEM",
+    "DIVINATION",
+    "SURVIVE",
+    "EN_MOUSSE",
+    "STEAL_ITEM",
+    "SET_HP",
+    "NOVICE",
+    "STEAL_MONSTER",
+)
 
 def _cle_nom(nom):
     # cle de lookup insensible a la casse et aux accents (les titres du tableur varient)
@@ -54,6 +90,7 @@ class Objet:
         self.compteur = 0
         self.types_tags = types_tags if types_tags is not None else []
         self.puissance_tags = puissance_tags if puissance_tags is not None else []
+        self.gameplay_tags = tuple(getattr(type(self), "gameplay_tags", ()))
 
     def rules(self, joueur, carte, Jeu, log_details):
         # rule condition to use the item
@@ -530,6 +567,8 @@ class KebabRevigorant(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class ArcEnflamme(Objet):
+    manual_gameplay_tags = ("LOSE_HP",)
+
     def __init__(self):
         super().__init__("Arc enflammé", False, 7)
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -537,6 +576,8 @@ class ArcEnflamme(Objet):
             self.add_damage(1, joueur, carte, log_details)
 
 class ParcheminDeTeleportation(Objet):
+    remove_gameplay_tags = ("ESCAPE_PENALTY",)
+
     def __init__(self):
         super().__init__("Parchemin de Téléportation", False, 2, -100)
     def vaincu_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
@@ -1055,6 +1096,8 @@ class CoffreAnime(Objet):
                 log_details.append(f" {joueur_proprietaire.nom} utilise {self.nom} pour essayer de voler et réparer {objet.nom} de {joueur.nom} MAIS cela ECHOUE!")
                             
 class AnneauDeVie(Objet):
+    manual_gameplay_tags = ("HP_CONDITION",)
+
     def __init__(self):
         super().__init__("Anneau de Vie", False)
     def fin_tour(self, joueur, Jeu, log_details):
@@ -1063,6 +1106,8 @@ class AnneauDeVie(Objet):
                 
 
 class BottesDeVitesse(Objet):
+    manual_gameplay_tags = ("ESCAPE_BONUS",)
+
     def __init__(self):
         super().__init__("Bottes de Vitesse", False, 2)
     def _maj_bonus_fuite(self, joueur):
@@ -1265,6 +1310,8 @@ class SeringueDuDocteurFou(Objet):
             self.perdPV(1, joueur, log_details)
             
 class CorneDAbordage(Objet):
+    manual_gameplay_tags = ("STEAL_MONSTER",)
+
     def __init__(self):
         super().__init__("Corne d'abordage", True)
 
@@ -1549,6 +1596,8 @@ class ChapeauStyle(Objet):
         joueur.tiebreaker = True
         
 class Chameau(Objet):
+    manual_gameplay_tags = ("HEAL_CONDITIONAL", "HP_CONDITION")
+
     def __init__(self):
         super().__init__("Chameau", True)
     def chameau(self, joueur, Jeu, log_details):
@@ -1605,6 +1654,8 @@ class AnkhDeReincarnation(Objet):
             self.repare()
 
 class CoffreDuRoiSorcier(Objet):
+    manual_gameplay_tags = ("STEAL_ITEM",)
+
     def __init__(self):
         super().__init__("Coffre du Roi Sorcier", False, 3)
     def en_mort(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
@@ -1626,6 +1677,9 @@ class CoeurDeDragon(Objet):
             self.gagnePV(4, joueur_proprietaire, log_details)
 
 class ShotDAdrenaline(Objet):
+    manual_gameplay_tags = ("HEAL_NOW", "HP_CONDITION")
+    remove_gameplay_tags = ("SET_HP",)
+
     def __init__(self):
         super().__init__("Shot d'adrénaline", True)
     def shotDAdrenaline(self, joueur, Jeu, log_details):
@@ -2245,6 +2299,8 @@ class ParcheminDePoncage(Objet):
             self.destroy(joueur, Jeu, log_details)
 
 class AraigneeDomestique(Objet):
+    manual_gameplay_tags = ("STEAL_MONSTER",)
+
     def __init__(self):
         super().__init__("Araignée domestique", False, 0, -1)
         self.deja_vole_sur_mort = False
@@ -2362,6 +2418,8 @@ class BouillonDAmes(Objet):
         self.destroy(joueur, Jeu, log_details)       
          
 class SacDeConstantinople(Objet):
+    manual_gameplay_tags = ("STEAL_MONSTER",)
+
     non_combattant = True  # utile seulement s'il y a des Dragons a voler: ne retarde pas la fuite
 
     def __init__(self):
@@ -3245,6 +3303,8 @@ class PorteBoulesDuPonceur(Objet):
                 self.destroy(joueur, Jeu, log_details)
 
 class ChevalierePirate(Objet):
+    remove_gameplay_tags = ("REDUCE_DAMAGE",)
+
     def __init__(self):
         super().__init__("Chevalière Pirate", True)
     def rules(self, joueur, carte, Jeu, log_details):
@@ -3501,6 +3561,8 @@ class BotteDePandore(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class ScotchDuSilencieux(Objet):
+    remove_gameplay_tags = ("REDUCE_DAMAGE",)
+
     def __init__(self):
         super().__init__("Scotch du Silencieux", False)
     def rencontre_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
@@ -4175,6 +4237,210 @@ def _table_sans_hook(base, hooks):
 
 SANS_HOOK_OBJET = _table_sans_hook(Objet, _HOOKS_OBJET)
 
+_TAG_METHODS = (
+    "rules",
+    "worthit",
+    "can_use_in_combat",
+    "combat_effet",
+    "rencontre_effet",
+    "rencontre_event_effet",
+    "vaincu_effet",
+    "survie_effet",
+    "debut_tour",
+    "fin_tour",
+    "subit_dommages_effet",
+    "activated_effet",
+    "mort_effet",
+    "fuite_definitive_effet",
+    "en_roll",
+    "en_fuite",
+    "score_effet",
+    "decompte_effet",
+)
+
+_CONDITION_TAG_METHODS = (
+    "rules",
+    "can_use_in_combat",
+)
+
+_VP_TAG_METHODS = (
+    "score_effet",
+    "decompte_effet",
+)
+
+
+def _method_text(cls, method_name):
+    method = getattr(cls, method_name, None)
+    base_method = getattr(Objet, method_name, None)
+    if method is None or method is base_method:
+        return "", set(), ()
+    code = getattr(method, "__code__", None)
+    names = set(code.co_names) if code is not None else set()
+    consts = code.co_consts if code is not None else ()
+    try:
+        source = inspect.getsource(method)
+    except (OSError, TypeError):
+        source = ""
+    return source, names, consts
+
+
+def _derive_gameplay_tags(objet):
+    cls = type(objet)
+    tags = set(getattr(cls, "manual_gameplay_tags", ()))
+    if objet.actif:
+        tags.add("ACTIVE")
+    if objet.pv_bonus > 0:
+        tags.add("RAW_HP")
+    if objet.modificateur_de > 0:
+        tags.add("ESCAPE_BONUS")
+    elif objet.modificateur_de < 0:
+        tags.add("ESCAPE_PENALTY")
+    if "mousse" in objet.nom.lower():
+        tags.add("EN_MOUSSE")
+    if "novice" in objet.nom.lower() or getattr(objet, "bonus_sans_medaille", False):
+        tags.add("NOVICE")
+
+    combined_source = []
+    combined_names = set()
+    combined_consts = []
+    combat_source = ""
+    combat_names = set()
+    en_roll_source = ""
+    en_roll_names = set()
+    condition_source = []
+    condition_names = set()
+    vp_source = []
+    vp_names = set()
+    for method_name in _TAG_METHODS:
+        source, names, consts = _method_text(cls, method_name)
+        combined_source.append(source)
+        combined_names.update(names)
+        combined_consts.extend(consts)
+        if method_name == "combat_effet":
+            combat_source = source
+            combat_names = names
+        if method_name == "en_roll":
+            en_roll_source = source
+            en_roll_names = names
+        if method_name in _CONDITION_TAG_METHODS:
+            condition_source.append(source)
+            condition_names.update(names)
+        if method_name in _VP_TAG_METHODS:
+            vp_source.append(source)
+            vp_names.update(names)
+
+    source_text = "\n".join(combined_source)
+    condition_text = "\n".join(condition_source)
+    vp_text = "\n".join(vp_source)
+    if "execute" in combined_names:
+        tags.add("EXECUTE")
+    if "executeEtDefausse" in combined_names:
+        tags.update(("EXECUTE", "EXECUTE_AND_DISCARD", "DISCARD_MONSTER"))
+    if "absorbe" in combined_names:
+        tags.update(("ABSORB", "HEAL_NOW"))
+    if {"reduc_damage", "fixe_reduction_totale", "bloque_reduction_dommages"} & combined_names:
+        tags.add("REDUCE_DAMAGE")
+    if "gagnePV" in combat_names or "pv_total" in combat_names and "+=" in combat_source:
+        tags.add("HEAL_NOW")
+    if "gagnePV" in combined_names and "gagnePV" not in combat_names:
+        tags.add("HEAL_CONDITIONAL")
+    if "perdPV" in combined_names or "pv_total -=" in source_text:
+        tags.add("LOSE_HP")
+    if "pv_total =" in source_text or "fixe ses PV" in source_text or "remontent" in source_text:
+        tags.add("SET_HP")
+    reroll_text = en_roll_source.lower().replace("rerolled", "")
+    all_reroll_text = source_text.lower().replace("rerolled", "")
+    if (
+        "rollDice" in en_roll_names
+        or "pour reroll" in reroll_text
+        or "relance" in reroll_text
+        or ("rollDice" in combined_names and ("pour reroll" in all_reroll_text or "relance" in all_reroll_text))
+    ):
+        tags.add("REROLL")
+    if {"repare", "_repare_un_objet"} & combined_names:
+        tags.add("REPAIR")
+    if "destroy" in combined_names:
+        tags.add("BREAK_SELF")
+    if (
+        "_defausse_monstre_de_pile" in combined_names
+        or "defausse" in combined_names
+        or "defausse" in source_text
+        or "defausser" in source_text
+    ):
+        tags.add("DISCARD_MONSTER")
+    if (
+        "remetDansDonjon" in combined_names
+        or "rajoute_en_haut_de_la_pile" in combined_names
+        or "rajoute_en_bas_de_la_pile" in combined_names
+        or "remet" in source_text
+    ):
+        tags.add("PUT_BACK_MONSTER")
+    if "rollDice" in combined_names:
+        tags.add("ROLL_DICE")
+        normalized = source_text.replace(" ", "")
+        if any(pattern in normalized for pattern in (">=6", "==6", ">5", "jet6")):
+            tags.add("DICE_6_WIN")
+        if any(pattern in normalized for pattern in ("<=1", "==1", "<2", "jet1")):
+            tags.add("DICE_1_FAIL")
+    if "pile_monstres_vaincus" in combined_names or "_defausse_monstre_de_pile" in combined_names:
+        tags.add("NEEDS_MONSTER_IN_PILE")
+    if "survit" in combined_names or "survie_effet" in cls.__dict__:
+        tags.add("SURVIVE")
+    if "piocheItem" in combined_names or "ajouter_objet" in combined_names or "objets_dispo" in combined_names:
+        tags.add("PICK_NEW_ITEM")
+    if (
+        "ajouter_objet" in combined_names
+        and "objets.remove" in source_text
+        and ("vole" in source_text or "voler" in source_text or "ancien_proprietaire" in combined_names)
+    ):
+        tags.add("STEAL_ITEM")
+    if (
+        (
+            "ajouter_monstre_vaincu" in combined_names
+            or "steal_monsters" in combined_names
+        )
+        and (
+            "pile_monstres_vaincus.remove" in source_text
+            or "pile_monstres_vaincus.pop" in source_text
+        )
+        and ("vole" in source_text or "voler" in source_text or "volee" in source_text or "volables" in source_text)
+    ):
+        tags.add("STEAL_MONSTER")
+    if (
+        "_peek_prochaine_carte" in combined_names
+        or "cartes_connues" in combined_names
+        or "ORDER_CARDS" in source_text
+        or "pressentiment" in source_text.lower()
+    ):
+        tags.add("DIVINATION")
+    if "en_fuite" in cls.__dict__:
+        if any(pattern in source_text for pattern in ("jet_fuite +=", "jet_fuite = 100", "reroll", "relance")):
+            tags.add("ESCAPE_BONUS")
+        if "perdPV" in source_text or "jet_fuite -=" in source_text:
+            tags.add("ESCAPE_PENALTY")
+    if "scoreChange" in vp_names or "score_final" in vp_names:
+        if any(pattern in vp_text for pattern in ("scoreChange(-", "score_final -=", "-=")):
+            tags.add("VP_PENALTY")
+        if any(pattern in vp_text for pattern in ("scoreChange(", "score_final +=", "+=", "points de victoire")):
+            tags.add("VP_BONUS")
+    if "types" in condition_names or ".types" in condition_text:
+        tags.add("TYPE_CONDITION")
+    if "puissance" in condition_names or ".puissance" in condition_text:
+        tags.add("POWER_CONDITION")
+    if "pv_total" in condition_names or ".pv_total" in condition_text:
+        tags.add("HP_CONDITION")
+
+    tags.difference_update(getattr(cls, "remove_gameplay_tags", ()))
+    return tuple(tag for tag in ITEM_GAMEPLAY_TAGS if tag in tags)
+
+
+def _assign_gameplay_tags(objets):
+    for objet in objets:
+        tags = _derive_gameplay_tags(objet)
+        type(objet).gameplay_tags = tags
+        objet.gameplay_tags = tags
+
+
 # Liste des objets
 objets_disponibles = [
     MainDeMidas(),
@@ -4455,11 +4721,14 @@ objets_disponibles = [
     PotionDeJouvence(),
 ]
 
+_assign_gameplay_tags(objets_disponibles)
+
 
 
 __all__ = [
             "Objet",
             "objets_disponibles",
+            "ITEM_GAMEPLAY_TAGS",
             "Egide",
             "MainDeMidas",
             "MidasDeBronze",

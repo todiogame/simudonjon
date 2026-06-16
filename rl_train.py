@@ -25,7 +25,7 @@ from ai_policy import default_dungeon_policy, random_dungeon_policy
 from heros import persos_disponibles
 from joueurs import Joueur
 from monstres import DonjonDeck
-from objets import objets_disponibles
+from objets import ITEM_GAMEPLAY_TAGS, objets_disponibles
 from simu import ordonnanceur
 
 
@@ -169,7 +169,8 @@ class ObservationEncoder:
         self.phase_size = len(PHASE_VOCAB) + 1  # last slot = unknown
         self.binary_size = 40 + self.kind_size + self.phase_size
         self.combat_global_size = 34 + self.kind_size + self.phase_size
-        self.candidate_size = 14
+        self.item_tag_size = len(ITEM_GAMEPLAY_TAGS)
+        self.candidate_size = 14 + self.item_tag_size
         self.object_type_vocab_size = len(OBJECT_TYPE_INDEX) + 1
 
     def observation_spec(self):
@@ -362,6 +363,8 @@ class ObservationEncoder:
         type_match = any(card_type in objet.types_tags for card_type in subject_types)
         power_match = subject_power in objet.puissance_tags
         covers_lethal = (type_match or power_match) and subject_damage >= actor.pv_total
+        gameplay_tags = set(getattr(objet, 'gameplay_tags', ()))
+        tag_features = [float(tag in gameplay_tags) for tag in ITEM_GAMEPLAY_TAGS]
         return (
             float(objet.intact),
             float(objet.actif),
@@ -376,6 +379,7 @@ class ObservationEncoder:
             float(type_match),
             float(power_match),
             float(covers_lethal),
+            *tag_features,
             float(heuristic_worthit),
         )
 
@@ -656,7 +660,10 @@ def _make_model_and_policy(state_dict, managed_kinds, *, sample, record, device=
     encoder = ObservationEncoder()
     hidden_dim = int(state_dict['binary_trunk.0.bias'].shape[0])
     model = PolicyValueNet(encoder, hidden_dim=hidden_dim).to(device)
-    model.load_state_dict(state_dict)
+    try:
+        model.load_state_dict(state_dict)
+    except RuntimeError:
+        _load_compatible_state_dict(model, state_dict)
     model.eval()
     policy = HybridNeuralPolicy(
         model,
@@ -889,7 +896,7 @@ def evaluate_against_baseline(
 
 
 def _report_worker(args):
-    seed_specs, policy_name, checkpoint_state_dict, managed_kind_names = args
+    seed_specs, policy_name, checkpoint_state_dict, managed_kind_names, policy_label = args
     if policy_name == 'PPO':
         managed_kinds = tuple(DecisionKind[name] for name in managed_kind_names)
         _, target_policy = _make_model_and_policy(
@@ -913,6 +920,7 @@ def _report_worker(args):
         'flees': 0,
         'clears': 0,
         'score_sum': 0.0,
+        'policy_label': policy_label,
     }
     for seed, eval_index in seed_specs:
         joueurs, objets_simu = _build_match(seed)
@@ -938,14 +946,28 @@ def _merge_report_stats(results):
         'flees': 0,
         'clears': 0,
         'score_sum': 0.0,
+        'policy_label': None,
     }
     for result in results:
         for key in merged:
+            if key == 'policy_label':
+                merged[key] = result[key]
+                continue
             merged[key] += result[key]
     return merged
 
 
-def report_policy_stats(*, checkpoint_path=None, episodes=1000, num_workers=8):
+def _parse_managed_kind_names(value):
+    if value is None:
+        return None
+    names = tuple(part.strip() for part in value.split(',') if part.strip())
+    for name in names:
+        if name not in DecisionKind.__members__:
+            raise ValueError(f"Unknown DecisionKind for --ppo-managed-kinds: {name}")
+    return names
+
+
+def report_policy_stats(*, checkpoint_path=None, episodes=1000, num_workers=8, ppo_managed_kinds=None):
     _assert_multiprocessing_launch_safe(num_workers)
     seeds = _seed_bank(EVAL_DEFAULT_BASE_SEED, episodes)
     worker_count = max(1, min(num_workers, len(seeds)))
@@ -953,27 +975,31 @@ def report_policy_stats(*, checkpoint_path=None, episodes=1000, num_workers=8):
     for index, seed in enumerate(seeds):
         seed_chunks[index % worker_count].append((seed, index))
 
-    policies = ['DefaultDungeonPolicy', 'RandomPolicy']
+    policies = [('DefaultDungeonPolicy', 'DefaultDungeonPolicy'), ('RandomPolicy', 'RandomPolicy')]
     checkpoint_state_dict = None
     managed_kind_names = ()
     if checkpoint_path:
         checkpoint = _load_checkpoint(checkpoint_path)
         stage_index = checkpoint['stage_index']
-        managed_kind_names = progressive_stages()[stage_index].managed_kinds
+        managed_kind_names = ppo_managed_kinds or progressive_stages()[stage_index].managed_kinds
         checkpoint_state_dict = checkpoint['model_state_dict']
-        policies.append('PPO')
+        if ppo_managed_kinds:
+            managed_label = '+'.join(managed_kind_names)
+            policies.append(('PPO', f'PPO[{managed_label}]'))
+        else:
+            policies.append(('PPO', 'PPO'))
 
     rows = []
-    for policy_name in policies:
+    for policy_name, policy_label in policies:
         tasks = [
-            (chunk, policy_name, checkpoint_state_dict, managed_kind_names)
+            (chunk, policy_name, checkpoint_state_dict, managed_kind_names, policy_label)
             for chunk in seed_chunks
             if chunk
         ]
         stats = _merge_report_stats(_run_parallel(_report_worker, tasks, num_workers))
         total = max(1, stats['episodes'])
         rows.append({
-            'Policy': policy_name,
+            'Policy': stats['policy_label'] or policy_label,
             'Episodes': stats['episodes'],
             'Winrate': stats['wins'] / total,
             'Death%': stats['deaths'] / total,
@@ -1539,14 +1565,14 @@ def _assert_multiprocessing_launch_safe(num_workers):
         )
 
 
-def _customize_stages(stages, *, stage_limit=None, max_stage_iterations=None):
+def _customize_stages(stages, *, stage_limit=None, max_stage_iterations=None, managed_kind_names=None):
     customized = []
     for stage in stages[:stage_limit] if stage_limit else stages:
         customized.append(StageConfig(
             name=stage.name,
             max_iterations=max_stage_iterations if max_stage_iterations is not None else stage.max_iterations,
             hidden_dim=stage.hidden_dim,
-            managed_kinds=stage.managed_kinds,
+            managed_kinds=managed_kind_names if managed_kind_names is not None else stage.managed_kinds,
             ppo=PPOConfig(**asdict(stage.ppo)),
             reward=RewardConfig(**asdict(stage.reward)),
             restart_from_scratch=stage.restart_from_scratch,
@@ -1654,6 +1680,11 @@ def main():
     train_parser.add_argument('--warmstart', default=None)
     train_parser.add_argument('--stage-limit', type=int, default=None)
     train_parser.add_argument('--max-stage-iterations', type=int, default=None)
+    train_parser.add_argument(
+        '--managed-kinds',
+        default=None,
+        help='Comma-separated DecisionKind names controlled by PPO during training.',
+    )
 
     benchmark_parser = subparsers.add_parser('benchmark', help='Benchmark rollout throughput.')
     benchmark_parser.add_argument('--episodes', type=int, default=128)
@@ -1662,6 +1693,11 @@ def main():
     report_parser.add_argument('--checkpoint', default=None)
     report_parser.add_argument('--episodes', type=int, default=1000)
     report_parser.add_argument('--num-workers', type=int, default=8)
+    report_parser.add_argument(
+        '--ppo-managed-kinds',
+        default=None,
+        help='Comma-separated DecisionKind names controlled by PPO during report evaluation.',
+    )
 
     subparsers.add_parser('smoke', help='Run a small RL smoke training loop.')
     subparsers.add_parser('smoke-checkpoint', help='Run checkpoint roundtrip reproducibility smoke.')
@@ -1675,6 +1711,7 @@ def main():
             progressive_stages(),
             stage_limit=args.stage_limit,
             max_stage_iterations=args.max_stage_iterations,
+            managed_kind_names=_parse_managed_kind_names(args.managed_kinds),
         )
         result = train_progressive(
             run_dir=args.run_dir,
@@ -1702,6 +1739,7 @@ def main():
             checkpoint_path=args.checkpoint,
             episodes=args.episodes,
             num_workers=args.num_workers,
+            ppo_managed_kinds=_parse_managed_kind_names(args.ppo_managed_kinds),
         )
         print(format_policy_report(rows))
         return
