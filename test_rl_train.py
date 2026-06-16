@@ -8,7 +8,13 @@ except Exception as exc:  # pragma: no cover - environment-dependent skip path
     pytest.skip(f"torch unavailable for RL tests: {exc}", allow_module_level=True)
 
 from ai_decisions import DecisionContext, DecisionKind
-from rl_train import ObservationEncoder, PolicyValueNet, run_smoke_training, smoke_checkpoint_reproducibility
+from rl_train import (
+    ObservationEncoder,
+    PolicyValueNet,
+    _load_compatible_state_dict,
+    run_smoke_training,
+    smoke_checkpoint_reproducibility,
+)
 
 
 def test_rl_smoke_training_runs():
@@ -103,3 +109,25 @@ def test_combat_encoder_exposes_worthit_signal():
 
     assert encoded['candidate_obs'][0, -1] == 1.0
     assert encoded['global_obs'][-4] == 1.0 / encoder.max_candidates
+
+
+def test_compatible_load_preserves_candidate_embedding_columns_when_tags_expand():
+    torch.manual_seed(123)
+    encoder = ObservationEncoder()
+    source = PolicyValueNet(encoder, hidden_dim=32)
+    target = PolicyValueNet(encoder, hidden_dim=32)
+
+    target_initial = target.state_dict()['combat_candidate_encoder.0.weight'].clone()
+    source_state = source.state_dict()
+    full_weight = source_state['combat_candidate_encoder.0.weight']
+    old_candidate_size = 14
+    embed_cols = 16
+    old_weight = torch.cat((full_weight[:, :old_candidate_size], full_weight[:, -embed_cols:]), dim=1)
+    source_state['combat_candidate_encoder.0.weight'] = old_weight
+
+    _load_compatible_state_dict(target, source_state)
+
+    loaded_weight = target.state_dict()['combat_candidate_encoder.0.weight']
+    assert torch.allclose(loaded_weight[:, :old_candidate_size], full_weight[:, :old_candidate_size])
+    assert torch.allclose(loaded_weight[:, -embed_cols:], full_weight[:, -embed_cols:])
+    assert torch.allclose(loaded_weight[:, old_candidate_size:-embed_cols], target_initial[:, old_candidate_size:-embed_cols])

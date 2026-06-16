@@ -640,11 +640,35 @@ def _cpu_optimizer_state_dict(optimizer):
 
 def _load_compatible_state_dict(model, state_dict):
     current_state = model.state_dict()
-    compatible = {
-        key: value
-        for key, value in state_dict.items()
-        if key in current_state and current_state[key].shape == value.shape
-    }
+    compatible = {}
+    for key, value in state_dict.items():
+        if key not in current_state:
+            continue
+        current_value = current_state[key]
+        if current_value.shape == value.shape:
+            compatible[key] = value
+        elif key == 'combat_candidate_encoder.0.weight' and value.ndim == 2 and current_value.ndim == 2:
+            merged = current_value.clone()
+            old_candidate_size = 14
+            embed_cols = value.shape[1] - old_candidate_size
+            if (
+                value.shape[0] == current_value.shape[0]
+                and embed_cols > 0
+                and current_value.shape[1] >= value.shape[1]
+            ):
+                merged[:, :old_candidate_size] = value[:, :old_candidate_size]
+                merged[:, -embed_cols:] = value[:, -embed_cols:]
+                compatible[key] = merged
+        elif value.ndim == current_value.ndim == 2 and value.shape[0] == current_value.shape[0]:
+            merged = current_value.clone()
+            cols = min(value.shape[1], current_value.shape[1])
+            merged[:, :cols] = value[:, :cols]
+            compatible[key] = merged
+        elif value.ndim == current_value.ndim == 1:
+            merged = current_value.clone()
+            rows = min(value.shape[0], current_value.shape[0])
+            merged[:rows] = value[:rows]
+            compatible[key] = merged
     current_state.update(compatible)
     model.load_state_dict(current_state)
 
