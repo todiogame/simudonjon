@@ -49,10 +49,11 @@ arises is logged and asserted to be in the allowed set.
 
 Reward
 ------
-Terminal, game-aligned, no shaping: a player's reward is its final score (pile
-count) if it survives to be counted, else a fixed penalty (``DEATH_REWARD``).
-This rewards clearing extra *safe* monsters while strictly punishing death --
-the natural objective of the game.
+Terminal, game-aligned, no shaping and no raw score: +1 win the game / 0 survive
+but lose / -1 die. Using the score directly is fatal on a hard dungeon (a huge
+score upside against a tiny death penalty makes drawing-into-death EV-positive);
+rewarding the *outcome* instead -- with death strictly worse than a survived loss
+-- removes that trap while leaving honest fleeing neutral.
 
 Diagnostic findings (what the toy taught us)
 --------------------------------------------
@@ -123,9 +124,12 @@ from rl_train import (
 )
 
 
-# Terminal reward for a player that is not counted at the end (died, or fled
-# while the opponent ponced). Must be below the lowest survivor score (0) so
-# that surviving with an empty pile still beats dying.
+# Three-tier terminal reward (the game objective, no raw score, no shaping):
+#   +1 win the game / 0 survive but lose / -1 die.
+# Death is strictly worse than a survived loss, so it kills the draw-into-death
+# line; surviving-but-losing isn't punished, so honest fleeing stays neutral.
+WIN_REWARD = 1.0
+SURVIVE_REWARD = 0.0   # alive at the end but not the winner (fled or out-scored)
 DEATH_REWARD = -1.0
 
 
@@ -233,17 +237,20 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
             assignments = {i: policy for i in range(len(joueurs))}
             recorded = list(joueurs)
         routed = routed_toy_policy(assignments, joueurs)
-        ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
-        # Game-aligned terminal reward (no shaping): your final score if you
-        # survive to be counted (`compte_au_score`), a fixed penalty otherwise
-        # (death, or exclusion for fleeing while the opponent ponced). This is
-        # the game's own objective. It rewards drawing extra *safe* monsters
-        # (more pile while surviving) yet strictly punishes dying -- avoiding
-        # both degenerate self-play equilibria the simpler rewards produce:
-        # placement-rank rewards "die with a bigger pile" (draw-into-death),
-        # and pure winner +1/-1 never rewards a bigger pile (flee-immediately).
+        winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
+        # Terminal reward = the game objective: +1 win / 0 survive-but-lose / -1 die.
+        # No raw score, so the score reward's fatal asymmetry (huge score upside vs
+        # tiny death penalty -> drawing-into-death is EV-positive) disappears. Death
+        # is strictly worse than a survived loss, so the draw-into-death line is
+        # punished; an honest "fled and lost" stays neutral (0). Against a fixed
+        # competent opponent, +1 means outscoring it while surviving.
         for joueur in recorded:
-            reward = float(joueur.score_final) if joueur.compte_au_score else DEATH_REWARD
+            if joueur is winner:
+                reward = WIN_REWARD
+            elif joueur.vivant:
+                reward = SURVIVE_REWARD
+            else:
+                reward = DEATH_REWARD
             reward_sum += reward
             recorded_players += 1
             for step in policy.take_records(joueur):
