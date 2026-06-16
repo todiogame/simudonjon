@@ -104,6 +104,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import torch
 
 from ai_decisions import DecisionContext, DecisionKind
@@ -197,10 +198,62 @@ class ToyControlPolicy(HybridNeuralPolicy):
         return dict(self._skill)
 
 
+# --- Observation: deck awareness ---------------------------------------------
+
+class ToyObservationEncoder(ObservationEncoder):
+    """Extends the shared encoder with the *remaining-deck composition* on the
+    binary (flee / replay) observation. On a shuffled deck the replay decision is
+    a blind gamble unless you know what is still in the dungeon -- the deck is
+    public and the heuristic uses exactly this, so it is fair, not divination
+    (composition only, not the upcoming order). The combat-object encoding and the
+    shared rl_train encoder are left untouched.
+    """
+
+    deck_feature_size = 5
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.binary_size += self.deck_feature_size
+
+    def _encode_binary(self, context):
+        encoded = super()._encode_binary(context)
+        deck = self._remaining_deck_features(context)
+        encoded['obs'] = np.concatenate(
+            [encoded['obs'], np.asarray(deck, dtype=np.float32)]
+        )
+        return encoded
+
+    def _remaining_deck_features(self, context):
+        """[frac cheap (<=2), frac mid (3-5), frac big (>=6), frac power>=my HP,
+        max remaining power / 9] over the cards still in the dungeon. Defensive:
+        zeros when no deck info is available (e.g. unit-test stubs)."""
+        zeros = [0.0] * self.deck_feature_size
+        game = context.game
+        donjon = getattr(game, 'donjon', None) if game is not None else None
+        cartes = getattr(donjon, 'cartes', None)
+        ordre = getattr(donjon, 'ordre', None)
+        if not cartes or ordre is None:
+            return zeros
+        index = getattr(donjon, 'index', 0)
+        powers = [
+            getattr(cartes[i], 'puissance_initiale', getattr(cartes[i], 'puissance', 0))
+            for i in list(ordre)[index:]
+        ]
+        n = len(powers)
+        if n == 0:
+            return zeros
+        hp = max(1.0, float(getattr(context.actor, 'pv_total', 1)))
+        cheap = sum(1 for p in powers if p <= 2)
+        mid = sum(1 for p in powers if 3 <= p <= 5)
+        big = sum(1 for p in powers if p >= 6)
+        ge_hp = sum(1 for p in powers if p >= hp)
+        return [cheap / n, mid / n, big / n, ge_hp / n, max(powers) / 9.0]
+
+
 # --- Model / policy construction ---------------------------------------------
 
 def build_toy_model(*, hidden_dim=128, device='cpu'):
-    encoder = ObservationEncoder()
+    encoder = ToyObservationEncoder()
     model = PolicyValueNet(encoder, hidden_dim=hidden_dim).to(device)
     model.eval()
     return model, encoder
