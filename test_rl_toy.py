@@ -218,6 +218,17 @@ def test_toy_control_policy_routes_managed_to_network_and_guards_unknown_kinds()
 
 
 @requires_torch
+def test_toy_imitation_smoke_runs():
+    import rl_toy
+
+    result, bc, after_bc = rl_toy.run_toy_imitation_smoke()
+    assert bc['binary_samples'] > 0 and bc['combat_samples'] > 0
+    assert 'binary' in bc['accuracy'] and 'combat' in bc['accuracy']
+    assert 0.0 <= after_bc['vs_default'] <= 1.0
+    assert 0.0 <= result.final_winrate_vs_default <= 1.0
+
+
+@requires_torch
 def test_probe_returns_structured_result():
     import rl_toy
 

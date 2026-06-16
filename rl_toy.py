@@ -105,8 +105,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
-from ai_decisions import DecisionContext, DecisionKind
+from ai_decisions import CombatObjectChoice, DecisionContext, DecisionKind, require_permutation
 from ai_policy import RandomPolicy, default_dungeon_policy
 from monstres import CarteMonstre
 from simu import ordonnanceur
@@ -116,6 +117,7 @@ from rl_toy_env import (  # torch-free toy environment
     TOY_MANAGED_KINDS,
     TOY_PLAYER_NAMES,
     TOY_START_PV,
+    TOY_STRUCTURAL_KINDS,
     ToyDonjon,
     ToyStructuralPolicy,
     build_toy_match,
@@ -429,6 +431,118 @@ def probe_optimal_combat_decision(model, encoder, *, device='cpu'):
     }
 
 
+# --- Imitation: behaviour-clone the heuristic, then warmstart RL -------------
+#
+# Reward shaping alone cannot lift the agent out of the "flee immediately" basin
+# on the shuffled deck (deviating mostly leads to death -> punished -> back to
+# fleeing). So we first *copy the heuristic's decisions* with supervised learning
+# (the heuristic already plays the good line: draw when the remaining deck is
+# safe, Hache big monsters, flee in time), which puts the network in a competent
+# region, then let PPO fine-tune from there. The heuristic is only an offline
+# teacher; at play time the network still decides everything itself.
+
+class _DemoRecorder:
+    """Plays the heuristic and records (encoded observation, chosen action) for
+    each managed decision, to build a supervised dataset. ORDER_OBJECTS is
+    resolved as identity (structural), like the toy."""
+
+    def __init__(self, encoder):
+        self.encoder = encoder
+        self.heuristic = default_dungeon_policy()
+        self.samples = []
+
+    def decide(self, context):
+        if context.kind in TOY_STRUCTURAL_KINDS:
+            return require_permutation(
+                tuple(context.options), context.options, decision_name='toy_order_objects'
+            )
+        action = self.heuristic.decide(context)
+        if context.kind in TOY_MANAGED_KINDS:
+            self._record(context, action)
+        return action
+
+    def _record(self, context, action):
+        encoded = self.encoder.encode(context)
+        if encoded['mode'] == 'binary':
+            self.samples.append({'mode': 'binary', 'obs': encoded['obs'], 'label': int(action)})
+        elif encoded['mode'] in ('combat_object', 'single_object'):
+            if action is CombatObjectChoice.RESOLVE_NOW or action is None:
+                label = self.encoder.max_candidates  # the "resolve / none" slot
+            else:
+                options = context.options[:self.encoder.max_candidates]
+                label = next((i for i, o in enumerate(options) if o is action), self.encoder.max_candidates)
+            self.samples.append({
+                'mode': encoded['mode'],
+                'global_obs': encoded['global_obs'],
+                'candidate_obs': encoded['candidate_obs'],
+                'candidate_ids': encoded['candidate_ids'],
+                'action_mask': encoded['action_mask'],
+                'label': label,
+            })
+
+
+def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1):
+    """Heuristic vs heuristic on shuffled decks; record both seats' managed
+    decisions. Returns a flat list of supervised samples."""
+    samples = []
+    for offset in range(num_games):
+        joueurs, objets = build_toy_match(seed_start + offset)
+        recorders = [_DemoRecorder(encoder) for _ in joueurs]
+        routed = routed_toy_policy({i: recorders[i] for i in range(len(joueurs))}, joueurs)
+        ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
+        for rec in recorders:
+            samples.extend(rec.samples)
+    return samples
+
+
+def behavior_clone(model, samples, *, epochs=12, lr=1e-3, batch_size=512, device='cpu'):
+    """Supervised cross-entropy: make the policy heads predict the heuristic's
+    action. Returns per-mode accuracy so we can see how well it cloned."""
+    binary = [s for s in samples if s['mode'] == 'binary']
+    combat = [s for s in samples if s['mode'] in ('combat_object', 'single_object')]
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    def binary_batch(batch):
+        obs = torch.from_numpy(np.stack([s['obs'] for s in batch])).to(device)
+        labels = torch.tensor([s['label'] for s in batch], dtype=torch.long, device=device)
+        logits, _ = model.forward_binary(obs)
+        return F.cross_entropy(logits, labels), logits, labels
+
+    def combat_batch(batch):
+        g = torch.from_numpy(np.stack([s['global_obs'] for s in batch])).to(device)
+        c = torch.from_numpy(np.stack([s['candidate_obs'] for s in batch])).to(device)
+        ids = torch.from_numpy(np.stack([s['candidate_ids'] for s in batch])).to(device)
+        mask = torch.from_numpy(np.stack([s['action_mask'] for s in batch])).to(device)
+        labels = torch.tensor([s['label'] for s in batch], dtype=torch.long, device=device)
+        logits, _ = model.forward_combat(g, c, ids, mask)
+        return F.cross_entropy(logits, labels), logits, labels
+
+    model.train()
+    rng = np.random.default_rng(0)
+    for _ in range(epochs):
+        for group, batcher in ((binary, binary_batch), (combat, combat_batch)):
+            if not group:
+                continue
+            order = rng.permutation(len(group))
+            for start in range(0, len(group), batch_size):
+                batch = [group[i] for i in order[start:start + batch_size]]
+                loss, _, _ = batcher(batch)
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+    model.eval()
+
+    # Accuracy on the full set (how faithfully it cloned the teacher).
+    acc = {}
+    with torch.no_grad():
+        for name, group, batcher in (('binary', binary, binary_batch), ('combat', combat, combat_batch)):
+            if not group:
+                continue
+            _, logits, labels = batcher(group)
+            acc[name] = float((logits.argmax(dim=-1) == labels).float().mean())
+    return {'binary_samples': len(binary), 'combat_samples': len(combat), 'accuracy': acc}
+
+
 # --- Training loop -----------------------------------------------------------
 
 @dataclass
@@ -462,9 +576,12 @@ def train_toy(
     device='cpu',
     run_dir=None,
     verbose=True,
+    init_state_dict=None,
 ):
     torch.manual_seed(seed)
     model, encoder = build_toy_model(hidden_dim=hidden_dim, device=device)
+    if init_state_dict is not None:  # warmstart (e.g. from behaviour cloning)
+        model.load_state_dict(init_state_dict)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     ppo_config = PPOConfig(lr=lr, entropy_coef=entropy_coef, minibatch_size=2048)
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
@@ -594,6 +711,51 @@ def format_toy_report(result: ToyTrainResult):
     return "\n".join(lines)
 
 
+def train_toy_imitation_then_rl(
+    *,
+    demo_games=800,
+    bc_epochs=15,
+    bc_lr=1e-3,
+    hidden_dim=128,
+    iterations=120,
+    episodes_per_batch=256,
+    eval_games=600,
+    eval_every=10,
+    lr=1e-4,
+    entropy_coef=0.02,
+    opponent='default',
+    opponent_ratio=1.0,
+    seed=20260616,
+    device='cpu',
+    run_dir=None,
+    verbose=True,
+):
+    """Behaviour-clone the heuristic, then PPO fine-tune from those weights.
+    Returns (rl_result, bc_metrics, eval_after_bc)."""
+    torch.manual_seed(seed)
+    model, encoder = build_toy_model(hidden_dim=hidden_dim, device=device)
+
+    demos = collect_heuristic_demonstrations(encoder, num_games=demo_games, seed_start=seed)
+    bc_metrics = behavior_clone(model, demos, epochs=bc_epochs, lr=bc_lr, device=device)
+    eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
+    after_bc = {
+        'vs_random': evaluate_toy(model, encoder, eval_bank, baseline='random', device=device)['winrate'],
+        'vs_default': evaluate_toy(model, encoder, eval_bank, baseline='default', device=device)['winrate'],
+    }
+    if verbose:
+        print(f"[BC] samples binary={bc_metrics['binary_samples']} combat={bc_metrics['combat_samples']} "
+              f"acc={bc_metrics['accuracy']} | after-clone winrate "
+              f"vs_random={after_bc['vs_random']:.3f} vs_default={after_bc['vs_default']:.3f}", flush=True)
+
+    result = train_toy(
+        iterations=iterations, episodes_per_batch=episodes_per_batch, eval_games=eval_games,
+        eval_every=eval_every, hidden_dim=hidden_dim, lr=lr, entropy_coef=entropy_coef,
+        opponent=opponent, opponent_ratio=opponent_ratio, seed=seed, device=device,
+        run_dir=run_dir, verbose=verbose, init_state_dict={k: v.detach().cpu() for k, v in model.state_dict().items()},
+    )
+    return result, bc_metrics, after_bc
+
+
 def run_toy_smoke():
     """Tiny end-to-end run used by tests: exercises every code path quickly."""
     result = train_toy(
@@ -606,6 +768,15 @@ def run_toy_smoke():
         verbose=False,
     )
     return result
+
+
+def run_toy_imitation_smoke():
+    """Tiny imitation+RL run used by tests."""
+    result, bc, after_bc = train_toy_imitation_then_rl(
+        demo_games=20, bc_epochs=2, hidden_dim=32, iterations=2,
+        episodes_per_batch=24, eval_games=24, eval_every=1, seed=777, verbose=False,
+    )
+    return result, bc, after_bc
 
 
 def main():
@@ -633,6 +804,23 @@ def main():
 
     subparsers.add_parser('smoke', help='Run a tiny toy training smoke and print a report.')
 
+    imitate_parser = subparsers.add_parser(
+        'imitate', help='Behaviour-clone the heuristic, then PPO fine-tune; print a report.')
+    imitate_parser.add_argument('--demo-games', type=int, default=800)
+    imitate_parser.add_argument('--bc-epochs', type=int, default=15)
+    imitate_parser.add_argument('--bc-lr', type=float, default=1e-3)
+    imitate_parser.add_argument('--iterations', type=int, default=120)
+    imitate_parser.add_argument('--episodes-per-batch', type=int, default=256)
+    imitate_parser.add_argument('--eval-games', type=int, default=600)
+    imitate_parser.add_argument('--eval-every', type=int, default=10)
+    imitate_parser.add_argument('--hidden-dim', type=int, default=128)
+    imitate_parser.add_argument('--lr', type=float, default=1e-4)
+    imitate_parser.add_argument('--entropy-coef', type=float, default=0.02)
+    imitate_parser.add_argument('--opponent', choices=('random', 'default'), default='default')
+    imitate_parser.add_argument('--opponent-ratio', type=float, default=1.0)
+    imitate_parser.add_argument('--seed', type=int, default=20260616)
+    imitate_parser.add_argument('--run-dir', default='artifacts/rl_toy')
+
     args = parser.parse_args()
     command = args.command or 'train'
 
@@ -655,6 +843,28 @@ def main():
 
     if command == 'smoke':
         result = run_toy_smoke()
+        print(format_toy_report(result))
+        return
+
+    if command == 'imitate':
+        result, bc, after_bc = train_toy_imitation_then_rl(
+            demo_games=args.demo_games,
+            bc_epochs=args.bc_epochs,
+            bc_lr=args.bc_lr,
+            iterations=args.iterations,
+            episodes_per_batch=args.episodes_per_batch,
+            eval_games=args.eval_games,
+            eval_every=args.eval_every,
+            hidden_dim=args.hidden_dim,
+            lr=args.lr,
+            entropy_coef=args.entropy_coef,
+            opponent=args.opponent,
+            opponent_ratio=args.opponent_ratio,
+            seed=args.seed,
+            run_dir=args.run_dir,
+        )
+        print(f"\n[imitation] clone accuracy={bc['accuracy']} | "
+              f"after-clone vs_default={after_bc['vs_default']:.3f} vs_random={after_bc['vs_random']:.3f}\n")
         print(format_toy_report(result))
         return
 
