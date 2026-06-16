@@ -1331,6 +1331,7 @@ def train_progressive(
     resume_path=None,
     warmstart_path=None,
     stages=None,
+    curriculum_override=None,
 ):
     _assert_multiprocessing_launch_safe(num_workers)
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
@@ -1382,6 +1383,7 @@ def train_progressive(
         'default_eval_games': default_eval_games,
         'device': device,
         'warmstart_path': str(warmstart_path) if warmstart_path else None,
+        'curriculum_override': asdict(curriculum_override) if curriculum_override is not None else None,
         'stages': [asdict(stage) for stage in stages],
     }
 
@@ -1415,7 +1417,11 @@ def train_progressive(
         while stage_iteration < stage.max_iterations:
             total_iteration += 1
             stage_iteration += 1
-            curriculum = post_random_curriculum() if random_gate_iteration is not None else initial_curriculum()
+            curriculum = (
+                curriculum_override
+                if curriculum_override is not None
+                else post_random_curriculum() if random_gate_iteration is not None else initial_curriculum()
+            )
             rollout_seed = seed + ((total_iteration - 1) * episodes_per_batch)
             rollouts = collect_rollouts(
                 model,
@@ -1589,16 +1595,42 @@ def _assert_multiprocessing_launch_safe(num_workers):
         )
 
 
-def _customize_stages(stages, *, stage_limit=None, max_stage_iterations=None, managed_kind_names=None):
+def _parse_curriculum_mix(value):
+    if value is None:
+        return None
+    parts = [float(part.strip()) for part in value.split(',') if part.strip()]
+    if len(parts) != 3:
+        raise ValueError("--curriculum must have three comma-separated weights: self,default,random")
+    return CurriculumMix(self_play=parts[0], versus_default=parts[1], versus_random=parts[2])
+
+
+def _customize_stages(
+    stages,
+    *,
+    stage_limit=None,
+    max_stage_iterations=None,
+    managed_kind_names=None,
+    reward_shaping=None,
+    lr=None,
+    entropy_coef=None,
+):
     customized = []
     for stage in stages[:stage_limit] if stage_limit else stages:
+        ppo = PPOConfig(**asdict(stage.ppo))
+        reward = RewardConfig(**asdict(stage.reward))
+        if lr is not None:
+            ppo.lr = lr
+        if entropy_coef is not None:
+            ppo.entropy_coef = entropy_coef
+        if reward_shaping is not None:
+            reward.enabled = reward_shaping
         customized.append(StageConfig(
             name=stage.name,
             max_iterations=max_stage_iterations if max_stage_iterations is not None else stage.max_iterations,
             hidden_dim=stage.hidden_dim,
             managed_kinds=managed_kind_names if managed_kind_names is not None else stage.managed_kinds,
-            ppo=PPOConfig(**asdict(stage.ppo)),
-            reward=RewardConfig(**asdict(stage.reward)),
+            ppo=ppo,
+            reward=reward,
             restart_from_scratch=stage.restart_from_scratch,
         ))
     return customized
@@ -1705,6 +1737,18 @@ def main():
     train_parser.add_argument('--stage-limit', type=int, default=None)
     train_parser.add_argument('--max-stage-iterations', type=int, default=None)
     train_parser.add_argument(
+        '--curriculum',
+        default=None,
+        help='Override rollout mix as self,default,random weights.',
+    )
+    train_parser.add_argument(
+        '--reward-shaping',
+        action='store_true',
+        help='Enable dense score/monster/death shaping for all selected stages.',
+    )
+    train_parser.add_argument('--lr', type=float, default=None)
+    train_parser.add_argument('--entropy-coef', type=float, default=None)
+    train_parser.add_argument(
         '--managed-kinds',
         default=None,
         help='Comma-separated DecisionKind names controlled by PPO during training.',
@@ -1736,6 +1780,9 @@ def main():
             stage_limit=args.stage_limit,
             max_stage_iterations=args.max_stage_iterations,
             managed_kind_names=_parse_managed_kind_names(args.managed_kinds),
+            reward_shaping=True if args.reward_shaping else None,
+            lr=args.lr,
+            entropy_coef=args.entropy_coef,
         )
         result = train_progressive(
             run_dir=args.run_dir,
@@ -1749,6 +1796,7 @@ def main():
             resume_path=args.resume,
             warmstart_path=args.warmstart,
             stages=stages,
+            curriculum_override=_parse_curriculum_mix(args.curriculum),
         )
         print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
         return

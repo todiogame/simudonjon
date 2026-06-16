@@ -10,8 +10,12 @@ except Exception as exc:  # pragma: no cover - environment-dependent skip path
 from ai_decisions import DecisionContext, DecisionKind
 from rl_train import (
     ObservationEncoder,
+    CurriculumMix,
     PolicyValueNet,
     _load_compatible_state_dict,
+    _customize_stages,
+    _parse_curriculum_mix,
+    progressive_stages,
     run_smoke_training,
     smoke_checkpoint_reproducibility,
 )
@@ -131,3 +135,22 @@ def test_compatible_load_preserves_candidate_embedding_columns_when_tags_expand(
     assert torch.allclose(loaded_weight[:, :old_candidate_size], full_weight[:, :old_candidate_size])
     assert torch.allclose(loaded_weight[:, -embed_cols:], full_weight[:, -embed_cols:])
     assert torch.allclose(loaded_weight[:, old_candidate_size:-embed_cols], target_initial[:, old_candidate_size:-embed_cols])
+
+
+def test_training_customization_overrides_curriculum_and_stage_knobs():
+    mix = _parse_curriculum_mix("0,1,0")
+    assert mix == CurriculumMix(self_play=0.0, versus_default=1.0, versus_random=0.0)
+
+    stage = _customize_stages(
+        progressive_stages(),
+        stage_limit=1,
+        managed_kind_names=("CHOOSE_COMBAT_OBJECT",),
+        reward_shaping=True,
+        lr=5e-5,
+        entropy_coef=0.03,
+    )[0]
+
+    assert stage.managed_kinds == ("CHOOSE_COMBAT_OBJECT",)
+    assert stage.reward.enabled is True
+    assert stage.ppo.lr == 5e-5
+    assert stage.ppo.entropy_coef == 0.03
