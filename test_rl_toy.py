@@ -9,7 +9,7 @@ import pytest
 import rl_toy_env as env
 from ai_decisions import DecisionContext, DecisionKind
 from ai_policy import RandomPolicy
-from objets import CouronneEnMousse
+from objets import ArmureEnCuir, HacheDeGlace, MarteauDeGuerre, TorcheBleue
 from simu import ordonnanceur
 
 
@@ -23,33 +23,29 @@ requires_torch = pytest.mark.skipif(not HAVE_TORCH, reason="torch unavailable fo
 
 
 class _RecordingRandomPolicy:
-    """Random legal choices, but records every decision kind and tracks the
-    planted combo. Stands in for the network so the environment can be tested
-    without torch."""
+    """Random legal choices, but records every decision kind and tracks the key
+    skill (spending the one-shot Hache de Glace on a monster the free tools can't
+    kill). Stands in for the network so the environment is testable without torch."""
 
     def __init__(self):
         self._base = RandomPolicy()
         self.kinds = {}
-        self.combo = {'dragon_combats': 0, 'reducer_uses_on_dragon': 0, 'combo_fired': 0}
+        self.skill = {'hache_uses': 0, 'hache_well_used': 0}
 
     def decide(self, context):
         self.kinds[context.kind.name] = self.kinds.get(context.kind.name, 0) + 1
         assert context.kind in env.TOY_ALLOWED_KINDS, context.kind.name
-        dragon = env.is_dragon_combat_context(context)
-        step = context.meta('combat_step', 0) if dragon else 0
-        if dragon and step == 0:
-            self.combo['dragon_combats'] += 1
         decision = self._base.decide(context)
-        if dragon and env.is_reducer(decision):
-            self.combo['reducer_uses_on_dragon'] += 1
-            if step >= 1:
-                self.combo['combo_fired'] += 1
+        if context.kind is DecisionKind.CHOOSE_COMBAT_OBJECT and env.is_hache(decision):
+            self.skill['hache_uses'] += 1
+            if env.is_hache_worthy(context.subject):
+                self.skill['hache_well_used'] += 1
         return decision
 
 
 def _play_toy_games(seeds):
     seen = {}
-    combo = {'dragon_combats': 0, 'reducer_uses_on_dragon': 0, 'combo_fired': 0}
+    skill = {'hache_uses': 0, 'hache_well_used': 0}
     for seed in seeds:
         joueurs, objets = env.build_toy_match(seed)
         policies = [_RecordingRandomPolicy() for _ in joueurs]
@@ -58,9 +54,9 @@ def _play_toy_games(seeds):
         for policy in policies:
             for name, count in policy.kinds.items():
                 seen[name] = seen.get(name, 0) + count
-            for key in combo:
-                combo[key] += policy.combo[key]
-    return seen, combo
+            for key in skill:
+                skill[key] += policy.skill[key]
+    return seen, skill
 
 
 # --- Environment tests (torch-free) ------------------------------------------
@@ -71,9 +67,9 @@ def test_toy_match_is_fixed_and_two_players_with_four_objects():
     assert objets == []
     for joueur in joueurs:
         assert len(joueur.objets) == 4
-        assert joueur.pv_total == env.TOY_HERO_PV
-        reducers = [o for o in joueur.objets if isinstance(o, CouronneEnMousse)]
-        assert len(reducers) == 2  # the combo pair
+        assert joueur.pv_total == env.TOY_START_PV  # 7 hero + 5 armour
+        kinds = {type(o) for o in joueur.objets}
+        assert kinds == {MarteauDeGuerre, TorcheBleue, HacheDeGlace, ArmureEnCuir}
 
 
 def test_toy_dungeon_order_is_fixed():
@@ -85,8 +81,8 @@ def test_toy_dungeon_order_is_fixed():
     assert [c.titre for c in a.cartes] == [nom for nom, _, _ in env.TOY_DUNGEON_SEQUENCE]
 
 
-def test_toy_games_only_raise_allowed_kinds_and_combo_is_reachable():
-    seen, combo = _play_toy_games(range(200))
+def test_toy_games_only_raise_allowed_kinds():
+    seen, _ = _play_toy_games(range(200))
     allowed = {k.name for k in env.TOY_ALLOWED_KINDS}
     assert set(seen).issubset(allowed)
     # The core turn/combat decisions must actually be exercised.
@@ -94,9 +90,51 @@ def test_toy_games_only_raise_allowed_kinds_and_combo_is_reachable():
     assert seen.get('SHOULD_REPLAY', 0) > 0
     assert seen.get('CHOOSE_COMBAT_OBJECT', 0) > 0
     assert seen.get('ORDER_OBJECTS', 0) > 0
-    # The planted combo must be reachable under random play (so it can be learned).
-    assert combo['dragon_combats'] > 0
-    assert combo['combo_fired'] > 0
+
+
+def test_toy_key_skill_is_reachable_by_a_competent_line():
+    """Random play dies at the early monsters, so to show the planted skill is
+    reachable (hence learnable) we play the intended clearing line: execute free
+    monsters for zero damage, spend the one-shot Hache on a monster the free
+    tools cannot kill, never flee, keep drawing."""
+    from ai_decisions import CombatObjectChoice
+
+    class _ClearingPolicy:
+        def __init__(self):
+            self.skill = {'hache_uses': 0, 'hache_well_used': 0}
+
+        def decide(self, context):
+            kind = context.kind
+            if kind is DecisionKind.SHOULD_FLEE:
+                return False
+            if kind is DecisionKind.SHOULD_REPLAY:
+                return True
+            if kind is DecisionKind.ORDER_OBJECTS:
+                return tuple(context.options)
+            if kind is DecisionKind.CHOOSE_COMBAT_OBJECT:
+                free = [o for o in context.options if not env.is_hache(o)]
+                if free:
+                    return free[0]  # never waste the Hache on a free kill
+                hache = [o for o in context.options if env.is_hache(o)]
+                if hache:
+                    self.skill['hache_uses'] += 1
+                    if env.is_hache_worthy(context.subject):
+                        self.skill['hache_well_used'] += 1
+                    return hache[0]
+                return CombatObjectChoice.RESOLVE_NOW
+            return context.options[0] if context.options else False
+
+    total = {'hache_uses': 0, 'hache_well_used': 0}
+    for seed in range(20):
+        joueurs, objets = env.build_toy_match(seed)
+        policies = [_ClearingPolicy() for _ in joueurs]
+        routed = env.routed_toy_policy({i: policies[i] for i in range(len(joueurs))}, joueurs)
+        ordonnanceur(joueurs, env.ToyDonjon(), objets, False, policy=routed)
+        for p in policies:
+            for key in total:
+                total[key] += p.skill[key]
+    assert total['hache_uses'] > 0
+    assert total['hache_well_used'] > 0  # the Hache lands on a hache-worthy monster
 
 
 def test_structural_policy_orders_identity_and_rejects_gameplay_kinds():
@@ -131,7 +169,7 @@ def test_toy_smoke_trains_and_reports():
     result = rl_toy.run_toy_smoke()
     assert result.iterations == 2
     assert 0.0 <= result.final_winrate_vs_random <= 1.0
-    assert 0.0 <= result.combo_rate <= 1.0
+    assert 0.0 <= result.skill_rate <= 1.0
     assert isinstance(result.optimal_line, bool)
     # Every kind the agent saw must be network-encodable / structural.
     allowed = {k.name for k in env.TOY_ALLOWED_KINDS}
@@ -176,5 +214,5 @@ def test_probe_returns_structured_result():
 
     model, encoder = rl_toy.build_toy_model(hidden_dim=32)
     probe = rl_toy.probe_optimal_combat_decision(model, encoder)
-    assert set(probe) == {'first_reducer_used', 'second_reducer_used', 'optimal_line'}
+    assert set(probe) == {'hache_on_lethal_dragon', 'hache_kept_on_weakling', 'optimal_line'}
     assert all(isinstance(v, bool) for v in probe.values())

@@ -20,17 +20,21 @@ Toy specification
 -----------------
 * 2 players (duel), self-play.
 * 4 fixed objects per player, identical every game:
-    - ``Marteau de Guerre``   : type-tagged executor (Golem / Squelette)
-    - ``Torche Bleue``        : power-tagged executor (power <= 2)
-    - ``Couronne en Mousse``  : damage reducer (-2), combo piece #1
-    - ``Couronne en Mousse``  : damage reducer (-2), combo piece #2
-* Fixed dungeon order, plain monsters only (no events, no special effects,
-  no X-cards) so the only decisions raised are the encodable binary / 1-of-N
-  kinds. The lone source of residual randomness is the seedable flee die roll.
-* The planted 2-object combo: stacking *both* Couronnes on a Dragon (power 9)
-  turns an otherwise-lethal 9 damage into 5, which is the only way to survive it
-  at the tuned HP. We know the combo because we built it, so we can measure
-  whether the agent discovers it.
+    - ``Marteau de Guerre`` : type-tagged executor (Golem / Squelette), free, reusable
+    - ``Torche Bleue``      : power-tagged executor (power <= 2), free, reusable
+    - ``Hache de Glace``    : active ONE-SHOT executor of any monster (incl. Dragon),
+                              consumed on use -- the scarce, decisive tool
+    - ``Armure en cuir``    : pure passive +5 PV (start HP = 7 hero + 5 = 12)
+* Fixed dungeon: the full set of "standard" monsters (Gobelin..Dragon, the base
+  DonjonDeck composition), in ascending power -- no rats, no special-rule /
+  effect / X cards -- so the only decisions raised stay the encodable binary /
+  1-of-N kinds. The lone source of residual randomness is the seedable flee roll.
+* The planted skill: only the one-shot Hache de Glace can execute the big
+  Hache-only monsters, and the Dragon (power 9) is the worst of them. The agent
+  should *spend the Hache on a Dragon* (not waste it on a weakling it can kill
+  for free), execute cheap monsters with Marteau / Torche, and flee before the
+  cumulative damage of the late high-power monsters kills it. We know the
+  intended line because we built it, so we can measure whether the agent finds it.
 
 Decision control
 ----------------
@@ -43,40 +47,40 @@ ordering head is out of scope for v0, so it is resolved as identity (a fixed,
 non-heuristic permutation), never via the heuristic policy. Every kind that
 arises is logged and asserted to be in the allowed set.
 
+Reward
+------
+Terminal, game-aligned, no shaping: a player's reward is its final score (pile
+count) if it survives to be counted, else a fixed penalty (``DEATH_REWARD``).
+This rewards clearing extra *safe* monsters while strictly punishing death --
+the natural objective of the game.
+
 Diagnostic findings (what the toy taught us)
 --------------------------------------------
-1. The PPO machinery *learns*. Across every configuration the agent drives the
-   planted combo trigger-rate from ~0.33 (random) to ~1.0 and reproduces the
-   hand-derived optimal combat line on the controlled probe. The encoder /
-   network / PPO update are sound -- the full-game failures are not in here.
+1. The PPO machinery *learns* and is not the bottleneck. The agent reproduces the
+   hand-derived optimal combat line on the controlled probe, and on an easy,
+   fully-clearable dungeon pure self-play converges to a strong policy that beats
+   Random markedly (~0.9). The encoder / network / PPO update are sound.
 
-2. *Pure self-play on this shared-queue duel is degenerate, and the win-rate is
-   highly sensitive to the reward.* Because both seats draw from one shared
-   dungeon queue, "draw aggressively" is safe against a mirror (the opponent
-   drains the queue / dies first) yet lethal against Random -- so self-play
-   over-fits to self-play dynamics. Which degenerate policy emerges depends on
-   the reward:
-   - Pile-rewarding terminal rewards (placement rank, or score-if-survive)
-     converge to drawing into a lethal monster: death-rate ~0.86, win-rate vs
-     Random collapses to ~0.12.
-   - A pure winner reward (+1 winner / -1 else) instead settles into "flee
-     immediately": safe, ~0.57 vs Random, combo still mastered.
+2. *Pure self-play on this shared-queue duel falls into degenerate equilibria,
+   and which one depends on the dungeon's difficulty.* Both seats draw from one
+   shared queue, so the self-play dynamics differ from facing a fixed opponent
+   and the agent does not find the intended "clear the cheap monsters, spend the
+   one-shot Hache on a monster the free tools can't kill, then flee before the
+   late high-power monsters" line. Observed attractors:
+   - Easy/clearable dungeon: converges to clearing everything -> beats Random.
+   - Hard dungeon (the full standard monster set): oscillates between fleeing
+     immediately (score ~0) and drawing everything and dying (score high, but
+     death-rate 1.0) -> loses to Random.
+   The lever is the training regime (reward / opponent mix via
+   ``--versus-random-ratio``), not the network.
 
-3. *The two attractors are flee-immediately (~0.57) and draw-into-death (~0.12),
-   and the agent oscillates between them* rather than settling on the
-   survive-and-score optimum (clear safe monsters, combo the Dragon, then stop
-   before the lethal second Dragon). The intended optimum needs a precise "stop
-   here" decision that the current reward/exploration does not reliably find.
-   Mixing Random opponents in (``--versus-random-ratio``) shifts the balance --
-   the best observed win-rate (~0.65) came from a placement reward with a Random
-   mix -- but does not by itself stabilise the optimum.
+(This is an iterated design -- objects, dungeon and skill metric have changed as
+we probe the difficulty. Re-run ``python rl_toy.py train`` to refresh the numbers
+for the current setup.)
 
-The point of the toy is exactly this: it isolated a *training-regime* problem
-(self-play curriculum + terminal reward on a shared-queue duel) from the
-*machinery* (which provably learns the combo and the optimal combat line), with
-every decision inspectable. The next lever to turn is the reward / curriculum,
-not the network. Set ``--versus-random-ratio 0`` to reproduce the pure
-self-play collapse; raise it to study the opponent-diversity effect.
+The point of the toy is exactly this: it isolates training-regime and
+game-difficulty questions from the *machinery* (which provably learns), with
+every decision inspectable.
 """
 from __future__ import annotations
 
@@ -95,14 +99,14 @@ from simu import ordonnanceur
 
 from rl_toy_env import (  # torch-free toy environment
     TOY_ALLOWED_KINDS,
-    TOY_HERO_PV,
     TOY_MANAGED_KINDS,
     TOY_PLAYER_NAMES,
+    TOY_START_PV,
     ToyDonjon,
     ToyStructuralPolicy,
     build_toy_match,
-    is_dragon_combat_context,
-    is_reducer,
+    is_hache,
+    is_hache_worthy,
     make_toy_hero,
     make_toy_objects,
     routed_toy_policy,
@@ -128,14 +132,16 @@ DEATH_REWARD = -1.0
 
 class ToyControlPolicy(HybridNeuralPolicy):
     """HybridNeuralPolicy specialised for the toy: records every decision kind,
-    asserts it is in the allowed set, and tracks the planted combo."""
+    asserts it is in the allowed set, and tracks the key strategic skill --
+    spending the one-shot Hache de Glace on a monster the free tools cannot kill
+    rather than wasting it on a free kill."""
 
     def __init__(self, model, encoder, **kwargs):
         kwargs.setdefault('managed_kinds', TOY_MANAGED_KINDS)
         kwargs['fallback'] = ToyStructuralPolicy()
         super().__init__(model, encoder, **kwargs)
         self._kinds_seen = Counter()
-        self._combo = Counter()
+        self._skill = Counter()
 
     def decide(self, context):
         kind = context.kind
@@ -146,30 +152,24 @@ class ToyControlPolicy(HybridNeuralPolicy):
                 f"the fixed object/dungeon set must only raise {sorted(k.name for k in TOY_ALLOWED_KINDS)}"
             )
 
-        dragon_combat = is_dragon_combat_context(context)
-        combat_step = context.meta('combat_step', 0) if dragon_combat else 0
-        if dragon_combat and combat_step == 0:
-            self._combo['dragon_combats'] += 1
-
         decision = super().decide(context)
 
-        if dragon_combat and is_reducer(decision):
-            self._combo['reducer_uses_on_dragon'] += 1
-            # A reducer chosen after at least one combat object already applied
-            # this combat completes the planted 2-object combo.
-            if combat_step >= 1:
-                self._combo['combo_fired'] += 1
+        # The scarce one-shot Hache de Glace: spending it on a monster the free
+        # tools cannot execute is the skill; spending it on a free kill is a waste.
+        if kind is DecisionKind.CHOOSE_COMBAT_OBJECT and is_hache(decision):
+            self._skill['hache_uses'] += 1
+            self._skill['hache_well_used' if is_hache_worthy(context.subject) else 'hache_wasted'] += 1
         return decision
 
     def clear_toy_stats(self):
         self._kinds_seen.clear()
-        self._combo.clear()
+        self._skill.clear()
 
     def export_kinds_seen(self):
         return dict(self._kinds_seen)
 
-    def export_combo_stats(self):
-        return dict(self._combo)
+    def export_skill_stats(self):
+        return dict(self._skill)
 
 
 # --- Model / policy construction ---------------------------------------------
@@ -241,7 +241,7 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start, versus_random_
         'episodes': episodes,
         'avg_reward_per_player': reward_sum / max(1, recorded_players),
         'kinds_seen': policy.export_kinds_seen(),
-        'combo_stats': policy.export_combo_stats(),
+        'skill_stats': policy.export_skill_stats(),
     }
 
 
@@ -277,7 +277,7 @@ def evaluate_toy_vs_random(model, encoder, seed_bank, *, device='cpu'):
         'ponce_rate': ponces / games,
         'avg_score': score_sum / games,
         'kinds_seen': agent.export_kinds_seen(),
-        'combo_stats': agent.export_combo_stats(),
+        'skill_stats': agent.export_skill_stats(),
     }
 
 
@@ -298,44 +298,46 @@ def _toy_game_namespace(actor, remaining_indices):
 
 
 def probe_optimal_combat_decision(model, encoder, *, device='cpu'):
-    """Controlled single-decision probe (criterion #2).
+    """Controlled single-decision probes (criterion #2).
 
-    Facing a Dragon (9 power / 9 damage) at HP where tanking is lethal, the
-    greedy agent should choose to use a Couronne (reduce) rather than resolve the
-    monster as-is -- and again for the second reducer. We construct the exact
-    state and read the argmax action.
+    The scarce one-shot Hache de Glace is the only tool that executes a Dragon.
+    The greedy agent should (a) spend it on a Dragon when tanking would be lethal,
+    and (b) NOT waste it on a weakling it can kill for free. We build the exact
+    states -- using the real combat-candidate filter -- and read the argmax.
     """
     from joueurs import Joueur
+    from objets import SANS_HOOK_OBJET
 
+    o_combat = SANS_HOOK_OBJET['en_combat']
     policy = _make_toy_policy(model, encoder, sample=False, record=False, device=device)
 
-    def choose(step, hp, reduced_damage):
+    def choose(carte, hp):
         actor = Joueur(TOY_PLAYER_NAMES[0], make_toy_hero(), make_toy_objects())
         actor.pv_total = hp
-        couronnes = [o for o in actor.objets if is_reducer(o)]
-        dragon = CarteMonstre("Dragon", 9, ["Dragon"])
-        dragon.dommages = reduced_damage
-        dragon.dommages_reference = 9
-        # After `step` reducers used, that many Couronnes are no longer candidates.
-        options = tuple(couronnes[step:])
-        game = _toy_game_namespace(actor, remaining_indices=[2, 3, 4])
+        carte.dommages = carte.puissance
+        carte.dommages_reference = carte.puissance
+        game = _toy_game_namespace(actor, remaining_indices=[3, 4, 5])
+        # Mirror simu's combat-candidate gathering: only objects that override
+        # combat_effet and are legal right now (so the +5 armor is never offered).
+        options = tuple(o for o in actor.objets
+                        if type(o) not in o_combat and o.can_use_in_combat(actor, carte, game, []))
         context = DecisionContext(
             kind=DecisionKind.CHOOSE_COMBAT_OBJECT,
             actor=actor,
             game=game,
             phase='choose_combat_object',
-            subject=dragon,
+            subject=carte,
             options=options,
-            metadata={'allow_resolve_now': True, 'combat_step': step, 'log_details': []},
+            metadata={'allow_resolve_now': True, 'combat_step': 0, 'log_details': []},
         )
         return policy.decide(context)
 
-    first = choose(step=0, hp=TOY_HERO_PV, reduced_damage=9)
-    second = choose(step=1, hp=TOY_HERO_PV, reduced_damage=7)
+    on_lethal_dragon = choose(CarteMonstre("Dragon", 9, ["Dragon"]), hp=6)   # 6 < 9: tanking kills
+    on_weakling = choose(CarteMonstre("Squelette", 2, ["Squelette"]), hp=TOY_START_PV)
     return {
-        'first_reducer_used': is_reducer(first),
-        'second_reducer_used': is_reducer(second),
-        'optimal_line': is_reducer(first) and is_reducer(second),
+        'hache_on_lethal_dragon': is_hache(on_lethal_dragon),
+        'hache_kept_on_weakling': not is_hache(on_weakling),
+        'optimal_line': is_hache(on_lethal_dragon) and not is_hache(on_weakling),
     }
 
 
@@ -346,7 +348,7 @@ class ToyTrainResult:
     iterations: int
     final_winrate_vs_random: float
     best_winrate_vs_random: float
-    combo_rate: float
+    skill_rate: float  # fraction of Hache uses on a monster the free tools can't kill
     kinds_seen: dict
     optimal_line: bool
     behaviour: dict
@@ -378,7 +380,7 @@ def train_toy(
     history = []
     best_winrate = 0.0
     last_winrate = 0.0
-    last_combo_rate = 0.0
+    last_skill_rate = 0.0
     last_kinds = {}
     last_behaviour = {}
 
@@ -390,9 +392,9 @@ def train_toy(
         )
         update = ppo_update(model, optimizer, rollout['steps'], ppo_config, device=device)
 
-        combo = rollout['combo_stats']
-        combo_rate = combo.get('combo_fired', 0) / max(1, combo.get('dragon_combats', 0))
-        last_combo_rate = combo_rate
+        skill = rollout['skill_stats']
+        skill_rate = skill.get('hache_well_used', 0) / max(1, skill.get('hache_uses', 0))
+        last_skill_rate = skill_rate
         last_kinds = rollout['kinds_seen']
 
         if iteration % eval_every == 0 or iteration == iterations:
@@ -410,9 +412,9 @@ def train_toy(
                 'winrate_vs_random': last_winrate,
                 'chance_winrate': evaluation['chance_winrate'],
                 'avg_rank': evaluation['avg_rank'],
-                'combo_rate': combo_rate,
-                'combo_fired': combo.get('combo_fired', 0),
-                'dragon_combats': combo.get('dragon_combats', 0),
+                'hache_well_used_rate': skill_rate,
+                'hache_uses': skill.get('hache_uses', 0),
+                'hache_well_used': skill.get('hache_well_used', 0),
                 'avg_reward_per_player': rollout['avg_reward_per_player'],
                 'policy_loss': update['policy_loss'],
                 'value_loss': update['value_loss'],
@@ -424,7 +426,7 @@ def train_toy(
                 print(
                     f"[toy iter {iteration:03d}] "
                     f"winrate_vs_random={last_winrate:.3f} (chance {evaluation['chance_winrate']:.2f}) "
-                    f"combo_rate={combo_rate:.3f} "
+                    f"hache_well_used={skill_rate:.3f} "
                     f"death={evaluation['death_rate']:.2f} flee={evaluation['flee_rate']:.2f} "
                     f"ponce={evaluation['ponce_rate']:.2f} score={evaluation['avg_score']:.2f} "
                     f"entropy={update['entropy']:.3f}",
@@ -449,7 +451,7 @@ def train_toy(
         iterations=iterations,
         final_winrate_vs_random=last_winrate,
         best_winrate_vs_random=best_winrate,
-        combo_rate=last_combo_rate,
+        skill_rate=last_skill_rate,
         kinds_seen=last_kinds,
         optimal_line=optimal['optimal_line'],
         behaviour=last_behaviour,
@@ -471,7 +473,7 @@ def format_toy_report(result: ToyTrainResult):
         f"- Iterations: {result.iterations}",
         f"- Winrate vs RandomPolicy: {result.final_winrate_vs_random:.3f} "
         f"(best {result.best_winrate_vs_random:.3f}, chance 0.50)",
-        f"- Combo trigger rate (both reducers on a Dragon): {result.combo_rate:.3f}",
+        f"- Hache de Glace spent wisely (on a monster the free tools can't kill): {result.skill_rate:.3f}",
         f"- Reproduces hand-derived optimal line on the probe: {result.optimal_line}",
     ]
     if b:

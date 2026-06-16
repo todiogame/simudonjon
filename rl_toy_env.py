@@ -19,7 +19,7 @@ from ai_decisions import CombatObjectChoice, DecisionKind, require_permutation
 from ai_policy import RoutedDungeonPolicy
 from heros import MercenaireOrc
 from monstres import CarteMonstre, DonjonDeck
-from objets import CouronneEnMousse, MarteauDeGuerre, TorcheBleue
+from objets import ArmureEnCuir, HacheDeGlace, MarteauDeGuerre, TorcheBleue
 
 
 TOY_PLAYER_NAMES = ("Alice", "Bob")
@@ -42,28 +42,47 @@ TOY_MANAGED_KINDS = (
 TOY_STRUCTURAL_KINDS = (DecisionKind.ORDER_OBJECTS,)
 TOY_ALLOWED_KINDS = frozenset(TOY_MANAGED_KINDS) | frozenset(TOY_STRUCTURAL_KINDS)
 
-# Fixed dungeon, drawn in this exact order every game. Plain monsters only.
-#   Squelette(2): executable by BOTH Marteau (type) and Torche (power)  -> real choice
-#   Gobelin(1)  : executable by Torche only (power)                     -> single tool
-#   Dragon(9)   : executable by NEITHER -> must be tanked; the combo (two -2
-#                 reducers) is the only way to survive it at the tuned HP.
-TOY_DUNGEON_SEQUENCE = (
-    ("Squelette", 2, ("Squelette",)),
-    ("Gobelin", 1, ("Gobelin",)),
-    ("Dragon", 9, ("Dragon",)),
-    ("Squelette", 2, ("Squelette",)),
-    ("Gobelin", 1, ("Gobelin",)),
-    ("Dragon", 9, ("Dragon",)),
-    ("Squelette", 2, ("Squelette",)),
-    ("Gobelin", 1, ("Gobelin",)),
+# Fixed dungeon, drawn in this exact order every game. The full set of "standard"
+# monsters (no rats, no special-rule / effect / X cards), in ascending power so
+# the difficulty ramps. Plain monsters only => the only decisions raised stay the
+# encodable binary / 1-of-N kinds.
+#   Gobelin(1)/Squelette(2) : free kills (Torche; Marteau also kills Squelette)
+#   Golem(5)                : Marteau (type) or Hache
+#   Orc/Vampire/Liche/Demon : Hache-only (or tank); not coverable by Marteau/Torche
+#   Dragon(9)               : Hache-only (biggest threat) -> the scarce Hache is
+#                             best spent here; the rest must be tanked or fled.
+_STANDARD_MONSTERS = (
+    # (nom, puissance, types, count) -- matches the base DonjonDeck composition.
+    ("Gobelin", 1, ("Gobelin",), 4),
+    ("Squelette", 2, ("Squelette",), 4),
+    ("Orc", 3, ("Orc",), 4),
+    ("Vampire", 4, ("Vampire",), 4),
+    ("Golem", 5, ("Golem",), 4),
+    ("Liche", 6, ("Liche",), 2),
+    ("Démon", 7, ("Démon",), 2),
+    ("Dragon", 9, ("Dragon",), 2),
+)
+TOY_DUNGEON_SEQUENCE = tuple(
+    (nom, puissance, types)
+    for nom, puissance, types, count in _STANDARD_MONSTERS
+    for _ in range(count)
 )
 
-TOY_HERO_PV = 7  # MercenaireOrc level 2: pure passive HP, no dice, no decisions.
+TOY_HERO_PV = 7   # MercenaireOrc level 2: pure passive HP, no dice, no decisions.
+TOY_ARMOR_PV = 5  # Armure en cuir: pure passive +5 PV.
+TOY_START_PV = TOY_HERO_PV + TOY_ARMOR_PV  # 12 PV: enough to tank one Dragon (->3).
 
 
 def make_toy_objects():
-    """Fresh instances of the four fixed toy objects (objects carry game state)."""
-    return [MarteauDeGuerre(), TorcheBleue(), CouronneEnMousse(), CouronneEnMousse()]
+    """Fresh instances of the four fixed toy objects (objects carry game state).
+
+    - Marteau de Guerre : type executor (Golem / Squelette), free, reusable.
+    - Torche Bleue      : power executor (<= 2), free, reusable.
+    - Hache de Glace    : active one-shot executor of ANY monster (incl. Dragon),
+                          consumed on use -- the scarce, decisive tool.
+    - Armure en cuir    : pure passive +5 PV buffer.
+    """
+    return [MarteauDeGuerre(), TorcheBleue(), HacheDeGlace(), ArmureEnCuir()]
 
 
 def make_toy_hero():
@@ -133,12 +152,15 @@ def routed_toy_policy(seat_policies, joueurs):
     return routed
 
 
-def is_dragon_combat_context(context):
-    return (
-        context.kind is DecisionKind.CHOOSE_COMBAT_OBJECT
-        and 'Dragon' in (getattr(context.subject, 'types', ()) or ())
-    )
+def is_hache(objet):
+    """The scarce one-shot executor whose use is the toy's key strategic skill."""
+    return isinstance(objet, HacheDeGlace)
 
 
-def is_reducer(objet):
-    return isinstance(objet, CouronneEnMousse)
+def is_hache_worthy(carte):
+    """True if the free reusable tools cannot execute this monster, so spending
+    the one-shot Hache on it is justified rather than a waste: not power <= 2
+    (Torche) and not Golem / Squelette (Marteau de Guerre)."""
+    power = getattr(carte, 'puissance', getattr(carte, 'puissance_initiale', 0))
+    types = getattr(carte, 'types', ()) or ()
+    return power > 2 and 'Golem' not in types and 'Squelette' not in types
