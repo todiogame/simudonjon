@@ -266,6 +266,18 @@ def _make_toy_policy(model, encoder, *, sample, record, device='cpu'):
 
 # --- Rollouts / evaluation (single process: deterministic and simple) --------
 
+def _terminal_reward(joueur, winner):
+    """Game outcome from a player's view: +1 win / score credit / score credit / 3
+    if dead (see the Reward note). Shared by RL rollouts and the value targets
+    used to warm the critic during behaviour cloning."""
+    if joueur is winner:
+        return WIN_REWARD
+    reward = min(SURVIVE_REWARD_CAP, SURVIVE_SCORE_COEF * joueur.score_final)
+    if not joueur.vivant:
+        reward /= DEATH_SCORE_DIVISOR
+    return reward
+
+
 def _opponent_policy(kind):
     """Fixed opponent for non-self-play episodes. The opponent may be the
     heuristic DefaultDungeonPolicy -- only the *agent* seat must avoid the
@@ -310,17 +322,8 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
             recorded = list(joueurs)
         routed = routed_toy_policy(assignments, joueurs)
         winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
-        # Win the game = +1; otherwise a score credit for the monsters cleared,
-        # divided by 3 if you died. Rewarding score (even on death) gives a
-        # gradient out of "flee immediately"; the /3 death discount keeps
-        # surviving clearly better than dying with the same pile.
         for joueur in recorded:
-            if joueur is winner:
-                reward = WIN_REWARD
-            else:
-                reward = min(SURVIVE_REWARD_CAP, SURVIVE_SCORE_COEF * joueur.score_final)
-                if not joueur.vivant:
-                    reward /= DEATH_SCORE_DIVISOR
+            reward = _terminal_reward(joueur, winner)
             reward_sum += reward
             recorded_players += 1
             for step in policy.take_records(joueur):
@@ -489,15 +492,20 @@ def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1):
         joueurs, objets = build_toy_match(seed_start + offset)
         recorders = [_DemoRecorder(encoder) for _ in joueurs]
         routed = routed_toy_policy({i: recorders[i] for i in range(len(joueurs))}, joueurs)
-        ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
-        for rec in recorders:
+        winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
+        for seat, rec in enumerate(recorders):
+            ret = _terminal_reward(joueurs[seat], winner)  # value target to warm the critic
+            for sample in rec.samples:
+                sample['return'] = ret
             samples.extend(rec.samples)
     return samples
 
 
-def behavior_clone(model, samples, *, epochs=12, lr=1e-3, batch_size=512, device='cpu'):
-    """Supervised cross-entropy: make the policy heads predict the heuristic's
-    action. Returns per-mode accuracy so we can see how well it cloned."""
+def behavior_clone(model, samples, *, epochs=12, lr=1e-3, batch_size=512, value_coef=0.5, device='cpu'):
+    """Supervised: make the policy heads predict the heuristic's action AND warm
+    the value head by regressing it to the demonstrations' game returns (so PPO
+    fine-tuning starts with a meaningful critic, not random advantages). Returns
+    per-mode action accuracy."""
     binary = [s for s in samples if s['mode'] == 'binary']
     combat = [s for s in samples if s['mode'] in ('combat_object', 'single_object')]
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -505,8 +513,10 @@ def behavior_clone(model, samples, *, epochs=12, lr=1e-3, batch_size=512, device
     def binary_batch(batch):
         obs = torch.from_numpy(np.stack([s['obs'] for s in batch])).to(device)
         labels = torch.tensor([s['label'] for s in batch], dtype=torch.long, device=device)
-        logits, _ = model.forward_binary(obs)
-        return F.cross_entropy(logits, labels), logits, labels
+        returns = torch.tensor([s.get('return', 0.0) for s in batch], dtype=torch.float32, device=device)
+        logits, value = model.forward_binary(obs)
+        loss = F.cross_entropy(logits, labels) + value_coef * F.mse_loss(value, returns)
+        return loss, logits, labels
 
     def combat_batch(batch):
         g = torch.from_numpy(np.stack([s['global_obs'] for s in batch])).to(device)
@@ -514,8 +524,10 @@ def behavior_clone(model, samples, *, epochs=12, lr=1e-3, batch_size=512, device
         ids = torch.from_numpy(np.stack([s['candidate_ids'] for s in batch])).to(device)
         mask = torch.from_numpy(np.stack([s['action_mask'] for s in batch])).to(device)
         labels = torch.tensor([s['label'] for s in batch], dtype=torch.long, device=device)
-        logits, _ = model.forward_combat(g, c, ids, mask)
-        return F.cross_entropy(logits, labels), logits, labels
+        returns = torch.tensor([s.get('return', 0.0) for s in batch], dtype=torch.float32, device=device)
+        logits, value = model.forward_combat(g, c, ids, mask)
+        loss = F.cross_entropy(logits, labels) + value_coef * F.mse_loss(value, returns)
+        return loss, logits, labels
 
     model.train()
     rng = np.random.default_rng(0)
@@ -532,7 +544,7 @@ def behavior_clone(model, samples, *, epochs=12, lr=1e-3, batch_size=512, device
                 optimizer.step()
     model.eval()
 
-    # Accuracy on the full set (how faithfully it cloned the teacher).
+    # Action accuracy on the full set (how faithfully it cloned the teacher).
     acc = {}
     with torch.no_grad():
         for name, group, batcher in (('binary', binary, binary_batch), ('combat', combat, combat_batch)):
