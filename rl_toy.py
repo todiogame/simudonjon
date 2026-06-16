@@ -71,8 +71,9 @@ Diagnostic findings (what the toy taught us)
    - Hard dungeon (the full standard monster set): oscillates between fleeing
      immediately (score ~0) and drawing everything and dying (score high, but
      death-rate 1.0) -> loses to Random.
-   The lever is the training regime (reward / opponent mix via
-   ``--versus-random-ratio``), not the network.
+   The lever is the training regime (reward / opponent mix via ``--opponent``
+   and ``--opponent-ratio``, e.g. train against the heuristic DefaultDungeonPolicy),
+   not the network.
 
 (This is an iterated design -- objects, dungeon and skill metric have changed as
 we probe the difficulty. Re-run ``python rl_toy.py train`` to refresh the numbers
@@ -93,7 +94,7 @@ from pathlib import Path
 import torch
 
 from ai_decisions import DecisionContext, DecisionKind
-from ai_policy import RandomPolicy
+from ai_policy import RandomPolicy, default_dungeon_policy
 from monstres import CarteMonstre
 from simu import ordonnanceur
 
@@ -189,30 +190,42 @@ def _make_toy_policy(model, encoder, *, sample, record, device='cpu'):
 
 # --- Rollouts / evaluation (single process: deterministic and simple) --------
 
-def collect_toy_rollouts(model, encoder, *, episodes, seed_start, versus_random_ratio=0.0, device='cpu'):
+def _opponent_policy(kind):
+    """Fixed opponent for non-self-play episodes. The opponent may be the
+    heuristic DefaultDungeonPolicy -- only the *agent* seat must avoid the
+    heuristic (guardrail), the opponent is free to use it."""
+    if kind == 'random':
+        return RandomPolicy()
+    if kind == 'default':
+        return default_dungeon_policy()
+    raise ValueError(f"Unknown toy opponent: {kind}")
+
+
+def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
+                         opponent_ratio=0.0, opponent='random', device='cpu'):
     """Rollouts for one PPO batch.
 
-    ``versus_random_ratio`` is the fraction of episodes played against a
-    RandomPolicy opponent (the agent occupies one rotated seat and only its
-    steps are recorded). The default 0.0 is pure self-play, as the brief
-    specifies; a non-zero ratio mirrors the self/random curriculum the real
-    harness uses and is available for experiments, but with the game-aligned
-    reward below it is not needed to beat Random.
+    ``opponent_ratio`` is the fraction of episodes the agent plays against a
+    fixed ``opponent`` ('random' or 'default'); the rest are self-play. On each
+    such episode the agent occupies one rotated seat and only its steps are
+    recorded. Pure self-play (ratio 0.0) over-fits to facing a clone on the
+    shared dungeon queue; training against a fixed competent opponent (the
+    heuristic 'default') mirrors what the real harness does.
     """
     policy = _make_toy_policy(model, encoder, sample=True, record=True, device=device)
-    baseline = RandomPolicy()
+    baseline = _opponent_policy(opponent)
     steps = []
     reward_sum = 0.0
     recorded_players = 0
-    versus_random_period = (
-        max(1, round(1.0 / versus_random_ratio)) if versus_random_ratio > 0 else 0
+    opponent_period = (
+        max(1, round(1.0 / opponent_ratio)) if opponent_ratio > 0 else 0
     )
     for offset in range(episodes):
         seed = seed_start + offset
         joueurs, objets = build_toy_match(seed)
         policy.clear_records()
-        is_versus_random = versus_random_period and (offset % versus_random_period == 0)
-        if is_versus_random:
+        is_versus_opponent = opponent_period and (offset % opponent_period == 0)
+        if is_versus_opponent:
             agent_seat = offset % len(joueurs)
             assignments = {i: (policy if i == agent_seat else baseline) for i in range(len(joueurs))}
             recorded = [joueurs[agent_seat]]
@@ -245,12 +258,12 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start, versus_random_
     }
 
 
-def evaluate_toy_vs_random(model, encoder, seed_bank, *, device='cpu'):
-    """Greedy agent vs RandomPolicy, agent seat rotated across games. Also
-    reports the agent's behaviour (death / flee / ponce / score) so the win-rate
-    can be interpreted, not just read."""
+def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu'):
+    """Greedy agent vs a fixed baseline ('random' or 'default'), agent seat
+    rotated across games. Also reports the agent's behaviour (death / flee /
+    ponce / score) so the win-rate can be interpreted, not just read."""
     agent = _make_toy_policy(model, encoder, sample=False, record=False, device=device)
-    baseline = RandomPolicy()
+    baseline = _opponent_policy(baseline)
     wins = rank_sum = deaths = flees = ponces = 0
     score_sum = 0.0
     for eval_index, seed in enumerate(seed_bank):
@@ -348,11 +361,14 @@ class ToyTrainResult:
     iterations: int
     final_winrate_vs_random: float
     best_winrate_vs_random: float
+    final_winrate_vs_default: float
+    best_winrate_vs_default: float
     skill_rate: float  # fraction of Hache uses on a monster the free tools can't kill
     kinds_seen: dict
     optimal_line: bool
     behaviour: dict
-    versus_random_ratio: float
+    opponent: str
+    opponent_ratio: float
     history: list
 
 
@@ -365,7 +381,8 @@ def train_toy(
     hidden_dim=128,
     lr=3e-4,
     entropy_coef=0.01,
-    versus_random_ratio=0.0,
+    opponent='random',
+    opponent_ratio=0.0,
     seed=20260616,
     device='cpu',
     run_dir=None,
@@ -378,8 +395,8 @@ def train_toy(
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
 
     history = []
-    best_winrate = 0.0
-    last_winrate = 0.0
+    best_vs_random = best_vs_default = 0.0
+    last_vs_random = last_vs_default = 0.0
     last_skill_rate = 0.0
     last_kinds = {}
     last_behaviour = {}
@@ -388,7 +405,7 @@ def train_toy(
         rollout_seed = seed + iteration * episodes_per_batch
         rollout = collect_toy_rollouts(
             model, encoder, episodes=episodes_per_batch, seed_start=rollout_seed,
-            versus_random_ratio=versus_random_ratio, device=device,
+            opponent=opponent, opponent_ratio=opponent_ratio, device=device,
         )
         update = ppo_update(model, optimizer, rollout['steps'], ppo_config, device=device)
 
@@ -398,20 +415,23 @@ def train_toy(
         last_kinds = rollout['kinds_seen']
 
         if iteration % eval_every == 0 or iteration == iterations:
-            evaluation = evaluate_toy_vs_random(model, encoder, eval_bank, device=device)
-            last_winrate = evaluation['winrate']
-            best_winrate = max(best_winrate, last_winrate)
+            eval_random = evaluate_toy(model, encoder, eval_bank, baseline='random', device=device)
+            eval_default = evaluate_toy(model, encoder, eval_bank, baseline='default', device=device)
+            last_vs_random = eval_random['winrate']
+            last_vs_default = eval_default['winrate']
+            best_vs_random = max(best_vs_random, last_vs_random)
+            best_vs_default = max(best_vs_default, last_vs_default)
             last_behaviour = {
-                'death_rate': evaluation['death_rate'],
-                'flee_rate': evaluation['flee_rate'],
-                'ponce_rate': evaluation['ponce_rate'],
-                'avg_score': evaluation['avg_score'],
+                'death_rate': eval_default['death_rate'],
+                'flee_rate': eval_default['flee_rate'],
+                'ponce_rate': eval_default['ponce_rate'],
+                'avg_score': eval_default['avg_score'],
             }
             row = {
                 'iteration': iteration,
-                'winrate_vs_random': last_winrate,
-                'chance_winrate': evaluation['chance_winrate'],
-                'avg_rank': evaluation['avg_rank'],
+                'winrate_vs_random': last_vs_random,
+                'winrate_vs_default': last_vs_default,
+                'chance_winrate': eval_random['chance_winrate'],
                 'hache_well_used_rate': skill_rate,
                 'hache_uses': skill.get('hache_uses', 0),
                 'hache_well_used': skill.get('hache_well_used', 0),
@@ -425,10 +445,11 @@ def train_toy(
             if verbose:
                 print(
                     f"[toy iter {iteration:03d}] "
-                    f"winrate_vs_random={last_winrate:.3f} (chance {evaluation['chance_winrate']:.2f}) "
+                    f"vs_random={last_vs_random:.3f} vs_default={last_vs_default:.3f} "
+                    f"(chance {eval_random['chance_winrate']:.2f}) "
                     f"hache_well_used={skill_rate:.3f} "
-                    f"death={evaluation['death_rate']:.2f} flee={evaluation['flee_rate']:.2f} "
-                    f"ponce={evaluation['ponce_rate']:.2f} score={evaluation['avg_score']:.2f} "
+                    f"death={eval_default['death_rate']:.2f} flee={eval_default['flee_rate']:.2f} "
+                    f"ponce={eval_default['ponce_rate']:.2f} score={eval_default['avg_score']:.2f} "
                     f"entropy={update['entropy']:.3f}",
                     flush=True,
                 )
@@ -449,21 +470,24 @@ def train_toy(
 
     return ToyTrainResult(
         iterations=iterations,
-        final_winrate_vs_random=last_winrate,
-        best_winrate_vs_random=best_winrate,
+        final_winrate_vs_random=last_vs_random,
+        best_winrate_vs_random=best_vs_random,
+        final_winrate_vs_default=last_vs_default,
+        best_winrate_vs_default=best_vs_default,
         skill_rate=last_skill_rate,
         kinds_seen=last_kinds,
         optimal_line=optimal['optimal_line'],
         behaviour=last_behaviour,
-        versus_random_ratio=versus_random_ratio,
+        opponent=opponent,
+        opponent_ratio=opponent_ratio,
         history=history,
     )
 
 
 def format_toy_report(result: ToyTrainResult):
     regime = (
-        "pure self-play" if result.versus_random_ratio == 0
-        else f"self-play + {result.versus_random_ratio:.0%} vs-random"
+        "pure self-play" if result.opponent_ratio == 0
+        else f"self-play + {result.opponent_ratio:.0%} vs-{result.opponent}"
     )
     b = result.behaviour
     lines = [
@@ -473,12 +497,14 @@ def format_toy_report(result: ToyTrainResult):
         f"- Iterations: {result.iterations}",
         f"- Winrate vs RandomPolicy: {result.final_winrate_vs_random:.3f} "
         f"(best {result.best_winrate_vs_random:.3f}, chance 0.50)",
+        f"- Winrate vs DefaultDungeonPolicy (heuristic): {result.final_winrate_vs_default:.3f} "
+        f"(best {result.best_winrate_vs_default:.3f}, chance 0.50)",
         f"- Hache de Glace spent wisely (on a monster the free tools can't kill): {result.skill_rate:.3f}",
         f"- Reproduces hand-derived optimal line on the probe: {result.optimal_line}",
     ]
     if b:
         lines.append(
-            f"- Agent behaviour vs random: death {b['death_rate']:.2f}, "
+            f"- Agent behaviour vs the heuristic: death {b['death_rate']:.2f}, "
             f"flee {b['flee_rate']:.2f}, ponce {b['ponce_rate']:.2f}, "
             f"avg score {b['avg_score']:.2f}"
         )
@@ -520,8 +546,12 @@ def main():
     train_parser.add_argument('--lr', type=float, default=3e-4)
     train_parser.add_argument('--entropy-coef', type=float, default=0.01)
     train_parser.add_argument(
-        '--versus-random-ratio', type=float, default=0.0,
-        help='Fraction of rollout episodes played vs RandomPolicy (0 = pure self-play, the brief default).',
+        '--opponent', choices=('random', 'default'), default='random',
+        help="Fixed opponent for the non-self-play episodes ('default' = heuristic DefaultDungeonPolicy).",
+    )
+    train_parser.add_argument(
+        '--opponent-ratio', type=float, default=0.0,
+        help='Fraction of rollout episodes played vs the fixed opponent (0 = pure self-play).',
     )
     train_parser.add_argument('--seed', type=int, default=20260616)
     train_parser.add_argument('--run-dir', default='artifacts/rl_toy')
@@ -540,7 +570,8 @@ def main():
             hidden_dim=args.hidden_dim,
             lr=args.lr,
             entropy_coef=args.entropy_coef,
-            versus_random_ratio=args.versus_random_ratio,
+            opponent=args.opponent,
+            opponent_ratio=args.opponent_ratio,
             seed=args.seed,
             run_dir=args.run_dir,
         )
