@@ -65,31 +65,34 @@ drawing-into-death. The dungeon need not be clearable.
 
 Diagnostic findings (what the toy taught us)
 --------------------------------------------
-1. The PPO machinery *learns* and is not the bottleneck. The agent reproduces the
-   hand-derived optimal combat line on the controlled probe, and on an easy,
-   fully-clearable dungeon pure self-play converges to a strong policy that beats
-   Random markedly (~0.9). The encoder / network / PPO update are sound.
+1. The PPO machinery *learns* and is not the bottleneck. It reproduces the
+   hand-derived optimal combat line on the controlled probe; the encoder /
+   network / PPO update are sound. The hard part was the training regime.
 
-2. *Pure self-play on this shared-queue duel falls into degenerate equilibria,
-   and which one depends on the dungeon's difficulty.* Both seats draw from one
-   shared queue, so the self-play dynamics differ from facing a fixed opponent
-   and the agent does not find the intended "clear the cheap monsters, spend the
-   one-shot Hache on a monster the free tools can't kill, then flee before the
-   late high-power monsters" line. Observed attractors:
-   - Easy/clearable dungeon: converges to clearing everything -> beats Random.
-   - Hard dungeon (the full standard monster set): oscillates between fleeing
-     immediately (score ~0) and drawing everything and dying (score high, but
-     death-rate 1.0) -> loses to Random.
-   The lever is the training regime (reward / opponent mix via ``--opponent``
-   and ``--opponent-ratio``, e.g. train against the heuristic DefaultDungeonPolicy),
-   not the network.
+2. The *reward shape* was the real lever, in three steps (see the Reward note):
+   - Raw score -> the agent draws into death (a huge score upside against a tiny
+     death penalty makes suicide EV-positive).
+   - Flat +1 win / 0 lose / -1 die -> removes suicide but leaves a flat valley:
+     while losing, every episode returns 0, so PPO sees no gradient and freezes
+     at "flee immediately" (scaling the win reward does nothing -- a win is
+     ~never sampled).
+   - +1 / -1 / partial-credit-for-score-when-surviving -> a climb out of the
+     valley, with death still strictly worst so no return to suicide.
 
-(This is an iterated design -- objects, dungeon and skill metric have changed as
-we probe the difficulty. Re-run ``python rl_toy.py train`` to refresh the numbers
-for the current setup.)
+3. With that reward, trained against the heuristic DefaultDungeonPolicy on the
+   full (non-clearable) standard dungeon, the agent escapes "flee immediately"
+   around iteration ~80 and converges to the intended line -- clear the cheap
+   monsters, then flee before the deadly late ones -- beating BOTH baselines
+   markedly: ~0.95 vs Random and ~0.95 vs the heuristic (death ~0.04). Pure
+   self-play on this shared-queue duel does NOT get there (it over-fits to facing
+   a clone); a fixed competent opponent (``--opponent default``) is what works.
 
-The point of the toy is exactly this: it isolates training-regime and
-game-difficulty questions from the *machinery* (which provably learns), with
+(Iterated design -- objects, dungeon, skill metric and reward have all moved as
+we probed difficulty. Re-run ``python rl_toy.py train --opponent default
+--opponent-ratio 1.0 --entropy-coef 0.05 --iterations 220`` to reproduce.)
+
+The point of the toy is exactly this: it isolated reward-design and
+training-regime questions from the *machinery* (which provably learns), with
 every decision inspectable.
 """
 from __future__ import annotations
