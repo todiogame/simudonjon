@@ -901,7 +901,20 @@ def _load_compatible_state_dict(model, state_dict):
                 and old_feature_cols > 0
                 and current_feature_cols >= old_feature_cols
             ):
-                merged[:, :old_feature_cols] = value[:, :old_feature_cols]
+                legacy_feature_cols = 14 + len(ITEM_GAMEPLAY_TAGS)
+                current_base_cols = 12
+                current_tag_end = current_base_cols + len(ITEM_GAMEPLAY_TAGS)
+                if old_feature_cols == legacy_feature_cols and current_feature_cols >= current_tag_end:
+                    # Legacy combat candidates had: base13, tags, heuristic_worthit.
+                    # Current managed-object candidates removed priorite/worthit:
+                    # base12, tags, derived_features.
+                    merged[:, :current_feature_cols] = 0.0
+                    merged[:, :4] = value[:, :4]
+                    merged[:, 4:current_base_cols] = value[:, 5:13]
+                    merged[:, current_base_cols:current_tag_end] = value[:, 13:13 + len(ITEM_GAMEPLAY_TAGS)]
+                else:
+                    merged[:, :current_feature_cols] = 0.0
+                    merged[:, :old_feature_cols] = value[:, :old_feature_cols]
                 merged[:, -embed_cols:] = value[:, -embed_cols:]
                 compatible[key] = merged
         elif value.ndim == current_value.ndim == 2 and value.shape[0] == current_value.shape[0]:

@@ -14,6 +14,7 @@ from rl_train import (
     CurriculumMix,
     HybridNeuralPolicy,
     INITIAL_MANAGED_KINDS,
+    ITEM_GAMEPLAY_TAGS,
     PolicyValueNet,
     RewardConfig,
     _load_compatible_state_dict,
@@ -232,7 +233,6 @@ def test_compatible_load_preserves_candidate_embedding_columns_when_tags_expand(
     source = PolicyValueNet(encoder, hidden_dim=32)
     target = PolicyValueNet(encoder, hidden_dim=32)
 
-    target_initial = target.state_dict()['combat_candidate_encoder.0.weight'].clone()
     source_state = source.state_dict()
     full_weight = source_state['combat_candidate_encoder.0.weight']
     old_candidate_size = 12
@@ -245,7 +245,34 @@ def test_compatible_load_preserves_candidate_embedding_columns_when_tags_expand(
     loaded_weight = target.state_dict()['combat_candidate_encoder.0.weight']
     assert torch.allclose(loaded_weight[:, :old_candidate_size], full_weight[:, :old_candidate_size])
     assert torch.allclose(loaded_weight[:, -embed_cols:], full_weight[:, -embed_cols:])
-    assert torch.allclose(loaded_weight[:, old_candidate_size:-embed_cols], target_initial[:, old_candidate_size:-embed_cols])
+    assert torch.count_nonzero(loaded_weight[:, old_candidate_size:-embed_cols]) == 0
+
+
+def test_compatible_load_remaps_legacy_combat_candidate_columns():
+    torch.manual_seed(321)
+    encoder = ObservationEncoder()
+    target = PolicyValueNet(encoder, hidden_dim=32)
+    source_state = target.state_dict()
+    current_weight = source_state['combat_candidate_encoder.0.weight']
+
+    embed_cols = 16
+    tag_size = len(ITEM_GAMEPLAY_TAGS)
+    legacy_feature_cols = 14 + tag_size
+    legacy_weight = torch.full((current_weight.shape[0], legacy_feature_cols + embed_cols), -7.0)
+    legacy_weight[:, :13] = torch.arange(13, dtype=torch.float32).view(1, -1)
+    legacy_weight[:, 13:13 + tag_size] = 100.0 + torch.arange(tag_size, dtype=torch.float32).view(1, -1)
+    legacy_weight[:, 13 + tag_size] = 999.0
+    legacy_weight[:, -embed_cols:] = 200.0 + torch.arange(embed_cols, dtype=torch.float32).view(1, -1)
+    source_state['combat_candidate_encoder.0.weight'] = legacy_weight
+
+    _load_compatible_state_dict(target, source_state)
+
+    loaded_weight = target.state_dict()['combat_candidate_encoder.0.weight']
+    assert torch.allclose(loaded_weight[:, :4], legacy_weight[:, :4])
+    assert torch.allclose(loaded_weight[:, 4:12], legacy_weight[:, 5:13])
+    assert torch.allclose(loaded_weight[:, 12:12 + tag_size], legacy_weight[:, 13:13 + tag_size])
+    assert torch.allclose(loaded_weight[:, -embed_cols:], legacy_weight[:, -embed_cols:])
+    assert torch.count_nonzero(loaded_weight[:, 12 + tag_size:-embed_cols]) == 0
 
 
 def test_training_customization_overrides_curriculum_and_stage_knobs():
