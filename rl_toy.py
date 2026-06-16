@@ -50,19 +50,18 @@ arises is logged and asserted to be in the allowed set.
 
 Reward
 ------
-Terminal, keyed on the game outcome: +1 win the game / -1 die / a small
-partial-credit term (``SURVIVE_SCORE_COEF * score``, capped below a win) when you
-survive but lose. Two failure modes drove this design:
-  - Using the raw score as the reward is fatal on a hard dungeon: a huge score
-    upside against a tiny death penalty makes drawing-into-death EV-positive.
-  - A flat +1/0/-1 outcome reward removes that trap but leaves a flat valley --
-    while the agent keeps losing, every episode returns 0, so PPO sees no
-    gradient and stays stuck at "flee immediately" (scaling the win reward does
-    nothing: a win is ~never sampled).
-The partial credit makes the survive-but-lose tier vary with how well you played
-(so clearing free monsters before fleeing is rewarded), while the flat -1 for
-death keeps it strictly worse than any survived loss -- no return of
-drawing-into-death. The dungeon need not be clearable.
+Terminal, score-based: +1 for winning the game, otherwise a score credit
+(``SURVIVE_SCORE_COEF * score``, capped below a win) for the monsters cleared --
+and that credit is divided by ``DEATH_SCORE_DIVISOR`` (3) if you died. Rationale:
+  - A flat +1/0/-1 outcome reward leaves a flat valley -- while the agent keeps
+    losing, every episode returns the same value, PPO sees no gradient, and it
+    freezes at "flee immediately" (scaling the win reward does nothing: a win is
+    ~never sampled).
+  - Rewarding *score* gives a gradient out of that valley (drawing one more safe
+    monster is worth a little more). Crediting score even on death -- but only a
+    third of what surviving earns -- makes drawing worthwhile (so the agent stops
+    fleeing turn 1) while keeping survival clearly preferable to dying with the
+    same pile. The dungeon need not be clearable.
 
 Diagnostic findings (what the toy taught us)
 --------------------------------------------
@@ -137,21 +136,19 @@ from rl_train import (
 )
 
 
-# Terminal reward keyed on the game outcome, with a small partial-credit term so
-# the agent can climb out of the flat "flee immediately" valley on a hard,
-# non-clearable dungeon:
-#   win  = +1
-#   die  = -1                      (flat, regardless of score -> never suicidal)
-#   else =  SURVIVE_SCORE_COEF * score, capped below a win (survive-but-lose)
-# PPO learns from differences between the actions it actually samples; while it
-# keeps losing, those are all "survive-and-lose", so that tier must vary with how
-# well you played (score) -- otherwise the gradient is zero and scaling the win
-# reward changes nothing (a win is ~never sampled). Death stays strictly worse
-# than any survived loss, so partial credit does NOT bring back draw-into-death.
+# Terminal reward, score-based so the agent is rewarded for the monsters it
+# clears (this is what pulls it out of the flat "flee immediately" valley -- a
+# flat outcome reward gives a near-zero gradient there):
+#   win the game = +1
+#   else         = SURVIVE_SCORE_COEF * score (capped below a win), and that
+#                  score credit is DIVIDED BY DEATH_SCORE_DIVISOR if you died.
+# So you still earn credit for what you killed even when you die, but only ~1/3
+# of what you'd earn by surviving with the same score -> drawing is worth it
+# (escapes flee-immediately) while surviving stays clearly preferable.
 WIN_REWARD = 1.0
-DEATH_REWARD = -1.0
-SURVIVE_SCORE_COEF = 0.05   # partial credit per monster scored while surviving-but-losing
-SURVIVE_REWARD_CAP = 0.5    # keep survive-but-lose strictly below a win (+1)
+SURVIVE_SCORE_COEF = 0.05   # partial credit per monster scored
+SURVIVE_REWARD_CAP = 0.5    # keep the score credit strictly below a win (+1)
+DEATH_SCORE_DIVISOR = 3.0   # dying earns score credit, but a third of fleeing/surviving
 
 
 # --- Guardrail policy --------------------------------------------------------
@@ -311,19 +308,17 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
             recorded = list(joueurs)
         routed = routed_toy_policy(assignments, joueurs)
         winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
-        # Win the game = +1; die = -1; survive-but-lose = small partial credit for
-        # the score reached. The partial credit fills the flat "flee immediately"
-        # valley (so playing a bit better -- clearing free monsters, then stopping
-        # -- earns a bit more), while the flat -1 for death keeps drawing-into-death
-        # strictly bad. The dungeon need not be clearable: the agent just learns to
-        # score more before it must flee.
+        # Win the game = +1; otherwise a score credit for the monsters cleared,
+        # divided by 3 if you died. Rewarding score (even on death) gives a
+        # gradient out of "flee immediately"; the /3 death discount keeps
+        # surviving clearly better than dying with the same pile.
         for joueur in recorded:
             if joueur is winner:
                 reward = WIN_REWARD
-            elif joueur.vivant:
-                reward = min(SURVIVE_REWARD_CAP, SURVIVE_SCORE_COEF * joueur.score_final)
             else:
-                reward = DEATH_REWARD
+                reward = min(SURVIVE_REWARD_CAP, SURVIVE_SCORE_COEF * joueur.score_final)
+                if not joueur.vivant:
+                    reward /= DEATH_SCORE_DIVISOR
             reward_sum += reward
             recorded_players += 1
             for step in policy.take_records(joueur):
