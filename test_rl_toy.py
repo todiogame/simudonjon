@@ -73,9 +73,9 @@ def test_toy_match_draws_a_symmetric_hand_from_the_pool():
         kinds = {type(o) for o in joueur.objets}
         assert kinds.issubset(set(env.TOY_OBJECT_POOL))
         assert sum(isinstance(o, HacheDeGlace) for o in joueur.objets) <= 1
-        # PV depends on whether the armour was dealt this hand (variety is intended).
-        expected_pv = env.TOY_HERO_PV + (env.TOY_ARMOR_PV if ArmureEnCuir in kinds else 0)
-        assert joueur.pv_total == expected_pv
+        # PV varies with the hand (objects carry pv_bonus, plus a same-colour
+        # "Panoplie" bonus), so just sanity-check it is at least the hero's base.
+        assert joueur.pv_total >= env.TOY_HERO_PV
         hands.append(sorted(type(o).__name__ for o in joueur.objets))
     assert hands[0] == hands[1]  # symmetric: both seats share the same hand
 
@@ -102,7 +102,7 @@ def test_toy_dungeon_is_shuffled_with_fixed_composition():
     assert sorted(a.ordre) == list(range(n))
     assert list(a.ordre) != list(b.ordre)
     # The composition is fixed regardless of order.
-    assert sorted(c.titre for c in a.cartes) == sorted(nom for nom, _, _ in env.TOY_DUNGEON_SEQUENCE)
+    assert sorted(c.titre for c in a.cartes) == sorted(nom for nom, _, _, _ in env.TOY_DUNGEON_SEQUENCE)
 
 
 def test_toy_games_only_raise_allowed_kinds():
@@ -146,7 +146,9 @@ def test_toy_key_skill_is_reachable_by_a_competent_line():
                         self.skill['hache_well_used'] += 1
                     return hache[0]
                 return CombatObjectChoice.RESOLVE_NOW
-            return context.options[0] if context.options else False
+            # Covers CHOOSE_OBJECT_TO_SACRIFICE (Limon/Bombe) etc.: pick the first
+            # option, or None when there is nothing to choose (e.g. no intact object).
+            return context.options[0] if context.options else None
 
     total = {'hache_uses': 0, 'hache_well_used': 0}
     for seed in range(20):

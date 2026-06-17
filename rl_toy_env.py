@@ -19,8 +19,9 @@ from ai_decisions import CombatObjectChoice, DecisionKind, require_permutation
 from ai_policy import RoutedDungeonPolicy
 from heros import MercenaireOrc
 from monstres import CarteMonstre, DonjonDeck
-from objets import (ArmureEnCuir, CalumetDeLaPaix, CoquilleSalvatrice, CouteauSuisse,
-                    HacheDeGlace, KebabRevigorant, MarteauDeGuerre, TorcheBleue)
+from objets import (ArmureEnCuir, Barde, BombePirate, CalumetDeLaPaix, CoeurDeTarasque,
+                    CoquilleSalvatrice, CouteauSuisse, HacheDeGlace, KebabRevigorant,
+                    MarteauDeGuerre, MidasDeBronze, OsseletsDeResurrection, TorcheBleue)
 
 
 TOY_PLAYER_NAMES = ("Alice", "Bob")
@@ -41,6 +42,10 @@ TOY_MANAGED_KINDS = (
     # The heuristic is provably lazy here (repairs max-by-pv_bonus, which ties at
     # 0 for our one-shots -> just the first one), so it is real headroom to learn.
     DecisionKind.CHOOSE_OBJECT_TO_REPAIR,
+    # Limon glouton (and Bombe Pirate): pick which object to BREAK / sacrifice.
+    # Same 1-of-N-over-objects shape -> existing pointer head. This is Arc-1's
+    # decideBriseObjet, a decision the heuristic does crudely by priority order.
+    DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE,
 )
 
 # ORDER_OBJECTS is a structural, non-strategic inventory call the engine makes at
@@ -49,30 +54,32 @@ TOY_MANAGED_KINDS = (
 TOY_STRUCTURAL_KINDS = (DecisionKind.ORDER_OBJECTS,)
 TOY_ALLOWED_KINDS = frozenset(TOY_MANAGED_KINDS) | frozenset(TOY_STRUCTURAL_KINDS)
 
-# Fixed *composition* (re-shuffled each game): the full set of "standard"
-# monsters (no rats, no special-rule / effect / X cards). Listed here ascending
-# by power for readability only -- the order is randomised per game (see
-# ToyDonjon), so the agent cannot memorise a sequence. Plain monsters only =>
-# the only decisions raised stay the encodable binary / 1-of-N kinds.
+# Fixed *composition* (re-shuffled each game). Listed here ascending by power for
+# readability only -- the order is randomised per game (see ToyDonjon), so the
+# agent cannot memorise a sequence.
 #   Gobelin(1)/Squelette(2) : free kills (Torche; Marteau also kills Squelette)
 #   Golem(5)                : Marteau (type) or Hache
 #   Orc/Vampire/Liche/Demon : Hache-only (or tank); not coverable by Marteau/Torche
-#   Dragon(9)               : Hache-only (biggest threat) -> the scarce Hache is
-#                             best spent here; the rest must be tanked or fled.
+#   Dragon(9)               : Hache-only (biggest threat) -> scarce Hache best spent here
+#   Limon glouton(0)        : deals no damage but FORCES you to break one of your
+#                             objects (CHOOSE_OBJECT_TO_SACRIFICE). A pure strategic
+#                             tax -- which object do you give up? (Arc-1's
+#                             decideBriseObjet, a known heuristic weak spot.)
 _STANDARD_MONSTERS = (
-    # (nom, puissance, types, count) -- matches the base DonjonDeck composition.
-    ("Gobelin", 1, ("Gobelin",), 4),
-    ("Squelette", 2, ("Squelette",), 4),
-    ("Orc", 3, ("Orc",), 4),
-    ("Vampire", 4, ("Vampire",), 4),
-    ("Golem", 5, ("Golem",), 4),
-    ("Liche", 6, ("Liche",), 2),
-    ("Démon", 7, ("Démon",), 2),
-    ("Dragon", 9, ("Dragon",), 2),
+    # (nom, puissance, types, effet, count)
+    ("Gobelin", 1, ("Gobelin",), None, 4),
+    ("Squelette", 2, ("Squelette",), None, 4),
+    ("Orc", 3, ("Orc",), None, 4),
+    ("Vampire", 4, ("Vampire",), None, 4),
+    ("Golem", 5, ("Golem",), None, 4),
+    ("Liche", 6, ("Liche",), None, 2),
+    ("Démon", 7, ("Démon",), None, 2),
+    ("Dragon", 9, ("Dragon",), None, 2),
+    ("Limon glouton", 0, (), "LIMON", 2),
 )
 TOY_DUNGEON_SEQUENCE = tuple(
-    (nom, puissance, types)
-    for nom, puissance, types, count in _STANDARD_MONSTERS
+    (nom, puissance, types, effet)
+    for nom, puissance, types, effet, count in _STANDARD_MONSTERS
     for _ in range(count)
 )
 
@@ -82,7 +89,7 @@ TOY_START_PV = TOY_HERO_PV + TOY_ARMOR_PV  # 12 PV: enough to tank one Dragon (-
 
 # Distinct monster power levels and deck size, for the exact remaining-deck
 # histogram fed to the network (full information, not a coarse summary).
-TOY_POWER_LEVELS = tuple(sorted({puissance for _, puissance, _ in TOY_DUNGEON_SEQUENCE}))
+TOY_POWER_LEVELS = tuple(sorted({puissance for _, puissance, _, _ in TOY_DUNGEON_SEQUENCE}))
 TOY_DECK_SIZE = len(TOY_DUNGEON_SEQUENCE)
 
 
@@ -107,6 +114,12 @@ TOY_OBJECT_POOL = (
     # than vanish, so the Couteau gives them a second life -- and *which* one to
     # repair (given the remaining deck) is the new skill to learn.
     CouteauSuisse,
+    # More strategic variety:
+    MidasDeBronze,          # one-shot, executes a monster of power <= 4
+    Barde,                  # one-shot, executes a monster but costs 3 PV
+    OsseletsDeResurrection, # survives a would-be-lethal hit at 1 PV (and executes it)
+    CoeurDeTarasque,        # +3 PV; +1 PV at end of a turn where you killed >= 2
+    BombePirate,            # executes a big/lethal monster but you must BREAK an object
 )
 TOY_HAND_SIZE = 5  # each game draws this many from the pool (symmetric for both seats)
 
@@ -138,8 +151,8 @@ class ToyDonjon(DonjonDeck):
 
     def __init__(self):
         self.cartes = [
-            CarteMonstre(nom, power, list(types))
-            for nom, power, types in TOY_DUNGEON_SEQUENCE
+            CarteMonstre(nom, power, list(types), effet=effet)
+            for nom, power, types, effet in TOY_DUNGEON_SEQUENCE
         ]
         for index, carte in enumerate(self.cartes):
             carte.index = index
