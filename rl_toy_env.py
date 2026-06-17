@@ -19,8 +19,8 @@ from ai_decisions import CombatObjectChoice, DecisionKind, require_permutation
 from ai_policy import RoutedDungeonPolicy
 from heros import MercenaireOrc
 from monstres import CarteMonstre, DonjonDeck
-from objets import (ArmureEnCuir, CalumetDeLaPaix, CoquilleSalvatrice, HacheDeGlace,
-                    KebabRevigorant, MarteauDeGuerre, TorcheBleue)
+from objets import (ArmureEnCuir, CalumetDeLaPaix, CoquilleSalvatrice, CouteauSuisse,
+                    HacheDeGlace, KebabRevigorant, MarteauDeGuerre, TorcheBleue)
 
 
 TOY_PLAYER_NAMES = ("Alice", "Bob")
@@ -35,6 +35,12 @@ TOY_MANAGED_KINDS = (
     DecisionKind.USE_OBJECT_IN_COMBAT,
     DecisionKind.USE_ACTIVE_OBJECT,
     DecisionKind.CHOOSE_COMBAT_OBJECT,
+    # Couteau Suisse: pick which broken object to repair. A new decision *kind*,
+    # but the SAME shape as CHOOSE_COMBAT_OBJECT (1-of-N over objects) -- the
+    # encoder routes it to the existing candidate/pointer head, no new machinery.
+    # The heuristic is provably lazy here (repairs max-by-pv_bonus, which ties at
+    # 0 for our one-shots -> just the first one), so it is real headroom to learn.
+    DecisionKind.CHOOSE_OBJECT_TO_REPAIR,
 )
 
 # ORDER_OBJECTS is a structural, non-strategic inventory call the engine makes at
@@ -96,6 +102,11 @@ TOY_DECK_SIZE = len(TOY_DUNGEON_SEQUENCE)
 TOY_OBJECT_POOL = (
     MarteauDeGuerre, TorcheBleue, HacheDeGlace, ArmureEnCuir,
     CalumetDeLaPaix, CoquilleSalvatrice, KebabRevigorant,
+    # Couteau Suisse: one-shot, repairs ONE broken object of your choice. Our
+    # one-shots (Calumet / Coquille / Kebab) break (intact=False) on use rather
+    # than vanish, so the Couteau gives them a second life -- and *which* one to
+    # repair (given the remaining deck) is the new skill to learn.
+    CouteauSuisse,
 )
 TOY_HAND_SIZE = 5  # each game draws this many from the pool (symmetric for both seats)
 
