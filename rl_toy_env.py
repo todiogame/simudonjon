@@ -19,7 +19,8 @@ from ai_decisions import CombatObjectChoice, DecisionKind, require_permutation
 from ai_policy import RoutedDungeonPolicy
 from heros import MercenaireOrc
 from monstres import CarteMonstre, DonjonDeck
-from objets import ArmureEnCuir, HacheDeGlace, MarteauDeGuerre, TorcheBleue
+from objets import (ArmureEnCuir, CalumetDeLaPaix, CoquilleSalvatrice, HacheDeGlace,
+                    KebabRevigorant, MarteauDeGuerre, TorcheBleue)
 
 
 TOY_PLAYER_NAMES = ("Alice", "Bob")
@@ -79,20 +80,38 @@ TOY_POWER_LEVELS = tuple(sorted({puissance for _, puissance, _ in TOY_DUNGEON_SE
 TOY_DECK_SIZE = len(TOY_DUNGEON_SEQUENCE)
 
 
-def make_toy_objects():
-    """Fresh instances of the fixed toy objects (objects carry game state).
+# The object POOL the toy draws hands from. All are real game objects, all are in
+# the encoder's object vocabulary, and (verified) they only ever raise the
+# network-controlled decision kinds. The variety forces the agent to value scarce
+# *consumables* against each other across many hand compositions:
+#   - Marteau de Guerre   : type executor (Golem / Squelette), free, reusable.
+#   - Torche Bleue        : power executor (<= 2), free, reusable.
+#   - Hache de Glace      : one-shot, executes ANY monster (the scarce premium).
+#   - Armure en cuir      : passive +5 PV buffer.
+#   - Calumet de la Paix  : one-shot, executes ANY monster but FORCES a skipped
+#                           turn (a second executor with a tempo cost).
+#   - Coquille Salvatrice : one-shot death-save -- a lethal hit leaves you at 3 PV
+#                           instead of dead (auto; changes the risk calculus).
+#   - Kebab revigorant    : one-shot heal of +7 PV (from turn 3 on).
+TOY_OBJECT_POOL = (
+    MarteauDeGuerre, TorcheBleue, HacheDeGlace, ArmureEnCuir,
+    CalumetDeLaPaix, CoquilleSalvatrice, KebabRevigorant,
+)
+TOY_HAND_SIZE = 5  # each game draws this many from the pool (symmetric for both seats)
 
-    - Marteau de Guerre : type executor (Golem / Squelette), free, reusable.
-    - Torche Bleue      : power executor (<= 2), free, reusable.
-    - Hache de Glace x2 : two active one-shot executors of ANY monster (incl.
-                          Dragon), each consumed on use. Two of them for the two
-                          Dragons removes the "dealt both Dragons => unavoidable
-                          death" structure, so skill (allocating the two one-shots
-                          across the two Dragons vs spending them early) decides
-                          and can be discovered by RL rather than hand-coded.
-    - Armure en cuir    : pure passive +5 PV buffer.
-    """
-    return [MarteauDeGuerre(), TorcheBleue(), HacheDeGlace(), HacheDeGlace(), ArmureEnCuir()]
+
+def make_toy_objects():
+    """A FIXED reference hand (1 Hache, no second any-executor) -- used only by the
+    optimal-line probe, where the Hache must be the unique any-monster executor so
+    the 'use it on the lethal Dragon / keep it on the weakling' test is unambiguous.
+    Real matches draw a varied hand from TOY_OBJECT_POOL (see build_toy_match)."""
+    return [MarteauDeGuerre(), TorcheBleue(), HacheDeGlace(), ArmureEnCuir()]
+
+
+def make_toy_hand(rng):
+    """Draw a symmetric hand of TOY_HAND_SIZE object *classes* from the pool, using
+    the given stdlib Random instance (so it is reproducible per game seed)."""
+    return rng.sample(TOY_OBJECT_POOL, TOY_HAND_SIZE)
 
 
 def make_toy_hero():
@@ -120,26 +139,31 @@ class ToyDonjon(DonjonDeck):
 
 
 def build_toy_match(seed, shuffle_objects=False):
-    """Build a fixed 2-player toy match. Returns (joueurs, objets_dispo).
+    """Build a 2-player toy match. Returns (joueurs, objets_dispo).
+
+    Each game draws a SYMMETRIC hand of TOY_HAND_SIZE objects from TOY_OBJECT_POOL
+    -- the two seats get the *same* hand (fairness preserved), but the hand varies
+    across games, so the agent must handle different object *combinations* rather
+    than one fixed set. Reproducible per seed.
 
     The only randomness consumed downstream is the flee die roll; seeding here
     keeps each (seed) reproducible while varying across the rollout batch. torch
     is seeded in rl_toy where it is imported; here we seed the stdlib/numpy RNGs.
 
-    ``shuffle_objects`` permutes each player's inventory order (reproducibly per
-    seed). The object *set* is unchanged -- only the order they are presented in.
-    A policy that decides by object *identity* (features) rather than slot
-    position is invariant to this; it is a robustness check, not a difficulty
-    change, and it mirrors the real game where items arrive in arbitrary order.
+    ``shuffle_objects`` additionally permutes each seat's inventory order. The hand
+    (set) stays identical between seats; only the presentation order differs. A
+    policy that decides by object *identity* rather than slot position is invariant
+    to this -- a robustness check, mirroring the real game's arbitrary item order.
     """
     random.seed(seed)
     np.random.seed(seed & 0xFFFFFFFF)
 
     from joueurs import Joueur
 
+    hand_classes = make_toy_hand(random)  # the shared hand (symmetric across seats)
     joueurs = []
     for nom in TOY_PLAYER_NAMES:
-        objets = make_toy_objects()
+        objets = [cls() for cls in hand_classes]  # fresh instances per seat
         if shuffle_objects:
             random.shuffle(objets)
         joueurs.append(Joueur(nom, make_toy_hero(), objets))

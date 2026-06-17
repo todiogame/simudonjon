@@ -61,16 +61,30 @@ def _play_toy_games(seeds):
 
 # --- Environment tests (torch-free) ------------------------------------------
 
-def test_toy_match_is_fixed_and_two_players_with_fixed_objects():
+def test_toy_match_draws_a_symmetric_hand_from_the_pool():
     joueurs, objets = env.build_toy_match(1)
     assert len(joueurs) == 2
     assert objets == []
+    # Each seat gets a hand of HAND_SIZE objects drawn from the pool, at most one
+    # Hache (single now), and the two seats get the SAME hand (symmetric).
+    hands = []
     for joueur in joueurs:
-        assert len(joueur.objets) == 5
-        assert joueur.pv_total == env.TOY_START_PV  # 7 hero + 5 armour
+        assert len(joueur.objets) == env.TOY_HAND_SIZE
         kinds = {type(o) for o in joueur.objets}
-        assert kinds == {MarteauDeGuerre, TorcheBleue, HacheDeGlace, ArmureEnCuir}
-        assert sum(isinstance(o, HacheDeGlace) for o in joueur.objets) == 2  # two one-shot executors
+        assert kinds.issubset(set(env.TOY_OBJECT_POOL))
+        assert sum(isinstance(o, HacheDeGlace) for o in joueur.objets) <= 1
+        # PV depends on whether the armour was dealt this hand (variety is intended).
+        expected_pv = env.TOY_HERO_PV + (env.TOY_ARMOR_PV if ArmureEnCuir in kinds else 0)
+        assert joueur.pv_total == expected_pv
+        hands.append(sorted(type(o).__name__ for o in joueur.objets))
+    assert hands[0] == hands[1]  # symmetric: both seats share the same hand
+
+
+def test_toy_hands_vary_across_games():
+    # Different seeds should produce different hands (the pool is sampled).
+    seen = {tuple(sorted(type(o).__name__ for o in env.build_toy_match(s)[0][0].objets))
+            for s in range(40)}
+    assert len(seen) > 1  # not a single fixed hand
 
 
 def test_toy_dungeon_is_shuffled_with_fixed_composition():
