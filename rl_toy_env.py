@@ -162,7 +162,7 @@ class ToyDonjon(DonjonDeck):
         self.index = 0
 
 
-def build_toy_match(seed, shuffle_objects=False):
+def build_toy_match(seed, shuffle_objects=False, deck='toy'):
     """Build a 2-player toy match. Returns (joueurs, objets_dispo).
 
     Each game draws a SYMMETRIC hand of TOY_HAND_SIZE objects from TOY_OBJECT_POOL
@@ -191,7 +191,29 @@ def build_toy_match(seed, shuffle_objects=False):
         if shuffle_objects:
             random.shuffle(objets)
         joueurs.append(Joueur(nom, make_toy_hero(), objets))
+    if deck == 'normal':
+        from objets import objets_disponibles
+
+        hand_types = set(hand_classes)
+        reserve = [type(objet)() for objet in objets_disponibles if type(objet) not in hand_types]
+        for objet in reserve:
+            objet.repare()
+        return joueurs, reserve
     return joueurs, []
+
+
+def make_dungeon(deck='toy'):
+    """Build the dungeon used by the toy harness.
+
+    ``toy`` keeps the reduced diagnostic deck. ``normal`` uses the full
+    simudonjon deck; decisions outside the toy network's action heads must then
+    be handled by a fallback policy in rl_toy.py.
+    """
+    if deck == 'toy':
+        return ToyDonjon()
+    if deck == 'normal':
+        return DonjonDeck()
+    raise ValueError(f"Unknown toy deck: {deck!r}")
 
 
 class ToyStructuralPolicy:

@@ -102,7 +102,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -129,10 +129,12 @@ from rl_toy_env import (  # torch-free toy environment
     is_hache_worthy,
     make_toy_hero,
     make_toy_objects,
+    make_dungeon,
     routed_toy_policy,
 )
 from rl_train import (
     HybridNeuralPolicy,
+    INITIAL_MANAGED_KINDS,
     ObservationEncoder,
     PolicyValueNet,
     PPOConfig,
@@ -140,6 +142,32 @@ from rl_train import (
     _seed_bank,
     ppo_update,
 )
+
+
+NORMAL_MANAGED_KINDS = tuple(
+    kind for kind in INITIAL_MANAGED_KINDS
+    if kind is not DecisionKind.DRAFT_PICK
+)
+
+
+def _context_with_choice_options(context):
+    """Expose metadata-backed choices as regular options for pointer heads."""
+    if context.options:
+        return context
+    if context.kind in (DecisionKind.CHOOSE_POWER, DecisionKind.CHOOSE_TYPE):
+        choices = (
+            context.meta('options')
+            or context.meta('scores')
+            or context.meta('counts')
+            or {}
+        )
+        if isinstance(choices, dict):
+            choices = tuple(choices.keys())
+        else:
+            choices = tuple(choices)
+        if choices:
+            return replace(context, options=choices)
+    return context
 
 
 # Terminal reward, tuned to make the EV-balanced line (the heuristic's) optimal:
@@ -199,17 +227,19 @@ class ToyControlPolicy(HybridNeuralPolicy):
     spending the one-shot Hache de Glace on a monster the free tools cannot kill
     rather than wasting it on a free kill."""
 
-    def __init__(self, model, encoder, **kwargs):
+    def __init__(self, model, encoder, strict_allowed=True, **kwargs):
         kwargs.setdefault('managed_kinds', TOY_MANAGED_KINDS)
-        kwargs['fallback'] = ToyStructuralPolicy()
+        kwargs.setdefault('fallback', ToyStructuralPolicy())
         super().__init__(model, encoder, **kwargs)
+        self.strict_allowed = strict_allowed
         self._kinds_seen = Counter()
         self._skill = Counter()
 
     def decide(self, context):
+        context = _context_with_choice_options(context)
         kind = context.kind
         self._kinds_seen[kind.name] += 1
-        if kind not in TOY_ALLOWED_KINDS:
+        if self.strict_allowed and kind not in TOY_ALLOWED_KINDS:
             raise AssertionError(
                 f"toy: unexpected decision kind {kind.name} (phase={context.phase!r}); "
                 f"the fixed object/dungeon set must only raise {sorted(k.name for k in TOY_ALLOWED_KINDS)}"
@@ -313,9 +343,13 @@ def build_toy_model(*, hidden_dim=128, device='cpu'):
     return model, encoder
 
 
-def _make_toy_policy(model, encoder, *, sample, record, device='cpu'):
+def _make_toy_policy(model, encoder, *, sample, record, device='cpu',
+                     strict_allowed=True, fallback=None, managed_kinds=None):
     return ToyControlPolicy(
-        model, encoder, sample=sample, record=record, device=device
+        model, encoder, sample=sample, record=record, device=device,
+        managed_kinds=(managed_kinds or TOY_MANAGED_KINDS),
+        strict_allowed=strict_allowed,
+        fallback=(fallback or ToyStructuralPolicy()),
     )
 
 
@@ -393,7 +427,8 @@ def _opponent_policy(kind):
 
 def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
                          opponent_ratio=0.0, opponent='random', device='cpu',
-                         reward_mode='shaped', opponent_policy=None, shuffle_objects=False):
+                         reward_mode='shaped', opponent_policy=None,
+                         shuffle_objects=False, deck='toy'):
     """Rollouts for one PPO batch.
 
     ``opponent_ratio`` is the fraction of episodes the agent plays against a
@@ -407,7 +442,12 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
     ``_opponent_policy(opponent)`` -- e.g. a frozen past-self snapshot for
     league-style self-play.
     """
-    policy = _make_toy_policy(model, encoder, sample=True, record=True, device=device)
+    normal_deck = deck == 'normal'
+    policy = _make_toy_policy(
+        model, encoder, sample=True, record=True, device=device,
+        strict_allowed=not normal_deck,
+        managed_kinds=(NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS),
+    )
     baseline = opponent_policy if opponent_policy is not None else _opponent_policy(opponent)
     steps = []
     reward_sum = 0.0
@@ -417,7 +457,7 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
     )
     for offset in range(episodes):
         seed = seed_start + offset
-        joueurs, objets = build_toy_match(seed, shuffle_objects=shuffle_objects)
+        joueurs, objets = build_toy_match(seed, shuffle_objects=shuffle_objects, deck=deck)
         policy.clear_records()
         is_versus_opponent = opponent_period and (offset % opponent_period == 0)
         if is_versus_opponent:
@@ -428,7 +468,7 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
             assignments = {i: policy for i in range(len(joueurs))}
             recorded = list(joueurs)
         routed = routed_toy_policy(assignments, joueurs)
-        winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
+        winner, _ = ordonnanceur(joueurs, make_dungeon(deck), objets, False, policy=routed)
         for joueur in recorded:
             reward = _terminal_reward(joueur, winner, joueurs, mode=reward_mode)
             reward_sum += reward
@@ -445,20 +485,26 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
     }
 
 
-def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu', shuffle_objects=False):
+def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu',
+                 shuffle_objects=False, deck='toy'):
     """Greedy agent vs a fixed baseline ('random' or 'default'), agent seat
     rotated across games. Also reports the agent's behaviour (death / flee /
     ponce / score) so the win-rate can be interpreted, not just read."""
-    agent = _make_toy_policy(model, encoder, sample=False, record=False, device=device)
+    normal_deck = deck == 'normal'
+    agent = _make_toy_policy(
+        model, encoder, sample=False, record=False, device=device,
+        strict_allowed=not normal_deck,
+        managed_kinds=(NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS),
+    )
     baseline = _opponent_policy(baseline)
     wins = opp_wins = draws = rank_sum = deaths = flees = ponces = 0
     score_sum = 0.0
     for eval_index, seed in enumerate(seed_bank):
-        joueurs, objets = build_toy_match(seed, shuffle_objects=shuffle_objects)
+        joueurs, objets = build_toy_match(seed, shuffle_objects=shuffle_objects, deck=deck)
         seat = eval_index % len(joueurs)
         assignments = {i: (agent if i == seat else baseline) for i in range(len(joueurs))}
         routed = routed_toy_policy(assignments, joueurs)
-        winner, joueurs_finaux = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
+        winner, joueurs_finaux = ordonnanceur(joueurs, make_dungeon(deck), objets, False, policy=routed)
         target = joueurs_finaux[seat]
         wins += int(target is winner)
         opp_wins += int(winner is not None and target is not winner)
@@ -576,14 +622,18 @@ class _DemoRecorder:
     instead, saving the Hache for the Dragon. Cloning this corrected teacher gives
     a policy that already out-plays the greedy heuristic on Hache management."""
 
-    def __init__(self, encoder, correct_hache=False):
+    def __init__(self, encoder, correct_hache=False, managed_kinds=TOY_MANAGED_KINDS,
+                 structural_kinds=TOY_STRUCTURAL_KINDS):
         self.encoder = encoder
         self.correct_hache = correct_hache
+        self.managed_kinds = frozenset(managed_kinds)
+        self.structural_kinds = frozenset(structural_kinds)
         self.heuristic = default_dungeon_policy()
         self.samples = []
 
     def decide(self, context):
-        if context.kind in TOY_STRUCTURAL_KINDS:
+        context = _context_with_choice_options(context)
+        if context.kind in self.structural_kinds:
             return require_permutation(
                 tuple(context.options), context.options, decision_name='toy_order_objects'
             )
@@ -596,7 +646,7 @@ class _DemoRecorder:
             # Save the Hache for the Dragon -- but only when tanking this monster
             # is survivable; still emergency-Hache a non-Dragon that would kill us.
             action = CombatObjectChoice.RESOLVE_NOW
-        if context.kind in TOY_MANAGED_KINDS:
+        if context.kind in self.managed_kinds:
             self._record(context, action)
         return action
 
@@ -609,7 +659,10 @@ class _DemoRecorder:
                 label = self.encoder.max_candidates  # the "resolve / none" slot
             else:
                 options = context.options[:self.encoder.max_candidates]
-                label = next((i for i, o in enumerate(options) if o is action), self.encoder.max_candidates)
+                label = next(
+                    (i for i, o in enumerate(options) if o is action or o == action),
+                    self.encoder.max_candidates,
+                )
             self.samples.append({
                 'mode': encoded['mode'],
                 'global_obs': encoded['global_obs'],
@@ -618,19 +671,56 @@ class _DemoRecorder:
                 'action_mask': encoded['action_mask'],
                 'label': label,
             })
+        elif encoded['mode'] == 'multi_object':
+            selected = np.zeros(self.encoder.max_candidates, dtype=np.float32)
+            chosen_ids = {id(value) for value in tuple(action or ())}
+            for index, option in enumerate(context.options[:self.encoder.max_candidates]):
+                selected[index] = float(id(option) in chosen_ids)
+            self.samples.append({
+                'mode': encoded['mode'],
+                'global_obs': encoded['global_obs'],
+                'candidate_obs': encoded['candidate_obs'],
+                'candidate_ids': encoded['candidate_ids'],
+                'action_mask': encoded['action_mask'],
+                'multi_action': selected,
+            })
+        elif encoded['mode'] == 'order_objects':
+            order = np.full(self.encoder.max_candidates, -1, dtype=np.int64)
+            option_ids = {id(option): index for index, option in enumerate(context.options[:self.encoder.max_candidates])}
+            for out_index, option in enumerate(tuple(action or ())[:self.encoder.max_candidates]):
+                if id(option) in option_ids:
+                    order[out_index] = option_ids[id(option)]
+            self.samples.append({
+                'mode': encoded['mode'],
+                'global_obs': encoded['global_obs'],
+                'candidate_obs': encoded['candidate_obs'],
+                'candidate_ids': encoded['candidate_ids'],
+                'action_mask': encoded['action_mask'],
+                'action_sequence': order,
+            })
 
 
 def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1, correct_hache=False,
-                                     reward_mode='shaped'):
+                                     reward_mode='shaped', deck='toy'):
     """Heuristic vs heuristic on shuffled decks; record both seats' managed
     decisions. Returns a flat list of supervised samples. ``reward_mode`` selects
     the value-target reward so the warmed critic matches the RL reward."""
     samples = []
+    managed_kinds = NORMAL_MANAGED_KINDS if deck == 'normal' else TOY_MANAGED_KINDS
+    structural_kinds = () if deck == 'normal' else TOY_STRUCTURAL_KINDS
     for offset in range(num_games):
-        joueurs, objets = build_toy_match(seed_start + offset)
-        recorders = [_DemoRecorder(encoder, correct_hache=correct_hache) for _ in joueurs]
+        joueurs, objets = build_toy_match(seed_start + offset, deck=deck)
+        recorders = [
+            _DemoRecorder(
+                encoder,
+                correct_hache=correct_hache,
+                managed_kinds=managed_kinds,
+                structural_kinds=structural_kinds,
+            )
+            for _ in joueurs
+        ]
         routed = routed_toy_policy({i: recorders[i] for i in range(len(joueurs))}, joueurs)
-        winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
+        winner, _ = ordonnanceur(joueurs, make_dungeon(deck), objets, False, policy=routed)
         for seat, rec in enumerate(recorders):
             ret = _terminal_reward(joueurs[seat], winner, joueurs, mode=reward_mode)  # value target to warm the critic
             for sample in rec.samples:
@@ -769,6 +859,7 @@ def train_toy(
     snapshot_every=25,
     freeze_binary=False,
     shuffle_objects=False,
+    deck='toy',
     anchor_demos=None,
     bc_anchor_weight=0.0,
     seed=20260616,
@@ -841,7 +932,7 @@ def train_toy(
             model, encoder, episodes=episodes_per_batch, seed_start=rollout_seed,
             opponent=opponent, opponent_ratio=opponent_ratio, device=device,
             reward_mode=reward_mode, opponent_policy=snapshot_opponent,
-            shuffle_objects=shuffle_objects,
+            shuffle_objects=shuffle_objects, deck=deck,
         )
         steps_for_update = rollout['steps']
         if freeze_binary:
@@ -862,8 +953,12 @@ def train_toy(
         last_kinds = rollout['kinds_seen']
 
         if iteration % eval_every == 0 or iteration == iterations:
-            eval_random = evaluate_toy(model, encoder, eval_bank, baseline='random', device=device, shuffle_objects=shuffle_objects)
-            eval_default = evaluate_toy(model, encoder, eval_bank, baseline='default', device=device, shuffle_objects=shuffle_objects)
+            eval_random = evaluate_toy(
+                model, encoder, eval_bank, baseline='random', device=device,
+                shuffle_objects=shuffle_objects, deck=deck)
+            eval_default = evaluate_toy(
+                model, encoder, eval_bank, baseline='default', device=device,
+                shuffle_objects=shuffle_objects, deck=deck)
             last_vs_random = eval_random['winrate']
             last_vs_default = eval_default['winrate']
             best_vs_random = max(best_vs_random, last_vs_random)
@@ -985,8 +1080,9 @@ def format_toy_report(result: ToyTrainResult):
         "Decision kinds encountered during rollouts (all must be network-encodable):",
     ]
     for name, count in sorted(result.kinds_seen.items()):
-        managed = any(k.name == name for k in TOY_MANAGED_KINDS)
-        tag = "network" if managed else "structural(identity)"
+        managed = any(k.name == name for k in NORMAL_MANAGED_KINDS)
+        structural = any(k.name == name for k in TOY_STRUCTURAL_KINDS)
+        tag = "network" if managed else ("structural(identity)" if structural else "fallback")
         lines.append(f"  - {name}: {count}  [{tag}]")
     return "\n".join(lines)
 
@@ -1013,6 +1109,7 @@ def train_toy_imitation_then_rl(
     freeze_binary=False,
     shuffle_objects=False,
     bc_anchor_weight=0.0,
+    deck='toy',
     seed=20260616,
     device='cpu',
     run_dir=None,
@@ -1025,12 +1122,12 @@ def train_toy_imitation_then_rl(
 
     demos = collect_heuristic_demonstrations(
         encoder, num_games=demo_games, seed_start=seed, correct_hache=correct_hache,
-        reward_mode=reward_mode)
+        reward_mode=reward_mode, deck=deck)
     bc_metrics = behavior_clone(model, demos, epochs=bc_epochs, lr=bc_lr, device=device)
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
     after_bc = {
-        'vs_random': evaluate_toy(model, encoder, eval_bank, baseline='random', device=device)['winrate'],
-        'vs_default': evaluate_toy(model, encoder, eval_bank, baseline='default', device=device)['winrate'],
+        'vs_random': evaluate_toy(model, encoder, eval_bank, baseline='random', device=device, deck=deck)['winrate'],
+        'vs_default': evaluate_toy(model, encoder, eval_bank, baseline='default', device=device, deck=deck)['winrate'],
     }
     if verbose:
         print(f"[BC] samples binary={bc_metrics['binary_samples']} combat={bc_metrics['combat_samples']} "
@@ -1060,7 +1157,7 @@ def train_toy_imitation_then_rl(
         entropy_coef_final=entropy_coef_final,
         opponent=opponent, opponent_ratio=opponent_ratio, reward_mode=reward_mode,
         snapshot_every=snapshot_every, freeze_binary=freeze_binary,
-        shuffle_objects=shuffle_objects,
+        shuffle_objects=shuffle_objects, deck=deck,
         anchor_demos=(demos if bc_anchor_weight > 0 else None), bc_anchor_weight=bc_anchor_weight,
         seed=seed, device=device,
         run_dir=run_dir, verbose=verbose, init_state_dict={k: v.detach().cpu() for k, v in model.state_dict().items()},
@@ -1115,6 +1212,8 @@ def main():
                               help="Refresh the frozen self-play snapshot every N iters (opponent='snapshot').")
     train_parser.add_argument('--shuffle-objects', action='store_true',
                               help="Shuffle each player's inventory order per game (order-invariance).")
+    train_parser.add_argument('--deck', choices=('toy', 'normal'), default='toy',
+                              help="Dungeon composition: reduced toy deck or full simudonjon deck.")
     train_parser.add_argument(
         '--opponent-ratio', type=float, default=0.0,
         help='Fraction of rollout episodes played vs the fixed opponent (0 = pure self-play).',
@@ -1163,6 +1262,8 @@ def main():
     imitate_parser.add_argument(
         '--shuffle-objects', action='store_true',
         help="Shuffle each player's inventory order per game (order-invariance robustness).")
+    imitate_parser.add_argument('--deck', choices=('toy', 'normal'), default='toy',
+                                help="Dungeon composition: reduced toy deck or full simudonjon deck.")
     imitate_parser.add_argument(
         '--correct-hache', action='store_true',
         help="Clone a corrected teacher that saves the one-shot Hache for Dragons "
@@ -1193,6 +1294,7 @@ def main():
             reward_mode=args.reward_mode,
             snapshot_every=args.snapshot_every,
             shuffle_objects=args.shuffle_objects,
+            deck=args.deck,
             seed=args.seed,
             run_dir=args.run_dir,
         )
@@ -1226,6 +1328,7 @@ def main():
             freeze_binary=args.freeze_binary,
             shuffle_objects=args.shuffle_objects,
             bc_anchor_weight=args.bc_anchor_weight,
+            deck=args.deck,
             seed=args.seed,
             run_dir=args.run_dir,
         )

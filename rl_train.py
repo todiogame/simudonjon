@@ -32,31 +32,65 @@ from simu import ordonnanceur
 PLAYER_NAMES = ("Sagarex", "Francis", "Mastho", "Mr.Adam")
 INITIAL_MANAGED_KINDS = (
     DecisionKind.SHOULD_FLEE,
+    DecisionKind.SHOULD_REPLAY,
     DecisionKind.USE_OBJECT_IN_COMBAT,
     DecisionKind.USE_ACTIVE_OBJECT,
     DecisionKind.USE_HERO_ABILITY,
+    DecisionKind.USE_EVENT_EFFECT,
+    DecisionKind.SHOULD_FACE_SPECIAL_CARD,
+    DecisionKind.SHOULD_KEEP_SPECIAL_MONSTER,
+    DecisionKind.PAY_TRAQUENARD,
     DecisionKind.CHOOSE_OBJECT,
     DecisionKind.CHOOSE_OBJECTS,
     DecisionKind.CHOOSE_COMBAT_OBJECT,
     DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE,
     DecisionKind.CHOOSE_OBJECT_TO_REPAIR,
+    DecisionKind.CHOOSE_MONSTER,
+    DecisionKind.CHOOSE_MONSTERS,
+    DecisionKind.CHOOSE_CARD,
+    DecisionKind.CHOOSE_CARDS,
+    DecisionKind.CHOOSE_PLAYER,
+    DecisionKind.CHOOSE_POWER,
+    DecisionKind.CHOOSE_TYPE,
+    DecisionKind.CHOOSE_CATEGORY,
+    DecisionKind.CHOOSE_DESTINATION,
     DecisionKind.ORDER_OBJECTS,
+    DecisionKind.ORDER_CARDS,
 )
 DECISION_EXPANSION_ORDER = ()
 BINARY_KINDS = (
+    DecisionKind.SHOULD_REPLAY,
     DecisionKind.SHOULD_FLEE,
     DecisionKind.USE_OBJECT_IN_COMBAT,
     DecisionKind.USE_ACTIVE_OBJECT,
     DecisionKind.USE_HERO_ABILITY,
+    DecisionKind.USE_EVENT_EFFECT,
+    DecisionKind.SHOULD_FACE_SPECIAL_CARD,
+    DecisionKind.SHOULD_KEEP_SPECIAL_MONSTER,
+    DecisionKind.PAY_TRAQUENARD,
 )
 SINGLE_OBJECT_KINDS = (
     DecisionKind.CHOOSE_COMBAT_OBJECT,
     DecisionKind.CHOOSE_OBJECT,
     DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE,
     DecisionKind.CHOOSE_OBJECT_TO_REPAIR,
+    DecisionKind.CHOOSE_MONSTER,
+    DecisionKind.CHOOSE_CARD,
+    DecisionKind.CHOOSE_PLAYER,
+    DecisionKind.CHOOSE_POWER,
+    DecisionKind.CHOOSE_TYPE,
+    DecisionKind.CHOOSE_CATEGORY,
+    DecisionKind.CHOOSE_DESTINATION,
 )
-MULTI_OBJECT_KINDS = (DecisionKind.CHOOSE_OBJECTS,)
-ORDER_OBJECT_KINDS = (DecisionKind.ORDER_OBJECTS,)
+MULTI_OBJECT_KINDS = (
+    DecisionKind.CHOOSE_OBJECTS,
+    DecisionKind.CHOOSE_MONSTERS,
+    DecisionKind.CHOOSE_CARDS,
+)
+ORDER_OBJECT_KINDS = (
+    DecisionKind.ORDER_OBJECTS,
+    DecisionKind.ORDER_CARDS,
+)
 KIND_VOCAB = INITIAL_MANAGED_KINDS + DECISION_EXPANSION_ORDER
 PHASE_VOCAB = (
     'flee',
