@@ -75,15 +75,19 @@ TOY_START_PV = TOY_HERO_PV + TOY_ARMOR_PV  # 12 PV: enough to tank one Dragon (-
 
 
 def make_toy_objects():
-    """Fresh instances of the four fixed toy objects (objects carry game state).
+    """Fresh instances of the fixed toy objects (objects carry game state).
 
     - Marteau de Guerre : type executor (Golem / Squelette), free, reusable.
     - Torche Bleue      : power executor (<= 2), free, reusable.
-    - Hache de Glace    : active one-shot executor of ANY monster (incl. Dragon),
-                          consumed on use -- the scarce, decisive tool.
+    - Hache de Glace x2 : two active one-shot executors of ANY monster (incl.
+                          Dragon), each consumed on use. Two of them for the two
+                          Dragons removes the "dealt both Dragons => unavoidable
+                          death" structure, so skill (allocating the two one-shots
+                          across the two Dragons vs spending them early) decides
+                          and can be discovered by RL rather than hand-coded.
     - Armure en cuir    : pure passive +5 PV buffer.
     """
-    return [MarteauDeGuerre(), TorcheBleue(), HacheDeGlace(), ArmureEnCuir()]
+    return [MarteauDeGuerre(), TorcheBleue(), HacheDeGlace(), HacheDeGlace(), ArmureEnCuir()]
 
 
 def make_toy_hero():

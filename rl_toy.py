@@ -19,11 +19,13 @@ reward (your final score if you survive to be counted, a penalty otherwise; see
 Toy specification
 -----------------
 * 2 players (duel), self-play.
-* 4 fixed objects per player, identical every game:
+* Fixed objects per player, identical every game:
     - ``Marteau de Guerre`` : type-tagged executor (Golem / Squelette), free, reusable
     - ``Torche Bleue``      : power-tagged executor (power <= 2), free, reusable
-    - ``Hache de Glace``    : active ONE-SHOT executor of any monster (incl. Dragon),
-                              consumed on use -- the scarce, decisive tool
+    - ``Hache de Glace`` x2 : two active ONE-SHOT executors of any monster (incl.
+                              Dragon), each consumed on use -- two for the two
+                              Dragons, so no game is unwinnable-by-structure and
+                              good one-shot allocation can be *learned*, not hand-coded
     - ``Armure en cuir``    : pure passive +5 PV (start HP = 7 hero + 5 = 12)
 * Fixed dungeon *composition* (the full standard monster set, Gobelin..Dragon --
   no rats, no special-rule / effect / X cards) but the order is **shuffled every

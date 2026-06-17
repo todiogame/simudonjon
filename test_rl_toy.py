@@ -61,15 +61,16 @@ def _play_toy_games(seeds):
 
 # --- Environment tests (torch-free) ------------------------------------------
 
-def test_toy_match_is_fixed_and_two_players_with_four_objects():
+def test_toy_match_is_fixed_and_two_players_with_fixed_objects():
     joueurs, objets = env.build_toy_match(1)
     assert len(joueurs) == 2
     assert objets == []
     for joueur in joueurs:
-        assert len(joueur.objets) == 4
+        assert len(joueur.objets) == 5
         assert joueur.pv_total == env.TOY_START_PV  # 7 hero + 5 armour
         kinds = {type(o) for o in joueur.objets}
         assert kinds == {MarteauDeGuerre, TorcheBleue, HacheDeGlace, ArmureEnCuir}
+        assert sum(isinstance(o, HacheDeGlace) for o in joueur.objets) == 2  # two one-shot executors
 
 
 def test_toy_dungeon_is_shuffled_with_fixed_composition():
