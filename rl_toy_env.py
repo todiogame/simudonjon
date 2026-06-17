@@ -73,6 +73,11 @@ TOY_HERO_PV = 7   # MercenaireOrc level 2: pure passive HP, no dice, no decision
 TOY_ARMOR_PV = 5  # Armure en cuir: pure passive +5 PV.
 TOY_START_PV = TOY_HERO_PV + TOY_ARMOR_PV  # 12 PV: enough to tank one Dragon (->3).
 
+# Distinct monster power levels and deck size, for the exact remaining-deck
+# histogram fed to the network (full information, not a coarse summary).
+TOY_POWER_LEVELS = tuple(sorted({puissance for _, puissance, _ in TOY_DUNGEON_SEQUENCE}))
+TOY_DECK_SIZE = len(TOY_DUNGEON_SEQUENCE)
+
 
 def make_toy_objects():
     """Fresh instances of the fixed toy objects (objects carry game state).

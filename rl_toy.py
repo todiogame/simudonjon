@@ -117,7 +117,9 @@ from simu import ordonnanceur
 from rl_toy_env import (  # torch-free toy environment
     TOY_ALLOWED_KINDS,
     TOY_MANAGED_KINDS,
+    TOY_DECK_SIZE,
     TOY_PLAYER_NAMES,
+    TOY_POWER_LEVELS,
     TOY_START_PV,
     TOY_STRUCTURAL_KINDS,
     ToyDonjon,
@@ -205,53 +207,70 @@ class ToyControlPolicy(HybridNeuralPolicy):
 # --- Observation: deck awareness ---------------------------------------------
 
 class ToyObservationEncoder(ObservationEncoder):
-    """Extends the shared encoder with the *remaining-deck composition* on the
-    binary (flee / replay) observation. On a shuffled deck the replay decision is
-    a blind gamble unless you know what is still in the dungeon -- the deck is
-    public and the heuristic uses exactly this, so it is fair, not divination
-    (composition only, not the upcoming order). The combat-object encoding and the
-    shared rl_train encoder are left untouched.
-    """
+    """Extends the shared encoder so the network sees the *full* public state on
+    BOTH the binary (flee/replay) and combat-object observations:
+      - the exact remaining-deck composition (a count per monster power level),
+        not a coarse summary -- this is what the heuristic computes its EV from,
+        and it's public (composition only, never the upcoming order);
+      - the opponent's state (score, HP, alive / fled / in-dungeon) and the score
+        margin, so the agent knows whether it is ahead or behind.
+    The shared rl_train encoder is untouched."""
 
-    deck_feature_size = 5
+    # exact deck histogram + [opp_score, opp_hp, opp_alive, opp_fled, opp_in_dj, margin]
+    extra_feature_size = len(TOY_POWER_LEVELS) + 6
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.binary_size += self.deck_feature_size
+        self.binary_size += self.extra_feature_size
+        self.combat_global_size += self.extra_feature_size
 
     def _encode_binary(self, context):
         encoded = super()._encode_binary(context)
-        deck = self._remaining_deck_features(context)
         encoded['obs'] = np.concatenate(
-            [encoded['obs'], np.asarray(deck, dtype=np.float32)]
+            [encoded['obs'], np.asarray(self._toy_extra_features(context), dtype=np.float32)]
         )
         return encoded
 
-    def _remaining_deck_features(self, context):
-        """[frac cheap (<=2), frac mid (3-5), frac big (>=6), frac power>=my HP,
-        max remaining power / 9] over the cards still in the dungeon. Defensive:
-        zeros when no deck info is available (e.g. unit-test stubs)."""
-        zeros = [0.0] * self.deck_feature_size
+    def _encode_object_choice(self, context, mode=None):
+        encoded = super()._encode_object_choice(context, mode=mode)
+        encoded['global_obs'] = np.concatenate(
+            [encoded['global_obs'], np.asarray(self._toy_extra_features(context), dtype=np.float32)]
+        )
+        return encoded
+
+    def _toy_extra_features(self, context):
+        """Exact remaining-deck histogram (per power level, normalised by deck
+        size) + opponent state + score margin. Defensive: zeros for any piece
+        whose info is missing (e.g. unit-test stubs)."""
+        feats = [0.0] * self.extra_feature_size
         game = context.game
-        donjon = getattr(game, 'donjon', None) if game is not None else None
+        if game is None:
+            return feats
+        donjon = getattr(game, 'donjon', None)
         cartes = getattr(donjon, 'cartes', None)
         ordre = getattr(donjon, 'ordre', None)
-        if not cartes or ordre is None:
-            return zeros
-        index = getattr(donjon, 'index', 0)
-        powers = [
-            getattr(cartes[i], 'puissance_initiale', getattr(cartes[i], 'puissance', 0))
-            for i in list(ordre)[index:]
-        ]
-        n = len(powers)
-        if n == 0:
-            return zeros
-        hp = max(1.0, float(getattr(context.actor, 'pv_total', 1)))
-        cheap = sum(1 for p in powers if p <= 2)
-        mid = sum(1 for p in powers if 3 <= p <= 5)
-        big = sum(1 for p in powers if p >= 6)
-        ge_hp = sum(1 for p in powers if p >= hp)
-        return [cheap / n, mid / n, big / n, ge_hp / n, max(powers) / 9.0]
+        if cartes and ordre is not None:
+            index = getattr(donjon, 'index', 0)
+            level_at = {p: i for i, p in enumerate(TOY_POWER_LEVELS)}
+            for i in list(ordre)[index:]:
+                p = getattr(cartes[i], 'puissance_initiale', getattr(cartes[i], 'puissance', None))
+                if p in level_at:
+                    feats[level_at[p]] += 1.0 / TOY_DECK_SIZE
+
+        actor = context.actor
+        opponents = [j for j in getattr(game, 'joueurs', []) if j is not actor]
+        if opponents:
+            opp = opponents[0]
+            my_score = len(getattr(actor, 'pile_monstres_vaincus', []))
+            opp_score = len(opp.pile_monstres_vaincus)
+            base = len(TOY_POWER_LEVELS)
+            feats[base + 0] = opp_score / 20.0
+            feats[base + 1] = opp.pv_total / 20.0
+            feats[base + 2] = float(opp.vivant)
+            feats[base + 3] = float(opp.fuite_reussie)
+            feats[base + 4] = float(opp.dans_le_dj)
+            feats[base + 5] = (my_score - opp_score) / 10.0
+        return feats
 
 
 # --- Model / policy construction ---------------------------------------------
