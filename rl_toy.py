@@ -446,13 +446,30 @@ def probe_optimal_combat_decision(model, encoder, *, device='cpu'):
 # region, then let PPO fine-tune from there. The heuristic is only an offline
 # teacher; at play time the network still decides everything itself.
 
+def _dragon_remains(game):
+    donjon = getattr(game, 'donjon', None) if game is not None else None
+    ordre = getattr(donjon, 'ordre', None)
+    cartes = getattr(donjon, 'cartes', None)
+    if ordre is None or not cartes:
+        return False
+    index = getattr(donjon, 'index', 0)
+    return any('Dragon' in cartes[i].types for i in list(ordre)[index:])
+
+
 class _DemoRecorder:
     """Plays the heuristic and records (encoded observation, chosen action) for
     each managed decision, to build a supervised dataset. ORDER_OBJECTS is
-    resolved as identity (structural), like the toy."""
+    resolved as identity (structural), like the toy.
 
-    def __init__(self, encoder):
+    With ``correct_hache``, it demonstrates a *corrected* heuristic: it refuses to
+    spend the one-shot Hache de Glace on a non-Dragon while a Dragon still remains
+    in the deck (the heuristic wastes it ~69% of the time) -- it resolves the card
+    instead, saving the Hache for the Dragon. Cloning this corrected teacher gives
+    a policy that already out-plays the greedy heuristic on Hache management."""
+
+    def __init__(self, encoder, correct_hache=False):
         self.encoder = encoder
+        self.correct_hache = correct_hache
         self.heuristic = default_dungeon_policy()
         self.samples = []
 
@@ -462,6 +479,14 @@ class _DemoRecorder:
                 tuple(context.options), context.options, decision_name='toy_order_objects'
             )
         action = self.heuristic.decide(context)
+        if (self.correct_hache and context.kind is DecisionKind.CHOOSE_COMBAT_OBJECT
+                and is_hache(action)
+                and 'Dragon' not in (getattr(context.subject, 'types', ()) or ())
+                and _dragon_remains(context.game)
+                and getattr(context.subject, 'dommages', 99) < getattr(context.actor, 'pv_total', 0)):
+            # Save the Hache for the Dragon -- but only when tanking this monster
+            # is survivable; still emergency-Hache a non-Dragon that would kill us.
+            action = CombatObjectChoice.RESOLVE_NOW
         if context.kind in TOY_MANAGED_KINDS:
             self._record(context, action)
         return action
@@ -486,13 +511,13 @@ class _DemoRecorder:
             })
 
 
-def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1):
+def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1, correct_hache=False):
     """Heuristic vs heuristic on shuffled decks; record both seats' managed
     decisions. Returns a flat list of supervised samples."""
     samples = []
     for offset in range(num_games):
         joueurs, objets = build_toy_match(seed_start + offset)
-        recorders = [_DemoRecorder(encoder) for _ in joueurs]
+        recorders = [_DemoRecorder(encoder, correct_hache=correct_hache) for _ in joueurs]
         routed = routed_toy_policy({i: recorders[i] for i in range(len(joueurs))}, joueurs)
         winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
         for seat, rec in enumerate(recorders):
@@ -739,6 +764,7 @@ def train_toy_imitation_then_rl(
     entropy_coef=0.02,
     opponent='default',
     opponent_ratio=1.0,
+    correct_hache=False,
     seed=20260616,
     device='cpu',
     run_dir=None,
@@ -749,7 +775,8 @@ def train_toy_imitation_then_rl(
     torch.manual_seed(seed)
     model, encoder = build_toy_model(hidden_dim=hidden_dim, device=device)
 
-    demos = collect_heuristic_demonstrations(encoder, num_games=demo_games, seed_start=seed)
+    demos = collect_heuristic_demonstrations(
+        encoder, num_games=demo_games, seed_start=seed, correct_hache=correct_hache)
     bc_metrics = behavior_clone(model, demos, epochs=bc_epochs, lr=bc_lr, device=device)
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
     after_bc = {
@@ -832,6 +859,10 @@ def main():
     imitate_parser.add_argument('--entropy-coef', type=float, default=0.02)
     imitate_parser.add_argument('--opponent', choices=('random', 'default'), default='default')
     imitate_parser.add_argument('--opponent-ratio', type=float, default=1.0)
+    imitate_parser.add_argument(
+        '--correct-hache', action='store_true',
+        help="Clone a corrected teacher that saves the one-shot Hache for Dragons "
+             "(the heuristic wastes it ~69%% of the time).")
     imitate_parser.add_argument('--seed', type=int, default=20260616)
     imitate_parser.add_argument('--run-dir', default='artifacts/rl_toy')
 
@@ -874,6 +905,7 @@ def main():
             entropy_coef=args.entropy_coef,
             opponent=args.opponent,
             opponent_ratio=args.opponent_ratio,
+            correct_hache=args.correct_hache,
             seed=args.seed,
             run_dir=args.run_dir,
         )
