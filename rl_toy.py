@@ -783,27 +783,28 @@ def behavior_clone(model, samples, *, epochs=12, lr=1e-3, batch_size=512, value_
     return {'binary_samples': len(binary), 'combat_samples': len(combat), 'accuracy': acc}
 
 
-def _bc_anchor_step(model, optimizer, binary, combat, *, weight, batch_size=512,
-                    device='cpu', rng=None, include_binary=True):
+def _bc_anchor_step(model, optimizer, binary, combat, *, weight_binary, weight_combat,
+                    batch_size=512, device='cpu', rng=None):
     """One supervised step pulling the policy toward the heuristic's actions --
-    the 'leash' / KL-to-clone anchor. Cross-entropy only (no value term). Applied
-    UNIFORMLY to every decision type (no hand-picked freeze): PPO overrides it
-    only where the competitive reward gradient is strong enough, so it improves
-    the exploitable decisions (object use) while keeping the heuristic's good
-    behaviour everywhere else. This is the scalable stand-in for freeze-binary --
-    it needs no knowledge of *which* decisions have headroom, so it generalises to
-    the real game's hundreds of objects and decision kinds."""
-    if weight <= 0:
-        return 0.0
+    the 'leash' / KL-to-clone anchor. Cross-entropy only (no value term).
+
+    DECISION-AWARE: a separate weight per decision group. We measured that the
+    heuristic is *good* at flee/replay (binary) but *weak* at the object decisions
+    (combat / repair / sacrifice) -- a uniform anchor therefore suppressed exactly
+    the improvements we wanted. So anchor the binary group HARD (protect the good
+    flee logic) and the object group LIGHTLY (let RL exploit the heuristic's weak
+    object choices). This is still per-decision-TYPE, not per-object, so it stays
+    scalable to the real game (a handful of decision groups, not hundreds of items).
+    """
     rng = rng if rng is not None else np.random.default_rng()
     groups = []
-    if include_binary and binary:
-        groups.append(('binary', binary))
-    if combat:
-        groups.append(('combat', combat))
+    if weight_binary > 0 and binary:
+        groups.append(('binary', binary, weight_binary))
+    if weight_combat > 0 and combat:
+        groups.append(('combat', combat, weight_combat))
     model.train()
     total = 0.0
-    for mode, group in groups:
+    for mode, group, weight in groups:
         idx = rng.integers(0, len(group), size=min(batch_size, len(group)))
         batch = [group[i] for i in idx]
         labels = torch.tensor([s['label'] for s in batch], dtype=torch.long, device=device)
@@ -862,6 +863,7 @@ def train_toy(
     deck='toy',
     anchor_demos=None,
     bc_anchor_weight=0.0,
+    bc_anchor_weight_combat=None,
     seed=20260616,
     device='cpu',
     run_dir=None,
@@ -904,11 +906,14 @@ def train_toy(
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
 
     # BC-anchor 'leash': pre-split the demos so each iter can pull the policy back
-    # toward the heuristic's actions (see _bc_anchor_step). Skip the binary group
-    # if the binary subnet is frozen (no grad).
+    # toward the heuristic's actions (see _bc_anchor_step). Decision-aware: a
+    # separate weight for the binary (flee/replay) group vs the object group. If
+    # the binary subnet is frozen, force its anchor weight to 0 (no grad).
+    anchor_w_binary = 0.0 if freeze_binary else bc_anchor_weight
+    anchor_w_combat = bc_anchor_weight if bc_anchor_weight_combat is None else bc_anchor_weight_combat
     anchor_binary = anchor_combat = None
     anchor_rng = None
-    if anchor_demos and bc_anchor_weight > 0:
+    if anchor_demos and (anchor_w_binary > 0 or anchor_w_combat > 0):
         anchor_binary = [s for s in anchor_demos if s['mode'] == 'binary']
         anchor_combat = [s for s in anchor_demos if s['mode'] in ('combat_object', 'single_object')]
         anchor_rng = np.random.default_rng(seed ^ 0xA5A5)
@@ -944,8 +949,8 @@ def train_toy(
         # if it is frozen). RL overrides this only where the reward gradient wins.
         if anchor_rng is not None:
             _bc_anchor_step(model, optimizer, anchor_binary, anchor_combat,
-                            weight=bc_anchor_weight, device=device, rng=anchor_rng,
-                            include_binary=not freeze_binary)
+                            weight_binary=anchor_w_binary, weight_combat=anchor_w_combat,
+                            device=device, rng=anchor_rng)
 
         skill = rollout['skill_stats']
         skill_rate = skill.get('hache_well_used', 0) / max(1, skill.get('hache_uses', 0))
@@ -1109,6 +1114,7 @@ def train_toy_imitation_then_rl(
     freeze_binary=False,
     shuffle_objects=False,
     bc_anchor_weight=0.0,
+    bc_anchor_weight_combat=None,
     deck='toy',
     seed=20260616,
     device='cpu',
@@ -1158,7 +1164,8 @@ def train_toy_imitation_then_rl(
         opponent=opponent, opponent_ratio=opponent_ratio, reward_mode=reward_mode,
         snapshot_every=snapshot_every, freeze_binary=freeze_binary,
         shuffle_objects=shuffle_objects, deck=deck,
-        anchor_demos=(demos if bc_anchor_weight > 0 else None), bc_anchor_weight=bc_anchor_weight,
+        anchor_demos=(demos if (bc_anchor_weight > 0 or (bc_anchor_weight_combat or 0) > 0) else None),
+        bc_anchor_weight=bc_anchor_weight, bc_anchor_weight_combat=bc_anchor_weight_combat,
         seed=seed, device=device,
         run_dir=run_dir, verbose=verbose, init_state_dict={k: v.detach().cpu() for k, v in model.state_dict().items()},
     )
@@ -1257,8 +1264,13 @@ def main():
              "combat/Hache decisions (keeps the heuristic's good flee logic intact).")
     imitate_parser.add_argument(
         '--bc-anchor-weight', type=float, default=0.0,
-        help="Leash strength: each RL iter, pull the policy toward the heuristic's "
-             "actions on all decisions with this weight (scalable stand-in for freeze-binary).")
+        help="Leash strength on the BINARY (flee/replay) decisions -- the ones the "
+             "heuristic does well, so anchor them hard.")
+    imitate_parser.add_argument(
+        '--bc-anchor-weight-combat', type=float, default=None,
+        help="Leash strength on the OBJECT decisions (combat/repair/sacrifice) -- where "
+             "the heuristic is weak, so anchor lightly. Defaults to --bc-anchor-weight "
+             "(uniform leash) if unset; set lower for the decision-aware leash.")
     imitate_parser.add_argument(
         '--shuffle-objects', action='store_true',
         help="Shuffle each player's inventory order per game (order-invariance robustness).")
@@ -1328,6 +1340,7 @@ def main():
             freeze_binary=args.freeze_binary,
             shuffle_objects=args.shuffle_objects,
             bc_anchor_weight=args.bc_anchor_weight,
+            bc_anchor_weight_combat=args.bc_anchor_weight_combat,
             deck=args.deck,
             seed=args.seed,
             run_dir=args.run_dir,
