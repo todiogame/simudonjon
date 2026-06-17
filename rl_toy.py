@@ -393,7 +393,7 @@ def _opponent_policy(kind):
 
 def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
                          opponent_ratio=0.0, opponent='random', device='cpu',
-                         reward_mode='shaped', opponent_policy=None):
+                         reward_mode='shaped', opponent_policy=None, shuffle_objects=False):
     """Rollouts for one PPO batch.
 
     ``opponent_ratio`` is the fraction of episodes the agent plays against a
@@ -417,7 +417,7 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
     )
     for offset in range(episodes):
         seed = seed_start + offset
-        joueurs, objets = build_toy_match(seed)
+        joueurs, objets = build_toy_match(seed, shuffle_objects=shuffle_objects)
         policy.clear_records()
         is_versus_opponent = opponent_period and (offset % opponent_period == 0)
         if is_versus_opponent:
@@ -445,7 +445,7 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
     }
 
 
-def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu'):
+def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu', shuffle_objects=False):
     """Greedy agent vs a fixed baseline ('random' or 'default'), agent seat
     rotated across games. Also reports the agent's behaviour (death / flee /
     ponce / score) so the win-rate can be interpreted, not just read."""
@@ -454,7 +454,7 @@ def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu'):
     wins = opp_wins = draws = rank_sum = deaths = flees = ponces = 0
     score_sum = 0.0
     for eval_index, seed in enumerate(seed_bank):
-        joueurs, objets = build_toy_match(seed)
+        joueurs, objets = build_toy_match(seed, shuffle_objects=shuffle_objects)
         seat = eval_index % len(joueurs)
         assignments = {i: (agent if i == seat else baseline) for i in range(len(joueurs))}
         routed = routed_toy_policy(assignments, joueurs)
@@ -693,6 +693,48 @@ def behavior_clone(model, samples, *, epochs=12, lr=1e-3, batch_size=512, value_
     return {'binary_samples': len(binary), 'combat_samples': len(combat), 'accuracy': acc}
 
 
+def _bc_anchor_step(model, optimizer, binary, combat, *, weight, batch_size=512,
+                    device='cpu', rng=None, include_binary=True):
+    """One supervised step pulling the policy toward the heuristic's actions --
+    the 'leash' / KL-to-clone anchor. Cross-entropy only (no value term). Applied
+    UNIFORMLY to every decision type (no hand-picked freeze): PPO overrides it
+    only where the competitive reward gradient is strong enough, so it improves
+    the exploitable decisions (object use) while keeping the heuristic's good
+    behaviour everywhere else. This is the scalable stand-in for freeze-binary --
+    it needs no knowledge of *which* decisions have headroom, so it generalises to
+    the real game's hundreds of objects and decision kinds."""
+    if weight <= 0:
+        return 0.0
+    rng = rng if rng is not None else np.random.default_rng()
+    groups = []
+    if include_binary and binary:
+        groups.append(('binary', binary))
+    if combat:
+        groups.append(('combat', combat))
+    model.train()
+    total = 0.0
+    for mode, group in groups:
+        idx = rng.integers(0, len(group), size=min(batch_size, len(group)))
+        batch = [group[i] for i in idx]
+        labels = torch.tensor([s['label'] for s in batch], dtype=torch.long, device=device)
+        if mode == 'binary':
+            obs = torch.from_numpy(np.stack([s['obs'] for s in batch])).to(device)
+            logits, _ = model.forward_binary(obs)
+        else:
+            g = torch.from_numpy(np.stack([s['global_obs'] for s in batch])).to(device)
+            c = torch.from_numpy(np.stack([s['candidate_obs'] for s in batch])).to(device)
+            ids = torch.from_numpy(np.stack([s['candidate_ids'] for s in batch])).to(device)
+            mask = torch.from_numpy(np.stack([s['action_mask'] for s in batch])).to(device)
+            logits, _ = model.forward_combat(g, c, ids, mask)
+        loss = weight * F.cross_entropy(logits, labels)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        total += float(loss.detach())
+    model.eval()
+    return total
+
+
 # --- Training loop -----------------------------------------------------------
 
 @dataclass
@@ -726,6 +768,9 @@ def train_toy(
     reward_mode='shaped',
     snapshot_every=25,
     freeze_binary=False,
+    shuffle_objects=False,
+    anchor_demos=None,
+    bc_anchor_weight=0.0,
     seed=20260616,
     device='cpu',
     run_dir=None,
@@ -767,6 +812,16 @@ def train_toy(
     entropy_end = entropy_coef if entropy_coef_final is None else entropy_coef_final
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
 
+    # BC-anchor 'leash': pre-split the demos so each iter can pull the policy back
+    # toward the heuristic's actions (see _bc_anchor_step). Skip the binary group
+    # if the binary subnet is frozen (no grad).
+    anchor_binary = anchor_combat = None
+    anchor_rng = None
+    if anchor_demos and bc_anchor_weight > 0:
+        anchor_binary = [s for s in anchor_demos if s['mode'] == 'binary']
+        anchor_combat = [s for s in anchor_demos if s['mode'] in ('combat_object', 'single_object')]
+        anchor_rng = np.random.default_rng(seed ^ 0xA5A5)
+
     history = []
     best_vs_random = best_vs_default = 0.0
     last_vs_random = last_vs_default = 0.0
@@ -786,6 +841,7 @@ def train_toy(
             model, encoder, episodes=episodes_per_batch, seed_start=rollout_seed,
             opponent=opponent, opponent_ratio=opponent_ratio, device=device,
             reward_mode=reward_mode, opponent_policy=snapshot_opponent,
+            shuffle_objects=shuffle_objects,
         )
         steps_for_update = rollout['steps']
         if freeze_binary:
@@ -793,6 +849,12 @@ def train_toy(
             # so PPO only updates the trainable combat/Hache parameters.
             steps_for_update = [s for s in steps_for_update if s.get('mode') != 'binary']
         update = ppo_update(model, optimizer, steps_for_update, ppo_config, device=device)
+        # Leash: pull the policy back toward the heuristic's actions (skip binary
+        # if it is frozen). RL overrides this only where the reward gradient wins.
+        if anchor_rng is not None:
+            _bc_anchor_step(model, optimizer, anchor_binary, anchor_combat,
+                            weight=bc_anchor_weight, device=device, rng=anchor_rng,
+                            include_binary=not freeze_binary)
 
         skill = rollout['skill_stats']
         skill_rate = skill.get('hache_well_used', 0) / max(1, skill.get('hache_uses', 0))
@@ -800,8 +862,8 @@ def train_toy(
         last_kinds = rollout['kinds_seen']
 
         if iteration % eval_every == 0 or iteration == iterations:
-            eval_random = evaluate_toy(model, encoder, eval_bank, baseline='random', device=device)
-            eval_default = evaluate_toy(model, encoder, eval_bank, baseline='default', device=device)
+            eval_random = evaluate_toy(model, encoder, eval_bank, baseline='random', device=device, shuffle_objects=shuffle_objects)
+            eval_default = evaluate_toy(model, encoder, eval_bank, baseline='default', device=device, shuffle_objects=shuffle_objects)
             last_vs_random = eval_random['winrate']
             last_vs_default = eval_default['winrate']
             best_vs_random = max(best_vs_random, last_vs_random)
@@ -949,6 +1011,8 @@ def train_toy_imitation_then_rl(
     snapshot_every=25,
     soften_head=None,
     freeze_binary=False,
+    shuffle_objects=False,
+    bc_anchor_weight=0.0,
     seed=20260616,
     device='cpu',
     run_dir=None,
@@ -995,7 +1059,10 @@ def train_toy_imitation_then_rl(
         eval_every=eval_every, hidden_dim=hidden_dim, lr=lr, entropy_coef=entropy_coef,
         entropy_coef_final=entropy_coef_final,
         opponent=opponent, opponent_ratio=opponent_ratio, reward_mode=reward_mode,
-        snapshot_every=snapshot_every, freeze_binary=freeze_binary, seed=seed, device=device,
+        snapshot_every=snapshot_every, freeze_binary=freeze_binary,
+        shuffle_objects=shuffle_objects,
+        anchor_demos=(demos if bc_anchor_weight > 0 else None), bc_anchor_weight=bc_anchor_weight,
+        seed=seed, device=device,
         run_dir=run_dir, verbose=verbose, init_state_dict={k: v.detach().cpu() for k, v in model.state_dict().items()},
     )
     return result, bc_metrics, after_bc
@@ -1046,6 +1113,8 @@ def main():
     )
     train_parser.add_argument('--snapshot-every', type=int, default=25,
                               help="Refresh the frozen self-play snapshot every N iters (opponent='snapshot').")
+    train_parser.add_argument('--shuffle-objects', action='store_true',
+                              help="Shuffle each player's inventory order per game (order-invariance).")
     train_parser.add_argument(
         '--opponent-ratio', type=float, default=0.0,
         help='Fraction of rollout episodes played vs the fixed opponent (0 = pure self-play).',
@@ -1088,6 +1157,13 @@ def main():
         help="Freeze the cloned flee/replay (binary) subnet; RL optimises ONLY the "
              "combat/Hache decisions (keeps the heuristic's good flee logic intact).")
     imitate_parser.add_argument(
+        '--bc-anchor-weight', type=float, default=0.0,
+        help="Leash strength: each RL iter, pull the policy toward the heuristic's "
+             "actions on all decisions with this weight (scalable stand-in for freeze-binary).")
+    imitate_parser.add_argument(
+        '--shuffle-objects', action='store_true',
+        help="Shuffle each player's inventory order per game (order-invariance robustness).")
+    imitate_parser.add_argument(
         '--correct-hache', action='store_true',
         help="Clone a corrected teacher that saves the one-shot Hache for Dragons "
              "(the heuristic wastes it ~69%% of the time).")
@@ -1116,6 +1192,7 @@ def main():
             opponent_ratio=args.opponent_ratio,
             reward_mode=args.reward_mode,
             snapshot_every=args.snapshot_every,
+            shuffle_objects=args.shuffle_objects,
             seed=args.seed,
             run_dir=args.run_dir,
         )
@@ -1147,6 +1224,8 @@ def main():
             snapshot_every=args.snapshot_every,
             soften_head=args.soften_head,
             freeze_binary=args.freeze_binary,
+            shuffle_objects=args.shuffle_objects,
+            bc_anchor_weight=args.bc_anchor_weight,
             seed=args.seed,
             run_dir=args.run_dir,
         )
