@@ -119,19 +119,31 @@ class ToyDonjon(DonjonDeck):
         self.index = 0
 
 
-def build_toy_match(seed):
+def build_toy_match(seed, shuffle_objects=False):
     """Build a fixed 2-player toy match. Returns (joueurs, objets_dispo).
 
     The only randomness consumed downstream is the flee die roll; seeding here
     keeps each (seed) reproducible while varying across the rollout batch. torch
     is seeded in rl_toy where it is imported; here we seed the stdlib/numpy RNGs.
+
+    ``shuffle_objects`` permutes each player's inventory order (reproducibly per
+    seed). The object *set* is unchanged -- only the order they are presented in.
+    A policy that decides by object *identity* (features) rather than slot
+    position is invariant to this; it is a robustness check, not a difficulty
+    change, and it mirrors the real game where items arrive in arbitrary order.
     """
     random.seed(seed)
     np.random.seed(seed & 0xFFFFFFFF)
 
     from joueurs import Joueur
 
-    return [Joueur(nom, make_toy_hero(), make_toy_objects()) for nom in TOY_PLAYER_NAMES], []
+    joueurs = []
+    for nom in TOY_PLAYER_NAMES:
+        objets = make_toy_objects()
+        if shuffle_objects:
+            random.shuffle(objets)
+        joueurs.append(Joueur(nom, make_toy_hero(), objets))
+    return joueurs, []
 
 
 class ToyStructuralPolicy:
