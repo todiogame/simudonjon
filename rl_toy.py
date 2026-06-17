@@ -159,6 +159,37 @@ SURVIVE_SCORE_COEF = 0.05   # partial credit per monster scored while surviving
 SURVIVE_REWARD_CAP = 0.5    # keep the score credit strictly below a win (+1)
 DEATH_REWARD = -0.25        # small flat penalty for dying (forfeits the score credit)
 
+# --- 'margin' (competitive) reward -------------------------------------------
+# The 'shaped' reward above credits *absolute* survival, which we measured to
+# reward fleeing more than winning (reward doubles while the win-rate stays
+# flat). The 'margin' reward credits the *outcome of the score race*, and -- this
+# is the key constraint -- a win is worth +1 NO MATTER THE LEAD. Winning by 1
+# point is exactly as good as winning by 8, because the optimal line is to score
+# one more than the opponent and then STOP (drawing further only risks death for
+# no extra reward). So the reward must NOT keep rising with the margin:
+#   win (you outscore the survivors / opponent died) -> +1, flat
+#   no winner (both dead)                            -> 0, neither side won
+#   you died and the opponent won                    -> MARGIN_LOSS (flat, bad:
+#                                                       a big dead pile is not
+#                                                       rewarded -> no draw-into-death)
+#   you survived but were out-scored                 -> margin / MARGIN_NORM in
+#                                                       (-1, 0): the ONLY graded
+#                                                       region, a dense gradient to
+#                                                       close the gap up to a win.
+# Dense in the losing region (no flat "flee-immediately" valley) and un-gameable
+# by fleeing (fleeing -> low own score -> deeper negative margin). It says *what*
+# to optimise (just-beat the opponent), not *how* -- strategies must still emerge.
+MARGIN_NORM = 8.0           # an 8-point deficit hits the -1 floor
+MARGIN_LOSS = -1.0          # died while the opponent won (a clear loss)
+MARGIN_DRAW = 0.0           # both dead / no winner: neither side won
+# A same-score *survivor* tie: the engine breaks it by coinflip (simu.py), which
+# injects uncontrollable noise into the reward (identical play -> +1 or 0 at
+# random) and a back-door "a free tie is worth 0.5" incentive. We score it
+# deterministically at its unbiased expected value instead -- half a win, still
+# strictly below a clean win so the agent prefers to break the tie by scoring one
+# more. (No coin -> no gradient noise.)
+MARGIN_TIE = 0.5
+
 
 # --- Guardrail policy --------------------------------------------------------
 
@@ -288,12 +319,60 @@ def _make_toy_policy(model, encoder, *, sample, record, device='cpu'):
     )
 
 
+def _soften_policy_heads(model, factor):
+    """Scale the policy-head logits by ``factor`` (<1) to DE-PEAK the action
+    distribution after behaviour cloning. The diagnosed failure: a 99%-accurate
+    clone is so confident that the PPO entropy bonus barely moves it (entropy
+    stuck ~0.09) -> no exploration -> it plateaus at the heuristic best-response.
+    Shrinking only the policy-head logits raises the action entropy (so PPO can
+    explore) while preserving (a) the per-state argmax action -- the greedy
+    policy is unchanged -- and (b) the trunk features and warm value heads."""
+    heads = ('binary_policy_head', 'combat_policy_head', 'combat_resolve_head',
+             'multi_policy_head', 'order_policy_head')
+    with torch.no_grad():
+        for name in heads:
+            head = getattr(model, name, None)
+            if head is None:
+                continue
+            head.weight.mul_(factor)
+            if head.bias is not None:
+                head.bias.mul_(factor)
+
+
 # --- Rollouts / evaluation (single process: deterministic and simple) --------
 
-def _terminal_reward(joueur, winner):
-    """Game outcome from a player's view: +1 win / small negative if dead /
-    else a score credit for the monsters cleared (see the Reward note). Shared by
-    RL rollouts and the value targets that warm the critic during cloning."""
+def _terminal_reward(joueur, winner, joueurs=None, mode='shaped'):
+    """Game outcome from a player's view. Shared by RL rollouts and the value
+    targets that warm the critic during cloning.
+
+    mode='shaped' (default): +1 win / small negative if dead / else a score
+        credit for the monsters cleared (see the Reward note). Credits absolute
+        survival -- which we measured to over-reward fleeing.
+    mode='margin': competitive outcome of the score race. A win is +1 FLAT (by 1
+        point or by 8 -- same reward; overshooting only risks death). Same-score
+        survivor tie = MARGIN_TIE (deterministic, no coinflip). Both-dead /
+        excluded = 0. Died-and-lost = MARGIN_LOSS (flat, so a big dead pile is not
+        rewarded). Survived-but-out-scored = (my_score - lead) / MARGIN_NORM in
+        (-1, 0): the only graded region, a dense gradient to just close the gap.
+        Needs ``joueurs`` to mirror the engine's finalist rule. (See the note.)
+    """
+    if mode == 'margin':
+        # Mirror the engine's finalist rule (simu.py) so a tie is resolved by us,
+        # deterministically, instead of by the engine's coinflip. Finalists are
+        # the ponceurs if any, else all living players (successful fleers count).
+        pool = joueurs if joueurs else [joueur]
+        ponceurs = [j for j in pool if getattr(j, 'dans_le_dj', False)]
+        finalists = ponceurs if ponceurs else [j for j in pool if j.vivant]
+        if joueur not in finalists:
+            # Excluded from the count: died, or fled while someone ponced.
+            return MARGIN_DRAW if not finalists else MARGIN_LOSS
+        top = max(float(j.score_final) for j in finalists)
+        my_score = float(joueur.score_final)
+        if my_score >= top:                   # at the top of the count
+            tied = [j for j in finalists if float(j.score_final) == top]
+            return MARGIN_TIE if len(tied) > 1 else WIN_REWARD  # +1 flat (any lead)
+        # In the count but out-scored: dense gradient to close the gap to the lead.
+        return min(0.0, max(MARGIN_LOSS, (my_score - top) / MARGIN_NORM))
     if joueur is winner:
         return WIN_REWARD
     if not joueur.vivant:
@@ -313,7 +392,8 @@ def _opponent_policy(kind):
 
 
 def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
-                         opponent_ratio=0.0, opponent='random', device='cpu'):
+                         opponent_ratio=0.0, opponent='random', device='cpu',
+                         reward_mode='shaped', opponent_policy=None):
     """Rollouts for one PPO batch.
 
     ``opponent_ratio`` is the fraction of episodes the agent plays against a
@@ -322,9 +402,13 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
     recorded. Pure self-play (ratio 0.0) over-fits to facing a clone on the
     shared dungeon queue; training against a fixed competent opponent (the
     heuristic 'default') mirrors what the real harness does.
+
+    ``opponent_policy`` (if given) is used as the baseline instead of
+    ``_opponent_policy(opponent)`` -- e.g. a frozen past-self snapshot for
+    league-style self-play.
     """
     policy = _make_toy_policy(model, encoder, sample=True, record=True, device=device)
-    baseline = _opponent_policy(opponent)
+    baseline = opponent_policy if opponent_policy is not None else _opponent_policy(opponent)
     steps = []
     reward_sum = 0.0
     recorded_players = 0
@@ -346,7 +430,7 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
         routed = routed_toy_policy(assignments, joueurs)
         winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
         for joueur in recorded:
-            reward = _terminal_reward(joueur, winner)
+            reward = _terminal_reward(joueur, winner, joueurs, mode=reward_mode)
             reward_sum += reward
             recorded_players += 1
             for step in policy.take_records(joueur):
@@ -367,7 +451,7 @@ def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu'):
     ponce / score) so the win-rate can be interpreted, not just read."""
     agent = _make_toy_policy(model, encoder, sample=False, record=False, device=device)
     baseline = _opponent_policy(baseline)
-    wins = rank_sum = deaths = flees = ponces = 0
+    wins = opp_wins = draws = rank_sum = deaths = flees = ponces = 0
     score_sum = 0.0
     for eval_index, seed in enumerate(seed_bank):
         joueurs, objets = build_toy_match(seed)
@@ -377,6 +461,8 @@ def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu'):
         winner, joueurs_finaux = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
         target = joueurs_finaux[seat]
         wins += int(target is winner)
+        opp_wins += int(winner is not None and target is not winner)
+        draws += int(winner is None)  # no winner (typically both dead)
         rank_sum += _player_rank(joueurs_finaux, target)
         deaths += int(not target.vivant)
         flees += int(target.fuite_reussie)
@@ -386,6 +472,8 @@ def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu'):
     return {
         'games': games,
         'winrate': wins / games,
+        'loss_rate': opp_wins / games,      # opponent won
+        'draw_rate': draws / games,         # no winner (both excluded/dead)
         'avg_rank': rank_sum / games,
         'chance_winrate': 1.0 / len(TOY_PLAYER_NAMES),
         'death_rate': deaths / games,
@@ -532,9 +620,11 @@ class _DemoRecorder:
             })
 
 
-def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1, correct_hache=False):
+def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1, correct_hache=False,
+                                     reward_mode='shaped'):
     """Heuristic vs heuristic on shuffled decks; record both seats' managed
-    decisions. Returns a flat list of supervised samples."""
+    decisions. Returns a flat list of supervised samples. ``reward_mode`` selects
+    the value-target reward so the warmed critic matches the RL reward."""
     samples = []
     for offset in range(num_games):
         joueurs, objets = build_toy_match(seed_start + offset)
@@ -542,7 +632,7 @@ def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1, correc
         routed = routed_toy_policy({i: recorders[i] for i in range(len(joueurs))}, joueurs)
         winner, _ = ordonnanceur(joueurs, ToyDonjon(), objets, False, policy=routed)
         for seat, rec in enumerate(recorders):
-            ret = _terminal_reward(joueurs[seat], winner)  # value target to warm the critic
+            ret = _terminal_reward(joueurs[seat], winner, joueurs, mode=reward_mode)  # value target to warm the critic
             for sample in rec.samples:
                 sample['return'] = ret
             samples.extend(rec.samples)
@@ -630,8 +720,12 @@ def train_toy(
     hidden_dim=128,
     lr=3e-4,
     entropy_coef=0.01,
+    entropy_coef_final=None,
     opponent='random',
     opponent_ratio=0.0,
+    reward_mode='shaped',
+    snapshot_every=25,
+    freeze_binary=False,
     seed=20260616,
     device='cpu',
     run_dir=None,
@@ -642,8 +736,35 @@ def train_toy(
     model, encoder = build_toy_model(hidden_dim=hidden_dim, device=device)
     if init_state_dict is not None:  # warmstart (e.g. from behaviour cloning)
         model.load_state_dict(init_state_dict)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # Optionally freeze the flee/replay (binary) subnetwork so RL keeps the cloned
+    # heuristic's well-tuned flee/replay EXACTLY and optimises ONLY the combat /
+    # Hache decisions -- the part with proven headroom (SaveHache wins by keeping
+    # the heuristic's flee logic and changing only Hache use). The agent still
+    # *discovers* the Hache policy itself; it just can't wreck the good flee logic.
+    if freeze_binary:
+        for name, param in model.named_parameters():
+            if name.startswith('binary_'):
+                param.requires_grad_(False)
+    trainable = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.Adam(trainable, lr=lr)
+
+    # League-style self-play: the opponent is a FROZEN past-self snapshot,
+    # refreshed every ``snapshot_every`` iters. Unlike mirror self-play (which can
+    # cycle) or a fixed opponent (which caps at that opponent's exploitability),
+    # chasing a slowly-improving past self is a moving curriculum that tends to
+    # produce robust, genuinely stronger play. The vs_default eval still selects
+    # the saved checkpoint, so we harvest whatever is best against the heuristic.
+    snapshot_opponent = None
+    if opponent == 'snapshot':
+        opp_model, _ = build_toy_model(hidden_dim=hidden_dim, device=device)
+        opp_model.load_state_dict(model.state_dict())
+        snapshot_opponent = _make_toy_policy(opp_model, encoder, sample=True, record=False, device=device)
     ppo_config = PPOConfig(lr=lr, entropy_coef=entropy_coef, minibatch_size=2048)
+    # Entropy annealing: explore early (high coef -> escape the BC-clone anchor /
+    # premature collapse we diagnosed), exploit late (low coef -> sharpen the
+    # discovered policy). Constant if entropy_coef_final is None.
+    entropy_start = entropy_coef
+    entropy_end = entropy_coef if entropy_coef_final is None else entropy_coef_final
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
 
     history = []
@@ -654,12 +775,24 @@ def train_toy(
     last_behaviour = {}
 
     for iteration in range(1, iterations + 1):
+        # Linearly anneal the entropy bonus across training.
+        frac = (iteration - 1) / max(1, iterations - 1)
+        ppo_config.entropy_coef = entropy_start + frac * (entropy_end - entropy_start)
+        # Refresh the frozen self-play snapshot on schedule (moving curriculum).
+        if snapshot_opponent is not None and iteration > 1 and (iteration - 1) % snapshot_every == 0:
+            snapshot_opponent.model.load_state_dict(model.state_dict())
         rollout_seed = seed + iteration * episodes_per_batch
         rollout = collect_toy_rollouts(
             model, encoder, episodes=episodes_per_batch, seed_start=rollout_seed,
             opponent=opponent, opponent_ratio=opponent_ratio, device=device,
+            reward_mode=reward_mode, opponent_policy=snapshot_opponent,
         )
-        update = ppo_update(model, optimizer, rollout['steps'], ppo_config, device=device)
+        steps_for_update = rollout['steps']
+        if freeze_binary:
+            # The frozen flee/replay (binary) steps carry no gradient; drop them
+            # so PPO only updates the trainable combat/Hache parameters.
+            steps_for_update = [s for s in steps_for_update if s.get('mode') != 'binary']
+        update = ppo_update(model, optimizer, steps_for_update, ppo_config, device=device)
 
         skill = rollout['skill_stats']
         skill_rate = skill.get('hache_well_used', 0) / max(1, skill.get('hache_uses', 0))
@@ -672,8 +805,23 @@ def train_toy(
             last_vs_random = eval_random['winrate']
             last_vs_default = eval_default['winrate']
             best_vs_random = max(best_vs_random, last_vs_random)
+            # Save the best-vs-heuristic checkpoint: PPO often peaks early then
+            # drifts into the over-flee local optimum, so the final model is not
+            # the strongest. Keep the peak so it can be evaluated/measured.
+            if run_dir and last_vs_default > best_vs_default:
+                _bp = Path(run_dir)
+                _bp.mkdir(parents=True, exist_ok=True)
+                torch.save(
+                    {'model_state_dict': {k: v.detach().cpu() for k, v in model.state_dict().items()},
+                     'hidden_dim': hidden_dim, 'iteration': iteration,
+                     'vs_default': last_vs_default},
+                    _bp / 'toy_best.pt',
+                )
             best_vs_default = max(best_vs_default, last_vs_default)
             last_behaviour = {
+                'winrate': eval_default['winrate'],
+                'loss_rate': eval_default.get('loss_rate', 0.0),
+                'draw_rate': eval_default.get('draw_rate', 0.0),
                 'death_rate': eval_default['death_rate'],
                 'flee_rate': eval_default['flee_rate'],
                 'ponce_rate': eval_default['ponce_rate'],
@@ -698,8 +846,9 @@ def train_toy(
                 print(
                     f"[toy iter {iteration:03d}] "
                     f"vs_random={last_vs_random:.3f} vs_default={last_vs_default:.3f} "
-                    f"(chance {eval_random['chance_winrate']:.2f}) "
-                    f"hache_well_used={skill_rate:.3f} "
+                    f"(W{eval_default['winrate']:.2f}/L{eval_default.get('loss_rate', 0.0):.2f}/"
+                    f"D{eval_default.get('draw_rate', 0.0):.2f}) "
+                    f"hache_alloc={skill_rate:.3f} "
                     f"death={eval_default['death_rate']:.2f} flee={eval_default['flee_rate']:.2f} "
                     f"ponce={eval_default['ponce_rate']:.2f} score={eval_default['avg_score']:.2f} "
                     f"entropy={update['entropy']:.3f}",
@@ -751,10 +900,19 @@ def format_toy_report(result: ToyTrainResult):
         f"(best {result.best_winrate_vs_random:.3f}, chance 0.50)",
         f"- Winrate vs DefaultDungeonPolicy (heuristic): {result.final_winrate_vs_default:.3f} "
         f"(best {result.best_winrate_vs_default:.3f}, chance 0.50)",
-        f"- Hache de Glace spent wisely (on a monster the free tools can't kill): {result.skill_rate:.3f}",
+        # Descriptive only -- NOT a quality judgment. The agent decides where to
+        # spend the one-shot Hache; this just observes how often it landed on a
+        # monster the free tools could not already kill.
+        f"- Hache de Glace allocation (observed; one-shot landed on a monster the "
+        f"free tools can't kill): {result.skill_rate:.3f}",
         f"- Reproduces hand-derived optimal line on the probe: {result.optimal_line}",
     ]
     if b:
+        if 'loss_rate' in b and 'draw_rate' in b:
+            lines.append(
+                f"- Outcome split vs the heuristic: agent wins {b['winrate']:.1%}, "
+                f"heuristic wins {b['loss_rate']:.1%}, draws/double-death {b['draw_rate']:.1%}"
+            )
         lines.append(
             f"- Agent behaviour vs the heuristic: death {b['death_rate']:.2f}, "
             f"flee {b['flee_rate']:.2f}, ponce {b['ponce_rate']:.2f}, "
@@ -783,9 +941,14 @@ def train_toy_imitation_then_rl(
     eval_every=10,
     lr=1e-4,
     entropy_coef=0.02,
+    entropy_coef_final=None,
     opponent='default',
     opponent_ratio=1.0,
     correct_hache=False,
+    reward_mode='shaped',
+    snapshot_every=25,
+    soften_head=None,
+    freeze_binary=False,
     seed=20260616,
     device='cpu',
     run_dir=None,
@@ -797,7 +960,8 @@ def train_toy_imitation_then_rl(
     model, encoder = build_toy_model(hidden_dim=hidden_dim, device=device)
 
     demos = collect_heuristic_demonstrations(
-        encoder, num_games=demo_games, seed_start=seed, correct_hache=correct_hache)
+        encoder, num_games=demo_games, seed_start=seed, correct_hache=correct_hache,
+        reward_mode=reward_mode)
     bc_metrics = behavior_clone(model, demos, epochs=bc_epochs, lr=bc_lr, device=device)
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
     after_bc = {
@@ -809,10 +973,29 @@ def train_toy_imitation_then_rl(
               f"acc={bc_metrics['accuracy']} | after-clone winrate "
               f"vs_random={after_bc['vs_random']:.3f} vs_default={after_bc['vs_default']:.3f}", flush=True)
 
+    # Save the post-clone weights: this agent plays like the heuristic (~its
+    # self-play ceiling), the reference point RL then tries to beat.
+    if run_dir:
+        _bcp = Path(run_dir)
+        _bcp.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {'model_state_dict': {k: v.detach().cpu() for k, v in model.state_dict().items()},
+             'hidden_dim': hidden_dim, 'vs_default': after_bc['vs_default']},
+            _bcp / 'toy_postbc.pt',
+        )
+
+    # Optionally de-peak the cloned policy so PPO can explore off the BC anchor.
+    if soften_head is not None:
+        _soften_policy_heads(model, soften_head)
+        if verbose:
+            print(f"[BC] softened policy heads by factor {soften_head} (greedy action preserved)", flush=True)
+
     result = train_toy(
         iterations=iterations, episodes_per_batch=episodes_per_batch, eval_games=eval_games,
         eval_every=eval_every, hidden_dim=hidden_dim, lr=lr, entropy_coef=entropy_coef,
-        opponent=opponent, opponent_ratio=opponent_ratio, seed=seed, device=device,
+        entropy_coef_final=entropy_coef_final,
+        opponent=opponent, opponent_ratio=opponent_ratio, reward_mode=reward_mode,
+        snapshot_every=snapshot_every, freeze_binary=freeze_binary, seed=seed, device=device,
         run_dir=run_dir, verbose=verbose, init_state_dict={k: v.detach().cpu() for k, v in model.state_dict().items()},
     )
     return result, bc_metrics, after_bc
@@ -854,12 +1037,23 @@ def main():
     train_parser.add_argument('--lr', type=float, default=3e-4)
     train_parser.add_argument('--entropy-coef', type=float, default=0.01)
     train_parser.add_argument(
-        '--opponent', choices=('random', 'default'), default='random',
-        help="Fixed opponent for the non-self-play episodes ('default' = heuristic DefaultDungeonPolicy).",
+        '--entropy-coef-final', type=float, default=None,
+        help='If set, linearly anneal the entropy bonus from --entropy-coef to this over training.')
+    train_parser.add_argument(
+        '--opponent', choices=('random', 'default', 'snapshot'), default='random',
+        help="Opponent for the vs-opponent episodes: 'default' = heuristic, "
+             "'snapshot' = frozen past-self (league self-play, refreshed every --snapshot-every).",
     )
+    train_parser.add_argument('--snapshot-every', type=int, default=25,
+                              help="Refresh the frozen self-play snapshot every N iters (opponent='snapshot').")
     train_parser.add_argument(
         '--opponent-ratio', type=float, default=0.0,
         help='Fraction of rollout episodes played vs the fixed opponent (0 = pure self-play).',
+    )
+    train_parser.add_argument(
+        '--reward-mode', choices=('shaped', 'margin'), default='shaped',
+        help="'shaped' = absolute survive credit (default); 'margin' = competitive "
+             "(my_score - opponent_score), un-gameable by fleeing.",
     )
     train_parser.add_argument('--seed', type=int, default=20260616)
     train_parser.add_argument('--run-dir', default='artifacts/rl_toy')
@@ -878,12 +1072,30 @@ def main():
     imitate_parser.add_argument('--hidden-dim', type=int, default=128)
     imitate_parser.add_argument('--lr', type=float, default=1e-4)
     imitate_parser.add_argument('--entropy-coef', type=float, default=0.02)
-    imitate_parser.add_argument('--opponent', choices=('random', 'default'), default='default')
+    imitate_parser.add_argument(
+        '--entropy-coef-final', type=float, default=None,
+        help='If set, linearly anneal the entropy bonus from --entropy-coef to this over training.')
+    imitate_parser.add_argument('--opponent', choices=('random', 'default', 'snapshot'), default='default')
     imitate_parser.add_argument('--opponent-ratio', type=float, default=1.0)
+    imitate_parser.add_argument('--snapshot-every', type=int, default=25,
+                                help="Refresh the frozen self-play snapshot every N iters (opponent='snapshot').")
+    imitate_parser.add_argument(
+        '--soften-head', type=float, default=None,
+        help="Scale the cloned policy-head logits by this factor (<1) before RL, to "
+             "de-peak the distribution so PPO can explore (greedy action preserved).")
+    imitate_parser.add_argument(
+        '--freeze-binary', action='store_true',
+        help="Freeze the cloned flee/replay (binary) subnet; RL optimises ONLY the "
+             "combat/Hache decisions (keeps the heuristic's good flee logic intact).")
     imitate_parser.add_argument(
         '--correct-hache', action='store_true',
         help="Clone a corrected teacher that saves the one-shot Hache for Dragons "
              "(the heuristic wastes it ~69%% of the time).")
+    imitate_parser.add_argument(
+        '--reward-mode', choices=('shaped', 'margin'), default='shaped',
+        help="'shaped' = absolute survive credit (default); 'margin' = competitive "
+             "(my_score - opponent_score), un-gameable by fleeing.",
+    )
     imitate_parser.add_argument('--seed', type=int, default=20260616)
     imitate_parser.add_argument('--run-dir', default='artifacts/rl_toy')
 
@@ -899,8 +1111,11 @@ def main():
             hidden_dim=args.hidden_dim,
             lr=args.lr,
             entropy_coef=args.entropy_coef,
+            entropy_coef_final=args.entropy_coef_final,
             opponent=args.opponent,
             opponent_ratio=args.opponent_ratio,
+            reward_mode=args.reward_mode,
+            snapshot_every=args.snapshot_every,
             seed=args.seed,
             run_dir=args.run_dir,
         )
@@ -924,9 +1139,14 @@ def main():
             hidden_dim=args.hidden_dim,
             lr=args.lr,
             entropy_coef=args.entropy_coef,
+            entropy_coef_final=args.entropy_coef_final,
             opponent=args.opponent,
             opponent_ratio=args.opponent_ratio,
             correct_hache=args.correct_hache,
+            reward_mode=args.reward_mode,
+            snapshot_every=args.snapshot_every,
+            soften_head=args.soften_head,
+            freeze_binary=args.freeze_binary,
             seed=args.seed,
             run_dir=args.run_dir,
         )
