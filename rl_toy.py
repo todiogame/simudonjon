@@ -274,11 +274,17 @@ class ToyObservationEncoder(ObservationEncoder):
         not a coarse summary -- this is what the heuristic computes its EV from,
         and it's public (composition only, never the upcoming order);
       - the opponent's state (score, HP, alive / fled / in-dungeon) and the score
-        margin, so the agent knows whether it is ahead or behind.
+        margin, so the agent knows whether it is ahead or behind;
+      - the KNOWN next card, when the player legitimately knows it (a card put on
+        top, or peeked via a divination object): a flag + its power + whether it is
+        a Marteau-killable type. This is *legal* public knowledge (not the hidden
+        deck order), so the agent can learn e.g. to replay when a free kill is on
+        top. Zero/absent when the next card is unknown.
     The shared rl_train encoder is untouched."""
 
-    # exact deck histogram + [opp_score, opp_hp, opp_alive, opp_fled, opp_in_dj, margin]
-    extra_feature_size = len(TOY_POWER_LEVELS) + 6
+    # deck histogram + [opp_score, opp_hp, opp_alive, opp_fled, opp_in_dj, margin]
+    #               + [known_next, next_power, next_is_golem, next_is_squelette]
+    extra_feature_size = len(TOY_POWER_LEVELS) + 6 + 4
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -331,6 +337,22 @@ class ToyObservationEncoder(ObservationEncoder):
             feats[base + 3] = float(opp.fuite_reussie)
             feats[base + 4] = float(opp.dans_le_dj)
             feats[base + 5] = (my_score - opp_score) / 10.0
+
+        # Known next card (legal public knowledge only -- None if unknown).
+        base2 = len(TOY_POWER_LEVELS) + 6
+        known = None
+        if hasattr(actor, 'connait_prochaine_carte'):
+            try:
+                known = actor.connait_prochaine_carte(game)
+            except Exception:
+                known = None
+        if known is not None:
+            types = getattr(known, 'types', ()) or ()
+            power = getattr(known, 'puissance_initiale', getattr(known, 'puissance', 0)) or 0
+            feats[base2 + 0] = 1.0
+            feats[base2 + 1] = float(power) / 10.0
+            feats[base2 + 2] = float('Golem' in types)
+            feats[base2 + 3] = float('Squelette' in types)
         return feats
 
 

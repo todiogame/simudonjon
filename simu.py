@@ -1033,6 +1033,9 @@ def ordonnanceur(joueurs, donjon, objets_dispo, log=True, policy=None):
                     # On garde en revanche l'exclusion du Miroir pour eviter la boucle historique.
                     monstre_remis = joueur.pile_monstres_vaincus.pop(-2)
                     donjon.rajoute_en_haut_de_la_pile(monstre_remis)
+                    # Le joueur a vu sa propre carte remonter : il la connait (carte
+                    # du dessus connue, comme via une divination).
+                    joueur.cartes_connues.add(monstre_remis)
                     log_details.append(f"L'Arracheur a remis {monstre_remis.titre} sur le Donjon.")
 
                 if effet_carte == "MEDAIL" and carte.dommages > 0 and joueur.medailles > 0:
