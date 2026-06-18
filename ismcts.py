@@ -51,7 +51,7 @@ def _rollout(s, seat):
     return _outcome(s, seat)
 
 
-def ismcts_decide(root, seat, n_iters):
+def ismcts_decide(root, seat, n_iters, return_visits=False):
     rootnode = Node()
     rng = random.Random(root.idx * 7919 + seat * 31 + 1)
     for _ in range(n_iters):
@@ -83,8 +83,12 @@ def ismcts_decide(root, seat, n_iters):
             nd.edges[a][0] += 1
             nd.edges[a][1] += outcome
     if not rootnode.edges:
-        return te.heuristic_action(root)
-    return max(rootnode.edges, key=lambda a: rootnode.edges[a][0])   # most-visited
+        act = te.heuristic_action(root)
+        return (act, {act: 1}) if return_visits else act
+    best = max(rootnode.edges, key=lambda a: rootnode.edges[a][0])   # most-visited
+    if return_visits:
+        return best, {a: e[0] for a, e in rootnode.edges.items()}
+    return best
 
 
 def winrate(n, iters, hand):
