@@ -21,7 +21,8 @@ from heros import MercenaireOrc
 from monstres import CarteMonstre, DonjonDeck
 from objets import (ArmureEnCuir, Barde, BombePirate, CalumetDeLaPaix, CoeurDeTarasque,
                     CoquilleSalvatrice, CouteauSuisse, HacheDeGlace, KebabRevigorant,
-                    MarteauDeGuerre, MidasDeBronze, OsseletsDeResurrection, TorcheBleue)
+                    MarteauDeGuerre, MidasDeBronze, OsseletsDeResurrection, PommeDAdam,
+                    TorcheBleue)
 
 
 TOY_PLAYER_NAMES = ("Alice", "Bob")
@@ -120,6 +121,10 @@ TOY_OBJECT_POOL = (
     OsseletsDeResurrection, # survives a would-be-lethal hit at 1 PV (and executes it)
     CoeurDeTarasque,        # +3 PV; +1 PV at end of a turn where you killed >= 2
     BombePirate,            # executes a big/lethal monster but you must BREAK an object
+    # Divination: one-shot, +3 PV AND the user secretly sees the next 3 cards
+    # (added to ONLY that player's cartes_connues) -> feeds the known-next-card
+    # feature, so the agent can learn to peek-then-replay into free kills.
+    PommeDAdam,
 )
 TOY_HAND_SIZE = 5  # each game draws this many from the pool (symmetric for both seats)
 
