@@ -135,6 +135,7 @@ from rl_toy_env import (  # torch-free toy environment
 from rl_train import (
     HybridNeuralPolicy,
     INITIAL_MANAGED_KINDS,
+    OBJECT_TYPE_INDEX,
     ObservationEncoder,
     PolicyValueNet,
     PPOConfig,
@@ -280,14 +281,26 @@ class ToyObservationEncoder(ObservationEncoder):
         a Marteau-killable type. This is *legal* public knowledge (not the hidden
         deck order), so the agent can learn e.g. to replay when a free kill is on
         top. Zero/absent when the next card is unknown.
+      - the FULL held inventory by object identity: two multi-hot counts over the
+        object-type vocabulary (one for intact items the actor can still use, one
+        for broken items). Without this the binary (flee/replay) observation only
+        had aggregate object COUNTS + a few flags, so the network could not tell it
+        holds e.g. a reusable Osselets vs a Kebab -- it now has its full hand at
+        every decision (the player always knows their own objects).
     The shared rl_train encoder is untouched."""
 
     # deck histogram + [opp_score, opp_hp, opp_alive, opp_fled, opp_in_dj, margin]
     #               + [known_next, next_power, next_is_golem, next_is_squelette]
-    extra_feature_size = len(TOY_POWER_LEVELS) + 6 + 4
+    # (the held-inventory multi-hot is sized from the vocab in __init__ and added on
+    # top -- see self.extra_feature_size there.)
+    base_extra_size = len(TOY_POWER_LEVELS) + 6 + 4
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Held inventory: intact multi-hot then broken multi-hot over the vocab.
+        self.inv_base = self.base_extra_size
+        self.inv_vocab = self.object_type_vocab_size
+        self.extra_feature_size = self.base_extra_size + 2 * self.inv_vocab
         self.binary_size += self.extra_feature_size
         self.combat_global_size += self.extra_feature_size
 
@@ -310,6 +323,17 @@ class ToyObservationEncoder(ObservationEncoder):
         size) + opponent state + score margin. Defensive: zeros for any piece
         whose info is missing (e.g. unit-test stubs)."""
         feats = [0.0] * self.extra_feature_size
+        # Held inventory: two multi-hot counts (intact / broken) over the object
+        # vocabulary. Depends only on the actor's own objects -- always known to
+        # the player -- so it is filled even when game/board context is missing.
+        actor = getattr(context, 'actor', None)
+        if actor is not None:
+            for objet in getattr(actor, 'objets', []) or []:
+                slot = OBJECT_TYPE_INDEX.get(type(objet).__name__, 0)
+                if getattr(objet, 'intact', True):
+                    feats[self.inv_base + slot] += 1.0
+                else:
+                    feats[self.inv_base + self.inv_vocab + slot] += 1.0
         game = context.game
         if game is None:
             return feats
