@@ -101,6 +101,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -139,6 +140,7 @@ from rl_train import (
     ObservationEncoder,
     PolicyValueNet,
     PPOConfig,
+    _cpu_state_dict,
     _player_rank,
     _seed_bank,
     ppo_update,
@@ -471,37 +473,65 @@ def _opponent_policy(kind):
     raise ValueError(f"Unknown toy opponent: {kind}")
 
 
-def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
-                         opponent_ratio=0.0, opponent='random', device='cpu',
-                         reward_mode='shaped', opponent_policy=None,
-                         shuffle_objects=False, deck='toy'):
-    """Rollouts for one PPO batch.
+# --- Parallel rollout / eval across CPU cores --------------------------------
+# NN decisions are ~100x slower than the heuristic (batch-1 forward + Python
+# encode), and the toy loops ran on a single core. Two cheap, safe wins:
+#   1. ONE torch thread per process -- splitting a tiny batch-1 matmul across
+#      cores is pure overhead (measured ~1.3x faster at 1 thread);
+#   2. play many games at once, one chunk per core.
+# We keep a PERSISTENT spawn pool because train_toy collects a fresh batch every
+# iteration -- re-spawning torch workers each time would cost more than it saves.
+# Each task carries the current weights (state_dict); workers rebuild the model
+# and pin themselves to 1 thread. num_workers=1 keeps the original serial path
+# untouched (so tests / library callers are unaffected).
 
-    ``opponent_ratio`` is the fraction of episodes the agent plays against a
-    fixed ``opponent`` ('random' or 'default'); the rest are self-play. On each
-    such episode the agent occupies one rotated seat and only its steps are
-    recorded. Pure self-play (ratio 0.0) over-fits to facing a clone on the
-    shared dungeon queue; training against a fixed competent opponent (the
-    heuristic 'default') mirrors what the real harness does.
+_TOY_POOL = None
+_TOY_POOL_SIZE = 0
 
-    ``opponent_policy`` (if given) is used as the baseline instead of
-    ``_opponent_policy(opponent)`` -- e.g. a frozen past-self snapshot for
-    league-style self-play.
-    """
-    normal_deck = deck == 'normal'
-    policy = _make_toy_policy(
-        model, encoder, sample=True, record=True, device=device,
-        strict_allowed=not normal_deck,
-        managed_kinds=(NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS),
-    )
-    baseline = opponent_policy if opponent_policy is not None else _opponent_policy(opponent)
+
+def _close_toy_pool():
+    global _TOY_POOL, _TOY_POOL_SIZE
+    if _TOY_POOL is not None:
+        _TOY_POOL.terminate()
+        _TOY_POOL = None
+        _TOY_POOL_SIZE = 0
+
+
+def _get_toy_pool(num_workers):
+    """Lazily create (and reuse across iterations) a spawn process pool."""
+    global _TOY_POOL, _TOY_POOL_SIZE
+    if _TOY_POOL is not None and _TOY_POOL_SIZE != num_workers:
+        _close_toy_pool()
+    if _TOY_POOL is None:
+        import atexit
+        import multiprocessing as mp
+        _TOY_POOL = mp.get_context('spawn').Pool(processes=num_workers)
+        _TOY_POOL_SIZE = num_workers
+        atexit.register(_close_toy_pool)
+    return _TOY_POOL
+
+
+def _chunk_bounds(n, k):
+    """Split range(n) into <=k balanced contiguous [lo, hi) chunks."""
+    k = max(1, min(k, n))
+    base, extra = divmod(n, k)
+    bounds = []
+    lo = 0
+    for i in range(k):
+        hi = lo + base + (1 if i < extra else 0)
+        bounds.append((lo, hi))
+        lo = hi
+    return bounds
+
+
+def _run_toy_rollout_chunk(policy, baseline, *, offsets, seed_start, opponent_period,
+                           reward_mode, shuffle_objects, deck):
+    """The per-episode rollout loop, over a set of GLOBAL episode offsets (so a
+    chunk plays exactly the games it would have played serially)."""
     steps = []
     reward_sum = 0.0
     recorded_players = 0
-    opponent_period = (
-        max(1, round(1.0 / opponent_ratio)) if opponent_ratio > 0 else 0
-    )
-    for offset in range(episodes):
+    for offset in offsets:
         seed = seed_start + offset
         joueurs, objets = build_toy_match(seed, shuffle_objects=shuffle_objects, deck=deck)
         policy.clear_records()
@@ -522,6 +552,94 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
             for step in policy.take_records(joueur):
                 step['reward'] = reward
                 steps.append(step)
+    return steps, reward_sum, recorded_players
+
+
+def _toy_rollout_worker(task):
+    import torch as _torch
+    _torch.set_num_threads(1)
+    normal_deck = task['deck'] == 'normal'
+    managed = NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS
+    model, encoder = build_toy_model(hidden_dim=task['hidden_dim'])
+    model.load_state_dict(task['state_dict'])
+    model.eval()
+    policy = _make_toy_policy(model, encoder, sample=True, record=True,
+                              strict_allowed=not normal_deck, managed_kinds=managed)
+    if task['opponent_state_dict'] is not None:
+        opp_model, opp_encoder = build_toy_model(hidden_dim=task['hidden_dim'])
+        opp_model.load_state_dict(task['opponent_state_dict'])
+        opp_model.eval()
+        baseline = _make_toy_policy(opp_model, opp_encoder, sample=True, record=False,
+                                    strict_allowed=not normal_deck, managed_kinds=managed)
+    else:
+        baseline = _opponent_policy(task['opponent'])
+    steps, reward_sum, recorded = _run_toy_rollout_chunk(
+        policy, baseline, offsets=range(task['offset_lo'], task['offset_hi']),
+        seed_start=task['seed_start'], opponent_period=task['opponent_period'],
+        reward_mode=task['reward_mode'], shuffle_objects=task['shuffle_objects'], deck=task['deck'])
+    return {'steps': steps, 'reward_sum': reward_sum, 'recorded_players': recorded,
+            'kinds_seen': policy.export_kinds_seen(), 'skill_stats': policy.export_skill_stats()}
+
+
+def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
+                         opponent_ratio=0.0, opponent='random', device='cpu',
+                         reward_mode='shaped', opponent_policy=None,
+                         shuffle_objects=False, deck='toy', num_workers=1, hidden_dim=128):
+    """Rollouts for one PPO batch.
+
+    ``opponent_ratio`` is the fraction of episodes the agent plays against a
+    fixed ``opponent`` ('random' or 'default'); the rest are self-play. On each
+    such episode the agent occupies one rotated seat and only its steps are
+    recorded. Pure self-play (ratio 0.0) over-fits to facing a clone on the
+    shared dungeon queue; training against a fixed competent opponent (the
+    heuristic 'default') mirrors what the real harness does.
+
+    ``opponent_policy`` (if given) is used as the baseline instead of
+    ``_opponent_policy(opponent)`` -- e.g. a frozen past-self snapshot for
+    league-style self-play.
+
+    ``num_workers`` > 1 fans the episodes out over a persistent spawn pool
+    (contiguous offset chunks -> the same games as serial, just distributed).
+    """
+    normal_deck = deck == 'normal'
+    opponent_period = max(1, round(1.0 / opponent_ratio)) if opponent_ratio > 0 else 0
+
+    if num_workers and num_workers > 1 and episodes > 1:
+        state_dict = _cpu_state_dict(model)
+        opp_state = _cpu_state_dict(opponent_policy.model) if opponent_policy is not None else None
+        tasks = [{
+            'state_dict': state_dict, 'opponent_state_dict': opp_state,
+            'hidden_dim': hidden_dim, 'opponent': opponent,
+            'offset_lo': lo, 'offset_hi': hi, 'seed_start': seed_start,
+            'opponent_period': opponent_period, 'reward_mode': reward_mode,
+            'shuffle_objects': shuffle_objects, 'deck': deck,
+        } for (lo, hi) in _chunk_bounds(episodes, num_workers)]
+        results = _get_toy_pool(num_workers).map(_toy_rollout_worker, tasks)
+        steps = []
+        reward_sum = 0.0
+        recorded_players = 0
+        kinds = Counter()
+        skill = Counter()
+        for r in results:
+            steps.extend(r['steps'])
+            reward_sum += r['reward_sum']
+            recorded_players += r['recorded_players']
+            kinds.update(r['kinds_seen'])
+            skill.update(r['skill_stats'])
+        return {'steps': steps, 'episodes': episodes,
+                'avg_reward_per_player': reward_sum / max(1, recorded_players),
+                'kinds_seen': dict(kinds), 'skill_stats': dict(skill)}
+
+    policy = _make_toy_policy(
+        model, encoder, sample=True, record=True, device=device,
+        strict_allowed=not normal_deck,
+        managed_kinds=(NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS),
+    )
+    baseline = opponent_policy if opponent_policy is not None else _opponent_policy(opponent)
+    steps, reward_sum, recorded_players = _run_toy_rollout_chunk(
+        policy, baseline, offsets=range(episodes), seed_start=seed_start,
+        opponent_period=opponent_period, reward_mode=reward_mode,
+        shuffle_objects=shuffle_objects, deck=deck)
     return {
         'steps': steps,
         'episodes': episodes,
@@ -531,49 +649,96 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
     }
 
 
-def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu',
-                 shuffle_objects=False, deck='toy'):
-    """Greedy agent vs a fixed baseline ('random' or 'default'), agent seat
-    rotated across games. Also reports the agent's behaviour (death / flee /
-    ponce / score) so the win-rate can be interpreted, not just read."""
-    normal_deck = deck == 'normal'
-    agent = _make_toy_policy(
-        model, encoder, sample=False, record=False, device=device,
-        strict_allowed=not normal_deck,
-        managed_kinds=(NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS),
-    )
-    baseline = _opponent_policy(baseline)
-    wins = opp_wins = draws = rank_sum = deaths = flees = ponces = 0
-    score_sum = 0.0
-    for eval_index, seed in enumerate(seed_bank):
+def _run_toy_eval_chunk(agent, baseline, seeds, *, index_start, shuffle_objects, deck):
+    counts = dict(wins=0, opp_wins=0, draws=0, rank_sum=0.0,
+                  deaths=0, flees=0, ponces=0, score_sum=0.0, games=0)
+    for local_i, seed in enumerate(seeds):
+        eval_index = index_start + local_i
         joueurs, objets = build_toy_match(seed, shuffle_objects=shuffle_objects, deck=deck)
         seat = eval_index % len(joueurs)
         assignments = {i: (agent if i == seat else baseline) for i in range(len(joueurs))}
         routed = routed_toy_policy(assignments, joueurs)
         winner, joueurs_finaux = ordonnanceur(joueurs, make_dungeon(deck), objets, False, policy=routed)
         target = joueurs_finaux[seat]
-        wins += int(target is winner)
-        opp_wins += int(winner is not None and target is not winner)
-        draws += int(winner is None)  # no winner (typically both dead)
-        rank_sum += _player_rank(joueurs_finaux, target)
-        deaths += int(not target.vivant)
-        flees += int(target.fuite_reussie)
-        ponces += int(target.dans_le_dj)
-        score_sum += float(target.score_final)
-    games = max(1, len(seed_bank))
+        counts['wins'] += int(target is winner)
+        counts['opp_wins'] += int(winner is not None and target is not winner)
+        counts['draws'] += int(winner is None)  # no winner (typically both dead)
+        counts['rank_sum'] += _player_rank(joueurs_finaux, target)
+        counts['deaths'] += int(not target.vivant)
+        counts['flees'] += int(target.fuite_reussie)
+        counts['ponces'] += int(target.dans_le_dj)
+        counts['score_sum'] += float(target.score_final)
+        counts['games'] += 1
+    return counts, agent.export_kinds_seen(), agent.export_skill_stats()
+
+
+def _toy_eval_worker(task):
+    import torch as _torch
+    _torch.set_num_threads(1)
+    normal_deck = task['deck'] == 'normal'
+    managed = NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS
+    model, encoder = build_toy_model(hidden_dim=task['hidden_dim'])
+    model.load_state_dict(task['state_dict'])
+    model.eval()
+    agent = _make_toy_policy(model, encoder, sample=False, record=False,
+                             strict_allowed=not normal_deck, managed_kinds=managed)
+    counts, kinds, skill = _run_toy_eval_chunk(
+        agent, _opponent_policy(task['baseline']), task['seeds'],
+        index_start=task['index_start'], shuffle_objects=task['shuffle_objects'], deck=task['deck'])
+    return {'counts': counts, 'kinds_seen': kinds, 'skill_stats': skill}
+
+
+def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu',
+                 shuffle_objects=False, deck='toy', num_workers=1, hidden_dim=128):
+    """Greedy agent vs a fixed baseline ('random' or 'default'), agent seat
+    rotated across games. Also reports the agent's behaviour (death / flee /
+    ponce / score) so the win-rate can be interpreted, not just read. Greedy =
+    deterministic, so num_workers>1 yields the identical winrate, just faster."""
+    normal_deck = deck == 'normal'
+    seed_bank = list(seed_bank)
+
+    if num_workers and num_workers > 1 and len(seed_bank) > 1:
+        state_dict = _cpu_state_dict(model)
+        tasks = [{
+            'state_dict': state_dict, 'hidden_dim': hidden_dim, 'baseline': baseline,
+            'seeds': seed_bank[lo:hi], 'index_start': lo,
+            'shuffle_objects': shuffle_objects, 'deck': deck,
+        } for (lo, hi) in _chunk_bounds(len(seed_bank), num_workers)]
+        results = _get_toy_pool(num_workers).map(_toy_eval_worker, tasks)
+        counts = dict(wins=0, opp_wins=0, draws=0, rank_sum=0.0,
+                      deaths=0, flees=0, ponces=0, score_sum=0.0, games=0)
+        kinds = Counter()
+        skill = Counter()
+        for r in results:
+            for key, value in r['counts'].items():
+                counts[key] += value
+            kinds.update(r['kinds_seen'])
+            skill.update(r['skill_stats'])
+        kinds_seen, skill_stats = dict(kinds), dict(skill)
+    else:
+        agent = _make_toy_policy(
+            model, encoder, sample=False, record=False, device=device,
+            strict_allowed=not normal_deck,
+            managed_kinds=(NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS),
+        )
+        counts, kinds_seen, skill_stats = _run_toy_eval_chunk(
+            agent, _opponent_policy(baseline), seed_bank,
+            index_start=0, shuffle_objects=shuffle_objects, deck=deck)
+
+    games = max(1, counts['games'])
     return {
         'games': games,
-        'winrate': wins / games,
-        'loss_rate': opp_wins / games,      # opponent won
-        'draw_rate': draws / games,         # no winner (both excluded/dead)
-        'avg_rank': rank_sum / games,
+        'winrate': counts['wins'] / games,
+        'loss_rate': counts['opp_wins'] / games,      # opponent won
+        'draw_rate': counts['draws'] / games,          # no winner (both excluded/dead)
+        'avg_rank': counts['rank_sum'] / games,
         'chance_winrate': 1.0 / len(TOY_PLAYER_NAMES),
-        'death_rate': deaths / games,
-        'flee_rate': flees / games,
-        'ponce_rate': ponces / games,
-        'avg_score': score_sum / games,
-        'kinds_seen': agent.export_kinds_seen(),
-        'skill_stats': agent.export_skill_stats(),
+        'death_rate': counts['deaths'] / games,
+        'flee_rate': counts['flees'] / games,
+        'ponce_rate': counts['ponces'] / games,
+        'avg_score': counts['score_sum'] / games,
+        'kinds_seen': kinds_seen,
+        'skill_stats': skill_stats,
     }
 
 
@@ -915,6 +1080,7 @@ def train_toy(
     run_dir=None,
     verbose=True,
     init_state_dict=None,
+    num_workers=1,
 ):
     torch.manual_seed(seed)
     model, encoder = build_toy_model(hidden_dim=hidden_dim, device=device)
@@ -984,6 +1150,12 @@ def train_toy(
             opponent=opponent, opponent_ratio=opponent_ratio, device=device,
             reward_mode=reward_mode, opponent_policy=snapshot_opponent,
             shuffle_objects=shuffle_objects, deck=deck,
+            # Rollouts stay serial on purpose: fanning them out is transfer-bound
+            # (workers must ship back tens of MB of experience buffers, which eats
+            # the parallel gain -- measured ~neutral). The real rollout speedup is
+            # torch.set_num_threads(1) (set in main). Eval, returning only counts,
+            # parallelises cleanly -- see the evaluate_toy calls below.
+            num_workers=1, hidden_dim=hidden_dim,
         )
         steps_for_update = rollout['steps']
         if freeze_binary:
@@ -1006,10 +1178,12 @@ def train_toy(
         if iteration % eval_every == 0 or iteration == iterations:
             eval_random = evaluate_toy(
                 model, encoder, eval_bank, baseline='random', device=device,
-                shuffle_objects=shuffle_objects, deck=deck)
+                shuffle_objects=shuffle_objects, deck=deck,
+                num_workers=num_workers, hidden_dim=hidden_dim)
             eval_default = evaluate_toy(
                 model, encoder, eval_bank, baseline='default', device=device,
-                shuffle_objects=shuffle_objects, deck=deck)
+                shuffle_objects=shuffle_objects, deck=deck,
+                num_workers=num_workers, hidden_dim=hidden_dim)
             last_vs_random = eval_random['winrate']
             last_vs_default = eval_default['winrate']
             best_vs_random = max(best_vs_random, last_vs_random)
@@ -1166,6 +1340,7 @@ def train_toy_imitation_then_rl(
     device='cpu',
     run_dir=None,
     verbose=True,
+    num_workers=1,
 ):
     """Behaviour-clone the heuristic, then PPO fine-tune from those weights.
     Returns (rl_result, bc_metrics, eval_after_bc)."""
@@ -1178,8 +1353,10 @@ def train_toy_imitation_then_rl(
     bc_metrics = behavior_clone(model, demos, epochs=bc_epochs, lr=bc_lr, device=device)
     eval_bank = _seed_bank(seed ^ 0x5151, eval_games)
     after_bc = {
-        'vs_random': evaluate_toy(model, encoder, eval_bank, baseline='random', device=device, deck=deck)['winrate'],
-        'vs_default': evaluate_toy(model, encoder, eval_bank, baseline='default', device=device, deck=deck)['winrate'],
+        'vs_random': evaluate_toy(model, encoder, eval_bank, baseline='random', device=device, deck=deck,
+                                  num_workers=num_workers, hidden_dim=hidden_dim)['winrate'],
+        'vs_default': evaluate_toy(model, encoder, eval_bank, baseline='default', device=device, deck=deck,
+                                   num_workers=num_workers, hidden_dim=hidden_dim)['winrate'],
     }
     if verbose:
         print(f"[BC] samples binary={bc_metrics['binary_samples']} combat={bc_metrics['combat_samples']} "
@@ -1214,6 +1391,7 @@ def train_toy_imitation_then_rl(
         bc_anchor_weight=bc_anchor_weight, bc_anchor_weight_combat=bc_anchor_weight_combat,
         seed=seed, device=device,
         run_dir=run_dir, verbose=verbose, init_state_dict={k: v.detach().cpu() for k, v in model.state_dict().items()},
+        num_workers=num_workers,
     )
     return result, bc_metrics, after_bc
 
@@ -1278,6 +1456,9 @@ def main():
     )
     train_parser.add_argument('--seed', type=int, default=20260616)
     train_parser.add_argument('--run-dir', default='artifacts/rl_toy')
+    train_parser.add_argument(
+        '--num-workers', type=int, default=0,
+        help="Parallel rollout/eval processes (0 = auto ~physical cores, 1 = serial).")
 
     subparsers.add_parser('smoke', help='Run a tiny toy training smoke and print a report.')
 
@@ -1333,9 +1514,21 @@ def main():
     )
     imitate_parser.add_argument('--seed', type=int, default=20260616)
     imitate_parser.add_argument('--run-dir', default='artifacts/rl_toy')
+    imitate_parser.add_argument(
+        '--num-workers', type=int, default=0,
+        help="Parallel rollout/eval processes (0 = auto ~physical cores, 1 = serial).")
 
     args = parser.parse_args()
     command = args.command or 'train'
+
+    # Batch-1 NN inference is faster on a single torch thread; we parallelise
+    # across PROCESSES instead (one game-chunk per core), so pin threads to 1.
+    torch.set_num_threads(1)
+
+    def _resolve_workers(requested):
+        if requested and requested > 0:
+            return requested
+        return max(1, min(8, (os.cpu_count() or 2) // 2))  # ~physical cores
 
     if command == 'train':
         result = train_toy(
@@ -1355,6 +1548,7 @@ def main():
             deck=args.deck,
             seed=args.seed,
             run_dir=args.run_dir,
+            num_workers=_resolve_workers(args.num_workers),
         )
         print(format_toy_report(result))
         return
@@ -1390,6 +1584,7 @@ def main():
             deck=args.deck,
             seed=args.seed,
             run_dir=args.run_dir,
+            num_workers=_resolve_workers(args.num_workers),
         )
         print(f"\n[imitation] clone accuracy={bc['accuracy']} | "
               f"after-clone vs_default={after_bc['vs_default']:.3f} vs_random={after_bc['vs_random']:.3f}\n")
