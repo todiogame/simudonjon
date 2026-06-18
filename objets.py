@@ -1975,10 +1975,11 @@ class OsseletsDeResurrection(Objet):
     def __init__(self):
         super().__init__("Osselets de Résurrection", False, 0)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= joueur.pv_total and not getattr(carte, 'non_executable', False)
-    # def survie_effet(self, joueur, carte, Jeu, log_details):
-    #     if joueur.pv_total >= 3:
-    #         self.survit(1, joueur, carte, log_details)
+        # Only offer it when it can actually act: lethal hit AND pv >= 3 (the
+        # threshold combat_effet requires). Otherwise it was offered as a no-op
+        # option (a "dead" choice), which notably misled the RL agent at low PV.
+        return (joueur.pv_total >= 3 and carte.dommages >= joueur.pv_total
+                and not getattr(carte, 'non_executable', False))
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if joueur.pv_total >= 3:
             carte.executed = True
