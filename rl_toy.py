@@ -134,12 +134,16 @@ from rl_toy_env import (  # torch-free toy environment
     routed_toy_policy,
 )
 from rl_train import (
+    BINARY_KINDS,
     HybridNeuralPolicy,
     INITIAL_MANAGED_KINDS,
+    MULTI_OBJECT_KINDS,
     OBJECT_TYPE_INDEX,
+    ORDER_OBJECT_KINDS,
     ObservationEncoder,
     PolicyValueNet,
     PPOConfig,
+    SINGLE_OBJECT_KINDS,
     _cpu_state_dict,
     _player_rank,
     _seed_bank,
@@ -151,6 +155,14 @@ NORMAL_MANAGED_KINDS = tuple(
     kind for kind in INITIAL_MANAGED_KINDS
     if kind is not DecisionKind.DRAFT_PICK
 )
+
+# Every decision kind that has a network head (one of the four shapes). On the
+# full deck the agent MUST control all of them -- nothing may fall back to the
+# heuristic -- so we manage this complete set and use a strict (non-heuristic)
+# structural fallback that only ever resolves a forced permutation.
+FULL_MANAGED_KINDS = tuple(dict.fromkeys(
+    BINARY_KINDS + SINGLE_OBJECT_KINDS + MULTI_OBJECT_KINDS + ORDER_OBJECT_KINDS
+))
 
 
 def _context_with_choice_options(context):
@@ -402,21 +414,26 @@ def _make_toy_policy(model, encoder, *, sample, record, device='cpu',
 
 
 def _toy_is_full_deck(deck):
-    """Decks using the full simudonjon dungeon. The network owns NORMAL_MANAGED_KINDS
-    and routing is non-strict; anything exotic (which the full item set can raise)
-    falls back to the HEURISTIC instead of the strict structural guard, so arbitrary
-    object hands never crash. 'toy' keeps the strict, fully-network-controlled set."""
+    """Decks using the full simudonjon dungeon ('normal' = toy-pool hands, 'full' =
+    hands from every game object). The network manages EVERY routable decision kind
+    (FULL_MANAGED_KINDS), so no gameplay decision is ever made by the heuristic; the
+    fallback is the strict structural guard (resolves only forced permutations and
+    raises on anything else, which -- verified -- never happens)."""
     return deck in ('normal', 'full')
 
 
 def _toy_agent_policy(model, encoder, *, sample, record, deck, device='cpu'):
-    """Build the toy control policy with the right routing/fallback for ``deck``."""
+    """Build the toy control policy with the right routing/fallback for ``deck``.
+
+    NO decision falls back to the heuristic: on the full-dungeon decks the network
+    owns all FULL_MANAGED_KINDS, and the fallback is the strict ToyStructuralPolicy
+    (NOT the heuristic)."""
     full = _toy_is_full_deck(deck)
     return _make_toy_policy(
         model, encoder, sample=sample, record=record, device=device,
         strict_allowed=not full,
-        managed_kinds=(NORMAL_MANAGED_KINDS if full else TOY_MANAGED_KINDS),
-        fallback=(default_dungeon_policy() if full else None),
+        managed_kinds=(FULL_MANAGED_KINDS if full else TOY_MANAGED_KINDS),
+        fallback=None,  # -> ToyStructuralPolicy (strict guard, never the heuristic)
     )
 
 
@@ -920,7 +937,7 @@ def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1, correc
     decisions. Returns a flat list of supervised samples. ``reward_mode`` selects
     the value-target reward so the warmed critic matches the RL reward."""
     samples = []
-    managed_kinds = NORMAL_MANAGED_KINDS if _toy_is_full_deck(deck) else TOY_MANAGED_KINDS
+    managed_kinds = FULL_MANAGED_KINDS if _toy_is_full_deck(deck) else TOY_MANAGED_KINDS
     structural_kinds = () if _toy_is_full_deck(deck) else TOY_STRUCTURAL_KINDS
     for offset in range(num_games):
         joueurs, objets = build_toy_match(seed_start + offset, deck=deck)

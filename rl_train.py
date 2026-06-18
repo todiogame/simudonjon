@@ -81,15 +81,18 @@ SINGLE_OBJECT_KINDS = (
     DecisionKind.CHOOSE_TYPE,
     DecisionKind.CHOOSE_CATEGORY,
     DecisionKind.CHOOSE_DESTINATION,
+    DecisionKind.DRAFT_PICK,  # pick one option -> pointer head
 )
 MULTI_OBJECT_KINDS = (
     DecisionKind.CHOOSE_OBJECTS,
     DecisionKind.CHOOSE_MONSTERS,
     DecisionKind.CHOOSE_CARDS,
+    DecisionKind.CHOOSE_CARDS_SPLIT,  # select a subset (the rest form the other group)
 )
 ORDER_OBJECT_KINDS = (
     DecisionKind.ORDER_OBJECTS,
     DecisionKind.ORDER_CARDS,
+    DecisionKind.CHOOSE_ORDER,  # permutation -> order head
 )
 KIND_VOCAB = INITIAL_MANAGED_KINDS + DECISION_EXPANSION_ORDER
 PHASE_VOCAB = (
