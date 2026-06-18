@@ -143,6 +143,25 @@ def make_toy_hand(rng):
     return rng.sample(TOY_OBJECT_POOL, TOY_HAND_SIZE)
 
 
+_ALL_OBJECT_CLASSES = None
+
+
+def all_object_classes():
+    """Every distinct object class in the game (deck='full' draws hands from these,
+    not just the curated TOY_OBJECT_POOL). Cached; sorted for reproducibility."""
+    global _ALL_OBJECT_CLASSES
+    if _ALL_OBJECT_CLASSES is None:
+        from objets import objets_disponibles
+        _ALL_OBJECT_CLASSES = sorted({type(o) for o in objets_disponibles},
+                                     key=lambda c: c.__name__)
+    return _ALL_OBJECT_CLASSES
+
+
+def make_full_hand(rng):
+    """Draw a symmetric hand of TOY_HAND_SIZE object classes from the FULL game set."""
+    return rng.sample(all_object_classes(), TOY_HAND_SIZE)
+
+
 def make_toy_hero():
     return MercenaireOrc(2)
 
@@ -189,14 +208,16 @@ def build_toy_match(seed, shuffle_objects=False, deck='toy'):
 
     from joueurs import Joueur
 
-    hand_classes = make_toy_hand(random)  # the shared hand (symmetric across seats)
+    # deck='full' draws the shared hand from EVERY object in the game; otherwise
+    # from the curated toy pool.
+    hand_classes = (make_full_hand(random) if deck == 'full' else make_toy_hand(random))
     joueurs = []
     for nom in TOY_PLAYER_NAMES:
         objets = [cls() for cls in hand_classes]  # fresh instances per seat
         if shuffle_objects:
             random.shuffle(objets)
         joueurs.append(Joueur(nom, make_toy_hero(), objets))
-    if deck == 'normal':
+    if deck in ('normal', 'full'):
         from objets import objets_disponibles
 
         hand_types = set(hand_classes)
@@ -216,7 +237,7 @@ def make_dungeon(deck='toy'):
     """
     if deck == 'toy':
         return ToyDonjon()
-    if deck == 'normal':
+    if deck in ('normal', 'full'):
         return DonjonDeck()
     raise ValueError(f"Unknown toy deck: {deck!r}")
 

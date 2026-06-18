@@ -401,6 +401,25 @@ def _make_toy_policy(model, encoder, *, sample, record, device='cpu',
     )
 
 
+def _toy_is_full_deck(deck):
+    """Decks using the full simudonjon dungeon. The network owns NORMAL_MANAGED_KINDS
+    and routing is non-strict; anything exotic (which the full item set can raise)
+    falls back to the HEURISTIC instead of the strict structural guard, so arbitrary
+    object hands never crash. 'toy' keeps the strict, fully-network-controlled set."""
+    return deck in ('normal', 'full')
+
+
+def _toy_agent_policy(model, encoder, *, sample, record, deck, device='cpu'):
+    """Build the toy control policy with the right routing/fallback for ``deck``."""
+    full = _toy_is_full_deck(deck)
+    return _make_toy_policy(
+        model, encoder, sample=sample, record=record, device=device,
+        strict_allowed=not full,
+        managed_kinds=(NORMAL_MANAGED_KINDS if full else TOY_MANAGED_KINDS),
+        fallback=(default_dungeon_policy() if full else None),
+    )
+
+
 def _soften_policy_heads(model, factor):
     """Scale the policy-head logits by ``factor`` (<1) to DE-PEAK the action
     distribution after behaviour cloning. The diagnosed failure: a 99%-accurate
@@ -558,19 +577,16 @@ def _run_toy_rollout_chunk(policy, baseline, *, offsets, seed_start, opponent_pe
 def _toy_rollout_worker(task):
     import torch as _torch
     _torch.set_num_threads(1)
-    normal_deck = task['deck'] == 'normal'
-    managed = NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS
+    deck = task['deck']
     model, encoder = build_toy_model(hidden_dim=task['hidden_dim'])
     model.load_state_dict(task['state_dict'])
     model.eval()
-    policy = _make_toy_policy(model, encoder, sample=True, record=True,
-                              strict_allowed=not normal_deck, managed_kinds=managed)
+    policy = _toy_agent_policy(model, encoder, sample=True, record=True, deck=deck)
     if task['opponent_state_dict'] is not None:
         opp_model, opp_encoder = build_toy_model(hidden_dim=task['hidden_dim'])
         opp_model.load_state_dict(task['opponent_state_dict'])
         opp_model.eval()
-        baseline = _make_toy_policy(opp_model, opp_encoder, sample=True, record=False,
-                                    strict_allowed=not normal_deck, managed_kinds=managed)
+        baseline = _toy_agent_policy(opp_model, opp_encoder, sample=True, record=False, deck=deck)
     else:
         baseline = _opponent_policy(task['opponent'])
     steps, reward_sum, recorded = _run_toy_rollout_chunk(
@@ -601,7 +617,6 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
     ``num_workers`` > 1 fans the episodes out over a persistent spawn pool
     (contiguous offset chunks -> the same games as serial, just distributed).
     """
-    normal_deck = deck == 'normal'
     opponent_period = max(1, round(1.0 / opponent_ratio)) if opponent_ratio > 0 else 0
 
     if num_workers and num_workers > 1 and episodes > 1:
@@ -630,11 +645,7 @@ def collect_toy_rollouts(model, encoder, *, episodes, seed_start,
                 'avg_reward_per_player': reward_sum / max(1, recorded_players),
                 'kinds_seen': dict(kinds), 'skill_stats': dict(skill)}
 
-    policy = _make_toy_policy(
-        model, encoder, sample=True, record=True, device=device,
-        strict_allowed=not normal_deck,
-        managed_kinds=(NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS),
-    )
+    policy = _toy_agent_policy(model, encoder, sample=True, record=True, deck=deck, device=device)
     baseline = opponent_policy if opponent_policy is not None else _opponent_policy(opponent)
     steps, reward_sum, recorded_players = _run_toy_rollout_chunk(
         policy, baseline, offsets=range(episodes), seed_start=seed_start,
@@ -675,13 +686,10 @@ def _run_toy_eval_chunk(agent, baseline, seeds, *, index_start, shuffle_objects,
 def _toy_eval_worker(task):
     import torch as _torch
     _torch.set_num_threads(1)
-    normal_deck = task['deck'] == 'normal'
-    managed = NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS
     model, encoder = build_toy_model(hidden_dim=task['hidden_dim'])
     model.load_state_dict(task['state_dict'])
     model.eval()
-    agent = _make_toy_policy(model, encoder, sample=False, record=False,
-                             strict_allowed=not normal_deck, managed_kinds=managed)
+    agent = _toy_agent_policy(model, encoder, sample=False, record=False, deck=task['deck'])
     counts, kinds, skill = _run_toy_eval_chunk(
         agent, _opponent_policy(task['baseline']), task['seeds'],
         index_start=task['index_start'], shuffle_objects=task['shuffle_objects'], deck=task['deck'])
@@ -694,7 +702,6 @@ def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu',
     rotated across games. Also reports the agent's behaviour (death / flee /
     ponce / score) so the win-rate can be interpreted, not just read. Greedy =
     deterministic, so num_workers>1 yields the identical winrate, just faster."""
-    normal_deck = deck == 'normal'
     seed_bank = list(seed_bank)
 
     if num_workers and num_workers > 1 and len(seed_bank) > 1:
@@ -716,11 +723,7 @@ def evaluate_toy(model, encoder, seed_bank, *, baseline='random', device='cpu',
             skill.update(r['skill_stats'])
         kinds_seen, skill_stats = dict(kinds), dict(skill)
     else:
-        agent = _make_toy_policy(
-            model, encoder, sample=False, record=False, device=device,
-            strict_allowed=not normal_deck,
-            managed_kinds=(NORMAL_MANAGED_KINDS if normal_deck else TOY_MANAGED_KINDS),
-        )
+        agent = _toy_agent_policy(model, encoder, sample=False, record=False, deck=deck, device=device)
         counts, kinds_seen, skill_stats = _run_toy_eval_chunk(
             agent, _opponent_policy(baseline), seed_bank,
             index_start=0, shuffle_objects=shuffle_objects, deck=deck)
@@ -917,8 +920,8 @@ def collect_heuristic_demonstrations(encoder, *, num_games, seed_start=1, correc
     decisions. Returns a flat list of supervised samples. ``reward_mode`` selects
     the value-target reward so the warmed critic matches the RL reward."""
     samples = []
-    managed_kinds = NORMAL_MANAGED_KINDS if deck == 'normal' else TOY_MANAGED_KINDS
-    structural_kinds = () if deck == 'normal' else TOY_STRUCTURAL_KINDS
+    managed_kinds = NORMAL_MANAGED_KINDS if _toy_is_full_deck(deck) else TOY_MANAGED_KINDS
+    structural_kinds = () if _toy_is_full_deck(deck) else TOY_STRUCTURAL_KINDS
     for offset in range(num_games):
         joueurs, objets = build_toy_match(seed_start + offset, deck=deck)
         recorders = [
@@ -1108,7 +1111,7 @@ def train_toy(
     if opponent == 'snapshot':
         opp_model, _ = build_toy_model(hidden_dim=hidden_dim, device=device)
         opp_model.load_state_dict(model.state_dict())
-        snapshot_opponent = _make_toy_policy(opp_model, encoder, sample=True, record=False, device=device)
+        snapshot_opponent = _toy_agent_policy(opp_model, encoder, sample=True, record=False, deck=deck, device=device)
     ppo_config = PPOConfig(lr=lr, entropy_coef=entropy_coef, minibatch_size=2048)
     # Entropy annealing: explore early (high coef -> escape the BC-clone anchor /
     # premature collapse we diagnosed), exploit late (low coef -> sharpen the
@@ -1443,8 +1446,10 @@ def main():
                               help="Refresh the frozen self-play snapshot every N iters (opponent='snapshot').")
     train_parser.add_argument('--shuffle-objects', action='store_true',
                               help="Shuffle each player's inventory order per game (order-invariance).")
-    train_parser.add_argument('--deck', choices=('toy', 'normal'), default='toy',
-                              help="Dungeon composition: reduced toy deck or full simudonjon deck.")
+    train_parser.add_argument('--deck', choices=('toy', 'normal', 'full'), default='toy',
+                              help="toy = reduced diagnostic deck/hands; normal = full dungeon, "
+                                   "hands from the 14-object toy pool; full = full dungeon AND "
+                                   "hands drawn from ALL game objects.")
     train_parser.add_argument(
         '--opponent-ratio', type=float, default=0.0,
         help='Fraction of rollout episodes played vs the fixed opponent (0 = pure self-play).',
@@ -1501,8 +1506,10 @@ def main():
     imitate_parser.add_argument(
         '--shuffle-objects', action='store_true',
         help="Shuffle each player's inventory order per game (order-invariance robustness).")
-    imitate_parser.add_argument('--deck', choices=('toy', 'normal'), default='toy',
-                                help="Dungeon composition: reduced toy deck or full simudonjon deck.")
+    imitate_parser.add_argument('--deck', choices=('toy', 'normal', 'full'), default='toy',
+                                help="toy = reduced diagnostic deck/hands; normal = full dungeon, "
+                                     "hands from the 14-object toy pool; full = full dungeon AND "
+                                     "hands drawn from ALL game objects.")
     imitate_parser.add_argument(
         '--correct-hache', action='store_true',
         help="Clone a corrected teacher that saves the one-shot Hache for Dragons "
