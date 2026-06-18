@@ -33,6 +33,7 @@ def _determinize(root, rng):
     rem = list(s.order[s.idx:])
     rng.shuffle(rem)
     s.order = tuple(s.order[:s.idx]) + tuple(rem)
+    s.rng = random.Random(rng.getrandbits(32))   # fresh flee-dice for this sampled world
     return s
 
 

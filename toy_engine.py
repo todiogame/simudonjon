@@ -44,13 +44,15 @@ def _can_kill(name, power, mtype):
 
 # --- the (plain) dungeon -----------------------------------------------------
 DECK = (
-    (1, 'Gobelin'), (1, 'Gobelin'), (1, 'Gobelin'),
-    (2, 'Squelette'), (2, 'Squelette'), (2, 'Squelette'),
-    (3, 'Orc'), (3, 'Orc'),
-    (5, 'Golem'), (5, 'Golem'),
+    (1, 'Gobelin'), (1, 'Gobelin'), (1, 'Gobelin'), (1, 'Gobelin'),
+    (2, 'Squelette'), (2, 'Squelette'), (2, 'Squelette'), (2, 'Squelette'),
+    (3, 'Orc'), (3, 'Orc'), (3, 'Orc'), (3, 'Orc'),
+    (4, 'Vampire'), (4, 'Vampire'), (4, 'Vampire'), (4, 'Vampire'),
+    (5, 'Golem'), (5, 'Golem'), (5, 'Golem'), (5, 'Golem'),
+    (6, 'Liche'), (6, 'Liche'),
     (7, 'Demon'), (7, 'Demon'),
     (9, 'Dragon'), (9, 'Dragon'),
-)
+)  # 26 cards: 4x power 1-5, 2x Liche(6) / Demon(7) / Dragon(9)
 
 
 @dataclass
@@ -72,6 +74,7 @@ class State:
     current: tuple = None        # (power, type) being faced, or None
     terminal: bool = False
     winner: int = None           # seat, or None (draw)
+    rng: object = None           # random.Random for the flee dice (in-state -> cloneable)
 
     def clone(self):
         return copy.deepcopy(self)
@@ -85,7 +88,7 @@ def new_game(seed, hand):
     armure = hand.count('armure')
     players = [Player(pv=PV_START + 5 * armure, pv_max=PV_MAX + 5 * armure,
                       objs={n: True for n in hand}) for _ in range(2)]
-    s = State(order=tuple(order), idx=0, players=players, to_move=0, phase='heal')
+    s = State(order=tuple(order), idx=0, players=players, to_move=0, phase='descend', rng=rng)
     return _advance(s)
 
 
@@ -96,6 +99,8 @@ def _holds(p, name):
 def legal(s):
     """(kind, options) for the current decision. options are concrete action values."""
     p = s.players[s.to_move]
+    if s.phase == 'descend':
+        return 'descend', [True, False]   # True = face the next card; False = stop & bank
     if s.phase == 'heal':
         return 'heal', [True, False]
     if s.phase == 'flee':
@@ -105,24 +110,20 @@ def legal(s):
         opts = [n for n in KILLERS if _holds(p, n) and _can_kill(n, power, mtype)]
         opts.append('none')
         return 'object', opts
-    if s.phase == 'replay':
-        return 'replay', [True, False]
     return 'terminal', []
 
 
-def _next_turn(s):
-    """End the current player's turn; hand over (or finish the game)."""
+def _next_player(s):
+    """The current player's run just ended (stopped / fled / died). Hand the rest
+    of the deck to the other player if they still have a run to take, else finish.
+    (Sequential runs: player A descends, then player B descends what's left.)"""
     s.current = None
-    # both done? (dead or deck exhausted for both)
-    if s.idx >= len(s.order) or all(pl.status == 'dead' for pl in s.players):
-        return _finish(s)
-    s.to_move = 1 - s.to_move
-    if s.players[s.to_move].status == 'dead':       # skip a dead player
-        if all(pl.status == 'dead' for pl in s.players):
-            return _finish(s)
-        s.to_move = 1 - s.to_move
-    s.phase = 'heal'
-    return s
+    other = 1 - s.to_move
+    if s.players[other].status == 'in' and s.idx < len(s.order):
+        s.to_move = other
+        s.phase = 'descend'
+        return s
+    return _finish(s)
 
 
 def _finish(s):
@@ -151,9 +152,10 @@ def _advance(s):
 
 
 def _draw(s):
-    """Player draws the top card and must decide flee/fight (or ends turn if empty)."""
+    """Draw the top card -> the player must flee/fight it. Deck empty -> run ends."""
     if s.idx >= len(s.order):
-        return _next_turn(s)
+        s.players[s.to_move].status = 'done'        # nothing left -> banked
+        return _next_player(s)
     s.current = DECK[s.order[s.idx]]
     s.idx += 1
     s.phase = 'flee'
@@ -161,17 +163,29 @@ def _draw(s):
 
 
 def step(s, action):
-    """Apply `action` to a COPY of s; advance to the next decision/terminal."""
-    s = s.clone()
+    """Apply `action` IN PLACE; advance to the next decision/terminal and return s.
+    Callers that need to preserve a state (e.g. MCTS at the root) clone first via
+    s.clone(); within a simulation we mutate freely -- far faster than cloning every
+    step (deepcopy per call was the bottleneck)."""
     p = s.players[s.to_move]
+    if s.phase == 'descend':
+        if not action:                              # STOP: bank the score, run ends
+            p.status = 'done'
+            return _next_player(s)
+        s.phase = 'heal'                            # keep descending: heal? then draw
+        return _advance(s)
     if s.phase == 'heal':
         if action and _holds(p, 'kebab'):
             p.pv = min(p.pv_max, p.pv + HEAL)
             p.objs['kebab'] = False
         return _draw(s)
     if s.phase == 'flee':
-        if action:                                  # flee: discard card, end turn
-            return _next_turn(s)
+        if action:                                  # attempt to flee: d6 vs monster power
+            power, _ = s.current
+            if s.rng.randint(1, 6) >= power:        # escaped -> leave the dungeon (banked)
+                p.status = 'done'
+                return _next_player(s)
+            # flee FAILED -> forced to fight this monster (power 7/9 always fail)
         s.phase = 'object'
         return s
     if s.phase == 'object':
@@ -180,30 +194,18 @@ def step(s, action):
             if action in ONE_SHOT:
                 p.objs[action] = False
             p.score += 1                            # executed: defeat, no damage
-            return _after_defeat(s)
-        # no killing object -> take the hit
-        if power >= p.pv:                           # lethal
+        elif power >= p.pv:                         # lethal hit, no killing object
             if _holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD:
                 p.pv = 1                            # death-save (reusable), defeat
                 p.score += 1
-                return _after_defeat(s)
-            p.status = 'dead'
-            return _next_turn(s)
-        p.pv -= power                               # survive the hit, defeat
-        p.score += 1
-        return _after_defeat(s)
-    if s.phase == 'replay':
-        if action:
-            return _draw(s)
-        return _next_turn(s)
-    return s
-
-
-def _after_defeat(s):
-    s.current = None
-    if s.idx >= len(s.order):                       # nothing left to replay
-        return _next_turn(s)
-    s.phase = 'replay'
+            else:
+                p.status = 'dead'
+                return _next_player(s)
+        else:
+            p.pv -= power                           # survive the hit, defeat
+            p.score += 1
+        s.phase = 'descend'                         # survived -> keep descending or stop
+        return s
     return s
 
 
@@ -211,13 +213,22 @@ def _after_defeat(s):
 def heuristic_action(s):
     kind, opts = legal(s)
     p = s.players[s.to_move]
+    if kind == 'descend':
+        # keep descending only while we could survive a FORCED Dragon (9): tank it,
+        # hache it, or osselets-save it. Otherwise stop & bank (a drawn Dragon is
+        # unfleeable). This is the push-your-luck lever.
+        backstop = (p.pv > 9 or _holds(p, 'hache')
+                    or (_holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD))
+        return bool(backstop)
     if kind == 'heal':
         return bool(p.pv <= 6 and _holds(p, 'kebab'))          # heal when low-ish
     if kind == 'flee':
         power, mtype = s.current
         killers = [n for n in KILLERS if _holds(p, n) and _can_kill(n, power, mtype)]
         save = _holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD
-        return bool(power >= p.pv and not killers and not save)  # flee only certain death
+        # attempt to flee a monster we can't kill and don't want to tank (osselets
+        # would save a lethal hit -> rather fight + score). Power 7/9 will fail anyway.
+        return bool(not killers and not save and power >= 4)
     if kind == 'object':
         power, mtype = s.current
         free = [n for n in ('marteau', 'torche') if n in opts]
@@ -228,8 +239,6 @@ def heuristic_action(s):
         if 'hache' in opts:
             return 'hache'
         return 'none'                                          # osselets saves, or die
-    if kind == 'replay':
-        return bool(p.pv >= 5)                                 # keep going while safe
     return opts[0] if opts else None
 
 
