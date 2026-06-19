@@ -85,9 +85,10 @@ class _ISMCTSPolicy:
     tail is determinized and the searcher descends the shared tree (UCB) / rolls out with the
     heuristic; the opponent always plays the heuristic. Records the tree path for back-up."""
 
-    def __init__(self, searcher, prefix, root, iter_seed, c):
+    def __init__(self, searcher, prefix, root, iter_seed, c, p_heur=0.75):
         from ai_policy import DefaultDungeonPolicy
         self.searcher, self.prefix, self.root, self.c = searcher, prefix, root, c
+        self.p_heur = p_heur                                   # prior weight on the heuristic's move
         self.i = 0
         self.node = root
         self.path = []
@@ -119,8 +120,9 @@ class _ISMCTSPolicy:
             return self._heur(ctx)
         for k in keys:
             self.node.edges.setdefault(k, [0, 0.0, 0])
-        h_key = action_key(ctx, self.heur.decide(ctx))         # heuristic PRIOR: stay close to it,
-        prior = {k: (0.75 if k == h_key else 0.25 / max(1, len(keys) - 1)) for k in keys}
+        h_key = action_key(ctx, self.heur.decide(ctx))         # heuristic PRIOR (tunable strength)
+        p_oth = (1.0 - self.p_heur) / max(1, len(keys) - 1)    # exploration floor on the other moves
+        prior = {k: (self.p_heur if k == h_key else p_oth) for k in keys}
         if h_key not in prior:                                 # heuristic chose an unlisted action
             prior = {k: 1.0 / len(keys) for k in keys}
         N = sum(self.node.edges[k][0] for k in keys)
@@ -139,7 +141,7 @@ class _ISMCTSPolicy:
         return action_from_key(ctx, k, self.heur, lambda: self._heur(ctx))
 
 
-def ismcts_decide(seed, searcher_seat, prefix, n_iters, c=1.4):
+def ismcts_decide(seed, searcher_seat, prefix, n_iters, c=1.4, p_heur=0.75):
     """Decide the searcher's current decision (reached by replaying `prefix`) via `n_iters`
     determinized re-simulations. Returns (best_key, {key: visits})."""
     from ai_policy import DefaultDungeonPolicy
@@ -152,7 +154,8 @@ def ismcts_decide(seed, searcher_seat, prefix, n_iters, c=1.4):
         np.random.seed(seed & 0x7FFFFFFF)
         joueurs, reserve = build_toy_match(seed, deck='toy')
         donjon = make_dungeon('toy')
-        pol = _ISMCTSPolicy(joueurs[searcher_seat], prefix, root, iter_seed=(seed * 1000003 + it + 1), c=c)
+        pol = _ISMCTSPolicy(joueurs[searcher_seat], prefix, root,
+                            iter_seed=(seed * 1000003 + it + 1), c=c, p_heur=p_heur)
         try:
             winner, _ = ordonnanceur(joueurs, donjon, reserve, log=False, policy=pol)
         except Exception:
@@ -167,7 +170,7 @@ def ismcts_decide(seed, searcher_seat, prefix, n_iters, c=1.4):
     return best, {k: e[0] for k, e in root.edges.items()}
 
 
-def play_teacher_game(seed, searcher_seat, n_iters):
+def play_teacher_game(seed, searcher_seat, n_iters, c=1.4, p_heur=0.75):
     """Play one real game: the searcher seat is the ISMCTS teacher (searching at each of its
     gameplay decisions), the other seat is the real ai_policy.py heuristic. Returns
     (outcome in {+1,0,-1} for the searcher, records=[(DecisionContext, visit-dict), ...])."""
@@ -186,7 +189,7 @@ def play_teacher_game(seed, searcher_seat, n_iters):
         ctx = drv.context
         if ctx.actor is searcher and ctx.kind.name in TREE_KINDS:
             rs_state, np_state = _rnd.getstate(), np.random.get_state()   # preserve the live game RNG
-            best, visits = ismcts_decide(seed, searcher_seat, prefix, n_iters)
+            best, visits = ismcts_decide(seed, searcher_seat, prefix, n_iters, c=c, p_heur=p_heur)
             _rnd.setstate(rs_state)
             np.random.set_state(np_state)                                # the search reseeded globals
             if best is None:
