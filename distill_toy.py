@@ -201,7 +201,17 @@ def stats_from_gen(st):
     return r
 
 
-# --- net: object embeddings + a shared scorer over usable objects (design B) --
+# --- net (design B): EVERYTHING is an entity with a learned embedding -----------
+# Objects AND dungeon cards each get an embedding; a SHARED scorer ranks each usable
+# held object from [state, object-embedding, FACED-CARD-embedding]. The card is an
+# entity too (not raw power+type features) -> ready for cards with powers/effects.
+# encode() is unchanged; we just read its slices and route the categorical ones
+# (faced-card type, remaining-deck composition, both inventories) through embeddings.
+NTYPES = len(te.TYPES)
+# encode() layout: own4 | opp4 | rem8 | phase3 | power1 | facedtype8 | owninv11 | oppinv11
+_SC_END, _REM0, _PH0, _POW, _FT0, _OI0, _PI0 = 8, 8, 16, 19, 20, 28, 28 + len(OBJ)
+
+
 def make_net():
     import torch
     import torch.nn as nn
@@ -209,30 +219,37 @@ def make_net():
     class Net(nn.Module):
         def __init__(s):
             super().__init__()
-            s.emb = nn.Embedding(len(OBJ), EMB_DIM)
-            s.trunk = nn.Sequential(nn.Linear(SCAL + MON + 2 * EMB_DIM, 128), nn.ReLU(),
+            s.obj_emb = nn.Embedding(len(OBJ), EMB_DIM)        # one embedding per object
+            s.card_emb = nn.Embedding(NTYPES, EMB_DIM)         # one embedding per card (entity)
+            scal = 4 + 4 + 3 + 1                               # own, opp, phase, faced power
+            s.trunk = nn.Sequential(nn.Linear(scal + 4 * EMB_DIM, 128), nn.ReLU(),
                                     nn.Linear(128, 128), nn.ReLU())
             s.struct = nn.Linear(128, 5)                       # flee_no/yes, replay_no/yes, resolve
-            s.scorer = nn.Sequential(nn.Linear(128 + EMB_DIM + MON, 64), nn.ReLU(),
-                                     nn.Linear(64, 1))         # shared object scorer
+            s.scorer = nn.Sequential(nn.Linear(128 + EMB_DIM + EMB_DIM + 1, 64), nn.ReLU(),
+                                     nn.Linear(64, 1))         # [h, object-emb, faced-card-emb, power]
             s.val = nn.Linear(128, 1)
             s.register_buffer('act_ids', torch.tensor([OBJ_IDX[o] for o in ACTION_OBJS]))
 
         def forward(s, x):
-            scal = x[:, :SCAL]
-            mon = x[:, SCAL:SCAL + MON]
-            own = x[:, SCAL + MON:SCAL + MON + len(OBJ)]
-            opp = x[:, SCAL + MON + len(OBJ):]
-            own_e = own @ s.emb.weight                         # pooled held-object embeddings
-            opp_e = opp @ s.emb.weight
-            h = s.trunk(torch.cat([scal, mon, own_e, opp_e], 1))
-            struct = s.struct(h)                               # (B,5)
+            own, opp = x[:, 0:4], x[:, 4:8]
+            rem = x[:, _REM0:_PH0]                              # remaining-deck composition (per card)
+            phase = x[:, _PH0:_POW]
+            power = x[:, _POW:_FT0]                             # faced card's current power (visible)
+            ftype = x[:, _FT0:_OI0]                             # faced card one-hot (entity id)
+            owninv, oppinv = x[:, _OI0:_PI0], x[:, _PI0:]
+            own_oe = owninv @ s.obj_emb.weight                 # pooled held-object embeddings
+            opp_oe = oppinv @ s.obj_emb.weight
+            faced_ce = ftype @ s.card_emb.weight               # the faced card's embedding
+            deck_ce = rem @ s.card_emb.weight                  # pooled remaining-deck embedding
+            h = s.trunk(torch.cat([own, opp, phase, power, own_oe, opp_oe, faced_ce, deck_ce], 1))
+            struct = s.struct(h)
             B = h.shape[0]
-            oe = s.emb(s.act_ids)                              # (9,EMB)
+            oe = s.obj_emb(s.act_ids)                          # (9,EMB) the usable-object embeddings
             obj_in = torch.cat([h.unsqueeze(1).expand(B, len(ACTION_OBJS), 128),
                                 oe.unsqueeze(0).expand(B, len(ACTION_OBJS), EMB_DIM),
-                                mon.unsqueeze(1).expand(B, len(ACTION_OBJS), MON)], 2)
-            obj = s.scorer(obj_in).squeeze(-1)                 # (B,9)
+                                faced_ce.unsqueeze(1).expand(B, len(ACTION_OBJS), EMB_DIM),
+                                power.unsqueeze(1).expand(B, len(ACTION_OBJS), 1)], 2)
+            obj = s.scorer(obj_in).squeeze(-1)                 # (B,9) pointer scores over usable objects
             return torch.cat([struct, obj], 1), s.val(h).squeeze(-1)
     return Net()
 
