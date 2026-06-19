@@ -9,6 +9,36 @@ block: determinizing the unseen deck mid-game and proving the seen prefix is pre
 """
 import numpy as np
 
+from ai_decisions import CombatObjectChoice
+
+
+# --- action <-> stable key (re-sims rebuild fresh instances, so we index, not identify) ---
+def action_key(ctx, action):
+    if action is True or action is False:
+        return ('b', action)
+    if action is CombatObjectChoice.RESOLVE_NOW:
+        return ('r',)
+    if action is None:
+        return ('n',)
+    opts = list(ctx.options or ())
+    for i, o in enumerate(opts):
+        if o is action or o == action:
+            return ('o', i)
+    return ('v', action)                       # structural/odd (e.g. ORDER_OBJECTS): not replayable
+
+
+def action_from_key(ctx, key, heur, fallback_ctx_action):
+    t = key[0]
+    if t == 'b':
+        return key[1]
+    if t == 'r':
+        return CombatObjectChoice.RESOLVE_NOW
+    if t == 'n':
+        return None
+    if t == 'o':
+        return list(ctx.options)[key[1]]
+    return fallback_ctx_action()               # ('v',...): re-run the heuristic (state is reproduced)
+
 
 def determinize_unseen(donjon, det_rng):
     """Reshuffle ONLY the cards not yet drawn (ordre[index:]); the drawn prefix is kept."""
@@ -16,6 +46,120 @@ def determinize_unseen(donjon, det_rng):
     tail = list(donjon.ordre[idx:])
     det_rng.shuffle(tail)
     donjon.ordre = np.concatenate([donjon.ordre[:idx], np.array(tail, dtype=donjon.ordre.dtype)])
+
+
+# --- ISMCTS by determinized re-simulation -------------------------------------------
+import math
+import random as _rnd
+
+# the gameplay decisions the searcher actually searches over; everything else (structural,
+# hero abilities the toy hero doesn't have, ...) is delegated to the heuristic.
+TREE_KINDS = {'SHOULD_FLEE', 'SHOULD_REPLAY', 'CHOOSE_COMBAT_OBJECT',
+              'CHOOSE_OBJECT_TO_SACRIFICE', 'CHOOSE_OBJECT_TO_REPAIR'}
+
+
+def legal_keys(ctx):
+    name = ctx.kind.name
+    opts = list(ctx.options or ())
+    if name in ('SHOULD_FLEE', 'SHOULD_REPLAY'):
+        acts = [True, False]
+    elif name == 'CHOOSE_COMBAT_OBJECT':
+        acts = opts + [CombatObjectChoice.RESOLVE_NOW]
+    elif name in ('CHOOSE_OBJECT_TO_SACRIFICE', 'CHOOSE_OBJECT_TO_REPAIR'):
+        acts = opts + ([None] if ctx.meta('allow_none') else [])   # only if the engine truly allows it
+    else:
+        acts = list(opts)
+    return [action_key(ctx, a) for a in acts]
+
+
+class Node:
+    __slots__ = ('edges', 'children')
+
+    def __init__(self):
+        self.edges = {}      # key -> [visits, value_sum, avail]
+        self.children = {}   # key -> Node
+
+
+class _ISMCTSPolicy:
+    """One re-simulation: the searcher replays `prefix` to the root, then the deck's unseen
+    tail is determinized and the searcher descends the shared tree (UCB) / rolls out with the
+    heuristic; the opponent always plays the heuristic. Records the tree path for back-up."""
+
+    def __init__(self, searcher, prefix, root, iter_seed, c):
+        from ai_policy import DefaultDungeonPolicy
+        self.searcher, self.prefix, self.root, self.c = searcher, prefix, root, c
+        self.i = 0
+        self.node = root
+        self.path = []
+        self.rollout = False
+        self.determinized = False
+        self.iter_seed = iter_seed
+        self.tree_rng = _rnd.Random(iter_seed ^ 0x9E3779B9)
+        self.heur = DefaultDungeonPolicy()
+
+    def _heur(self, ctx):
+        return self.heur.decide(ctx)
+
+    def decide(self, ctx):
+        if ctx.actor is not self.searcher or ctx.kind.name not in TREE_KINDS:
+            return self._heur(ctx)                             # opponent / structural -> heuristic
+        if self.i < len(self.prefix):                          # replay the searcher's tree decisions
+            k = self.prefix[self.i]
+            self.i += 1
+            return action_from_key(ctx, k, self.heur, lambda: self._heur(ctx))
+        if not self.determinized:                              # at the root: determinize the future
+            _rnd.seed(self.iter_seed)
+            np.random.seed(self.iter_seed & 0x7FFFFFFF)
+            determinize_unseen(ctx.game.donjon, np.random)
+            self.determinized = True
+        if self.rollout:                                       # past the expanded leaf -> roll out
+            return self._heur(ctx)
+        keys = legal_keys(ctx)
+        if not keys:                                           # nothing to branch on -> heuristic
+            return self._heur(ctx)
+        for k in keys:
+            self.node.edges.setdefault(k, [0, 0.0, 0])[2] += 1   # availability
+        untried = [k for k in keys if self.node.edges[k][0] == 0]
+        if untried:
+            k = untried[self.tree_rng.randrange(len(untried))]
+            self.path.append((self.node, k))
+            self.node.children.setdefault(k, Node())
+            self.rollout = True                                # expand one node, then roll out
+        else:
+            logN = math.log(sum(self.node.edges[k][2] for k in keys))
+            k = max(keys, key=lambda x: (self.node.edges[x][1] / self.node.edges[x][0]
+                                         + self.c * math.sqrt(logN / self.node.edges[x][0])))
+            self.path.append((self.node, k))
+            self.node = self.node.children.setdefault(k, Node())
+        return action_from_key(ctx, k, self.heur, lambda: self._heur(ctx))
+
+
+def ismcts_decide(seed, searcher_seat, prefix, n_iters, c=1.4):
+    """Decide the searcher's current decision (reached by replaying `prefix`) via `n_iters`
+    determinized re-simulations. Returns (best_key, {key: visits})."""
+    from ai_policy import DefaultDungeonPolicy
+    from simu import ordonnanceur
+
+    from rl_toy_env import build_toy_match, make_dungeon
+    root = Node()
+    for it in range(n_iters):
+        _rnd.seed(seed)
+        np.random.seed(seed & 0x7FFFFFFF)
+        joueurs, reserve = build_toy_match(seed, deck='toy')
+        donjon = make_dungeon('toy')
+        pol = _ISMCTSPolicy(joueurs[searcher_seat], prefix, root, iter_seed=(seed * 1000003 + it + 1), c=c)
+        try:
+            winner, _ = ordonnanceur(joueurs, donjon, reserve, log=False, policy=pol)
+        except Exception:
+            continue                                           # a bad determinization -> skip the sim
+        outcome = 1.0 if winner is joueurs[searcher_seat] else (0.0 if winner is None else -1.0)
+        for nd, k in pol.path:
+            nd.edges[k][0] += 1
+            nd.edges[k][1] += outcome
+    if not root.edges:
+        return None, {}
+    best = max(root.edges, key=lambda k: root.edges[k][0])
+    return best, {k: e[0] for k, e in root.edges.items()}
 
 
 # --- proof: reshuffling the unseen tail at decision K keeps the seen prefix, diverges after ---
@@ -47,6 +191,49 @@ if __name__ == '__main__':
         d = joueurs[0].policy  # not used; read deck via a fresh ref below
         return tuple(int(x) for x in donjon.ordre[:donjon.index]), \
             tuple((j.nom, j.score_final) for j in joueurs)
+
+    # --- replay proof: record seat-0's decision keys, then re-sim replaying them ---
+    from simu import ordonnanceur
+
+    def record_game(seed):
+        random.seed(seed)
+        np.random.seed(seed & 0xFFFFFFFF)
+        joueurs, reserve = build_toy_match(seed, deck='toy')
+        donjon = make_dungeon('toy')
+        heur = DefaultDungeonPolicy()
+        drv = RealGameDriver(joueurs, donjon, reserve)
+        searcher = joueurs[0]
+        keys = []
+        while not drv.terminal:
+            ctx = drv.context
+            a = heur.decide(ctx)
+            if ctx.actor is searcher:
+                keys.append(action_key(ctx, a))
+            drv.step(a)
+        return keys, tuple((j.nom, j.score_final) for j in joueurs), tuple(int(x) for x in donjon.ordre[:donjon.index])
+
+    class ReplayPolicy:
+        def __init__(self, searcher, keys):
+            self.searcher, self.keys, self.i = searcher, keys, 0
+            self.heur = DefaultDungeonPolicy()
+
+        def decide(self, ctx):
+            if ctx.actor is self.searcher and self.i < len(self.keys):
+                k = self.keys[self.i]
+                self.i += 1
+                return action_from_key(ctx, k, self.heur, lambda: self.heur.decide(ctx))
+            return self.heur.decide(ctx)
+
+    keys, o_scores, o_draws = record_game(0)
+    random.seed(0)
+    np.random.seed(0)
+    joueurs, reserve = build_toy_match(0, deck='toy')
+    donjon = make_dungeon('toy')
+    winner, _ = ordonnanceur(joueurs, donjon, reserve, log=False, policy=ReplayPolicy(joueurs[0], keys))
+    r_scores = tuple((j.nom, j.score_final) for j in joueurs)
+    r_draws = tuple(int(x) for x in donjon.ordre[:donjon.index])
+    print(f"REPLAY proof: scores match={o_scores == r_scores}, draws match={o_draws == r_draws}")
+    print(f"  recorded {len(keys)} seat-0 keys | orig {o_scores} | replay {r_scores}")
 
     base_draws, base_scores = run(0)
     K = 6
