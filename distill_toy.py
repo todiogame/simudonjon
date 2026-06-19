@@ -459,7 +459,7 @@ if __name__ == '__main__':
 
     print("[2] training the policy+value net (best-checkpoint by held-out WR)...", flush=True)
     net = make_net()
-    train(net, data, EPOCHS, log_every=max(1, EPOCHS // 8), val_seeds=range(400_000, 400_300))
+    train(net, data, EPOCHS, log_every=max(1, EPOCHS // 15), val_seeds=range(400_000, 401_000))
     torch.save(net.state_dict(), 'artifacts/toy_distill.pt')
     student = lambda s: net_action(net, s)
 
