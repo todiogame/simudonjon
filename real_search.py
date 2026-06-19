@@ -118,18 +118,23 @@ class _ISMCTSPolicy:
         if not keys:                                           # nothing to branch on -> heuristic
             return self._heur(ctx)
         for k in keys:
-            self.node.edges.setdefault(k, [0, 0.0, 0])[2] += 1   # availability
-        untried = [k for k in keys if self.node.edges[k][0] == 0]
-        if untried:
-            k = untried[self.tree_rng.randrange(len(untried))]
-            self.path.append((self.node, k))
+            self.node.edges.setdefault(k, [0, 0.0, 0])
+        h_key = action_key(ctx, self.heur.decide(ctx))         # heuristic PRIOR: stay close to it,
+        prior = {k: (0.75 if k == h_key else 0.25 / max(1, len(keys) - 1)) for k in keys}
+        if h_key not in prior:                                 # heuristic chose an unlisted action
+            prior = {k: 1.0 / len(keys) for k in keys}
+        N = sum(self.node.edges[k][0] for k in keys)
+        # PUCT: Q(a) + c * P(a) * sqrt(N+1) / (1 + n(a)) -- deviate from the prior only if Q backs it
+        def puct(k):
+            e = self.node.edges[k]
+            q = e[1] / e[0] if e[0] else 0.0
+            return q + self.c * prior[k] * math.sqrt(N + 1) / (1 + e[0])
+        k = max(keys, key=puct)
+        self.path.append((self.node, k))
+        if self.node.edges[k][0] == 0:                         # leaf -> expand it, then roll out
             self.node.children.setdefault(k, Node())
-            self.rollout = True                                # expand one node, then roll out
+            self.rollout = True
         else:
-            logN = math.log(sum(self.node.edges[k][2] for k in keys))
-            k = max(keys, key=lambda x: (self.node.edges[x][1] / self.node.edges[x][0]
-                                         + self.c * math.sqrt(logN / self.node.edges[x][0])))
-            self.path.append((self.node, k))
             self.node = self.node.children.setdefault(k, Node())
         return action_from_key(ctx, k, self.heur, lambda: self._heur(ctx))
 
