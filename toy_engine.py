@@ -411,7 +411,12 @@ def heuristic_action(s):
               + (1 if _holds(p, 'osselets') else 0) + (1 if _holds(p, 'coquille') else 0))
 
     if kind == 'replay':
-        return n_deadly <= covers
+        # on par with ai_policy.should_replay: PASS as soon as ANY remaining monster deals
+        # >2 and isn't FREELY executable (reusable marteau/torche). One-shots/saves are NOT
+        # "easy coverage", so it plays one card then passes whenever a real threat remains --
+        # it does NOT keep re-drawing early (matches simudonjon's "pass almost every turn").
+        return not any(q > 2 and not free_kill(q, t)
+                       for q, t in (DECK[i] for i in s.order[s.idx:]))
 
     if kind == 'flee':
         if s.current is None:                            # BLIND fresh flee (card not revealed yet)
