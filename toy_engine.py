@@ -1,40 +1,36 @@
 """Minimal, CLONEABLE, STEPPABLE toy engine -- a clean state machine so MCTS/ISMCTS
 can explore fast (no re-simulation).
 
-Faithful to the REAL simudonjon (simu.py `ordonnanceur`):
-  - Players ALTERNATE turns. A turn = face one card. After defeating it, the player
-    decides to REPLAY (keep the turn) or PASS. A player stays IN the dungeon across
-    turns; they only leave by fleeing successfully or dying.
-  - MONSTER-PASSING: fleeing/dying hands the monster to the next player. Fleeing is
-    OFFENSIVE.
-  - Round ends on deck-empty (poncé) or all-out. Scoring: poncéurs (still IN) count and
-    exclude fleers; else the alive fleers count; the dead never count. Top score wins.
-  - NO native "heal" or "save" action: using ANY object (kill, heal, survive) is the
-    SAME decision -- the "use an object" phase, which is a LOOP (you may use several
-    objects in a row, e.g. heal then execute). Death-saves are just objects you may
-    play when the monster's damage >= your PV. You may also resolve and die on purpose.
-  - PV has NO ceiling (the real game: pv_total is uncapped; heals can overheal).
+Faithful to the REAL simudonjon (simu.py `ordonnanceur`): players ALTERNATE turns; a
+turn = face one card; after defeating it you REPLAY or PASS; you stay IN the dungeon
+across turns and only leave by fleeing (a d6 roll >= power) or dying; fleeing/dying
+HANDS the monster to the next player (offensive); the round ends on deck-empty (poncé)
+or all-out; scoring = poncéurs (still IN) count and exclude fleers, else the alive
+fleers count, the dead never count; PV is UNCAPPED.
 
-OBJECT POOL (11 real game objects, faithful rules; a game draws 5 symmetric).
-Executors (defeat the monster, no damage taken):
+ONE looping "use an object" decision (no native heal/save): heal, death-saves and
+executors are all objects you may use, several in a row. Two sub-decisions reuse it:
+choosing WHICH object to break (bombe / Limon) and WHICH to repair (couteau).
+
+OBJECT POOL (14):
   marteau  : kills Golem/Squelette, free, reusable.
   torche   : kills power<=2, free, reusable.
-  hache    : kills ANY, one-shot, then discarded (not repairable).
-  midas    : kills power<=4, one-shot, AND heals you by the monster's power.
-  barde    : passive +3 PV; may be broken to kill ANY (you lose the +3 PV).
-  calumet  : kills ANY, one-shot, then your current turn ends immediately.
-Heal:
-  kebab    : +7 PV, one-shot, usable only from your 3rd turn on (does NOT end the fight
-             -> you keep choosing objects).
-Death-saves (playable only when the monster's damage >= your PV; defeat the monster):
-  osselets : survive at 1 PV; reusable but only ARMS at PV>=3 (so re-cross 3 PV -- heal --
-             to trigger it again: the multi-trigger combo).
-  coquille : survive at 3 PV, one-shot.
-Passive PV (applied at game start):
-  armure   : +5 PV.
-  coeur    : +3 PV; +1 PV each time you defeat a monster while already >=2 kills this turn.
-(Excluded for now -- need a learned decision the toy doesn't model yet: pomme=see next
- 3 cards, couteau=repair, bombe=break-another-object.)
+  hache    : kills ANY, one-shot, discarded (NOT repairable).
+  midas    : kills power<=4, one-shot, AND heals by the monster's power.
+  barde    : passive +3 PV; broken to kill ANY (you lose the +3 PV; repairable).
+  calumet  : kills ANY, one-shot, then your current turn ends.
+  bombe    : kills ANY, REUSABLE, but each use BREAKS another of your objects (your
+             choice; breaking a passive-PV object loses those PV).
+  couteau  : one-shot; REPAIR one broken object (your choice; not the hache).
+  kebab    : +7 PV, one-shot, only from your 3rd turn on.
+  pomme    : +3 PV AND reveal the next 3 cards (to you), one-shot.
+  osselets : survive a lethal hit at 1 PV; reusable but only ARMS at PV>=3.
+  coquille : survive a lethal hit at 3 PV; one-shot.
+  armure   : passive +5 PV.
+  coeur    : passive +3 PV; +1 PV per defeat once you have >=2 kills this turn.
+
+DUNGEON: plain monsters + the LIMON event (power 0): if you FIGHT it you must eat
+(break) one of your objects; if you EXECUTE it with an object, no loss.
 
 API: s=new_game(seed,hand); kind,opts=legal(s); s=step(s,action); s.terminal,s.winner.
 """
@@ -42,19 +38,21 @@ from __future__ import annotations
 
 import copy
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 PV_START = 10
 HEAL = 7
 KEBAB_MIN_TURN = 3
 OSSELETS_PV = 1
-OSSELETS_THRESHOLD = 3      # osselets only arms at PV>=3 (re-cross 3 PV -- e.g. heal -- to re-trigger)
+OSSELETS_THRESHOLD = 3
 COQUILLE_PV = 3
+POMME_HEAL = 3
+POMME_LOOKAHEAD = 3
 
-POOL = ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet',
-        'osselets', 'coquille', 'kebab', 'armure', 'coeur')
+POOL = ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet', 'bombe',
+        'couteau', 'kebab', 'pomme', 'osselets', 'coquille', 'armure', 'coeur')
 
-EXECUTORS = ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet')
+EXECUTORS = ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet', 'bombe')
 _EXEC_PRED = {
     'marteau': lambda q, t: t in ('Golem', 'Squelette'),
     'torche':  lambda q, t: q <= 2,
@@ -62,16 +60,11 @@ _EXEC_PRED = {
     'midas':   lambda q, t: q <= 4,
     'barde':   lambda q, t: True,
     'calumet': lambda q, t: True,
+    'bombe':   lambda q, t: True,
 }
-_ONESHOT_EXEC = ('hache', 'midas', 'barde', 'calumet')   # consumed/broken on use
-_PASSIVE_PV = {'armure': 5, 'coeur': 3, 'barde': 3}      # +PV at game start
+_ONESHOT_EXEC = ('hache', 'midas', 'barde', 'calumet')   # consumed/broken on use (bombe is reusable)
+_PASSIVE_PV = {'armure': 5, 'coeur': 3, 'barde': 3}      # +PV at game start (lost if broken)
 
-
-def sample_hand(seed, k=5):
-    return random.Random(seed).sample(POOL, k)
-
-
-# --- the (plain) dungeon -----------------------------------------------------
 DECK = (
     (1, 'Gobelin'), (1, 'Gobelin'), (1, 'Gobelin'), (1, 'Gobelin'),
     (2, 'Squelette'), (2, 'Squelette'), (2, 'Squelette'), (2, 'Squelette'),
@@ -81,18 +74,19 @@ DECK = (
     (6, 'Liche'), (6, 'Liche'),
     (7, 'Demon'), (7, 'Demon'),
     (9, 'Dragon'), (9, 'Dragon'),
-)  # 26 cards
-TYPES = ('Gobelin', 'Squelette', 'Orc', 'Vampire', 'Golem', 'Liche', 'Demon', 'Dragon')
+    (0, 'Limon'), (0, 'Limon'),                          # event: fight it -> eat an object
+)  # 28 cards
+TYPES = ('Gobelin', 'Squelette', 'Orc', 'Vampire', 'Golem', 'Liche', 'Demon', 'Dragon', 'Limon')
 
 
 @dataclass
 class Player:
     pv: int
-    objs: dict           # name -> intact(bool)
+    objs: dict
     score: int = 0
-    status: str = 'in'   # 'in' | 'fled' | 'dead'
-    turn: int = 0        # turns begun (kebab gated at >=3)
-    kills_turn: int = 0  # defeats this turn (coeur bonus)
+    status: str = 'in'
+    turn: int = 0
+    kills_turn: int = 0
 
 
 @dataclass
@@ -101,14 +95,20 @@ class State:
     idx: int
     players: list
     to_move: int
-    phase: str                   # 'flee' | 'object' | 'replay' | 'terminal'
-    current: tuple = None        # (power, type) being faced (drawn or PASSED), or None
+    phase: str                   # 'flee'|'object'|'break'|'repair'|'replay'|'terminal'
+    current: tuple = None        # (power, type) faced (drawn or PASSED), or None
     terminal: bool = False
     winner: int = None
     rng: object = None
+    known_until: list = field(default_factory=lambda: [0, 0])   # per-seat: order known up to here
+    break_then: str = None       # why we're in 'break' ('bombe' -> still must defeat; 'limon' -> done)
 
     def clone(self):
         return copy.deepcopy(self)
+
+
+def sample_hand(seed, k=5):
+    return random.Random(seed).sample(POOL, k)
 
 
 def new_game(seed, hand):
@@ -117,7 +117,8 @@ def new_game(seed, hand):
     rng.shuffle(order)
     pv0 = PV_START + sum(_PASSIVE_PV.get(n, 0) for n in hand)
     players = [Player(pv=pv0, objs={n: True for n in hand}) for _ in range(2)]
-    s = State(order=tuple(order), idx=0, players=players, to_move=0, phase='flee', rng=rng)
+    s = State(order=tuple(order), idx=0, players=players, to_move=0, phase='flee', rng=rng,
+              known_until=[0, 0])
     return _begin_fresh_turn(s, 0)
 
 
@@ -125,21 +126,40 @@ def _holds(p, name):
     return p.objs.get(name, False)
 
 
+def _break_targets(p, exclude=None):
+    """Intact objects whose breaking won't kill us (passives gated by their PV)."""
+    return [n for n, ok in p.objs.items()
+            if ok and n != exclude and _PASSIVE_PV.get(n, 0) < p.pv]
+
+
+def _repair_targets(p):
+    """Broken objects we may repair (not the discarded hache, not the couteau itself)."""
+    return [n for n, ok in p.objs.items() if not ok and n not in ('hache', 'couteau')]
+
+
 def _object_options(s, p):
-    """Usable held objects + 'resolve', for the combat object loop."""
     q, t = s.current
     opts = []
     for n in EXECUTORS:
-        if _holds(p, n) and _EXEC_PRED[n](q, t) and not (n == 'barde' and p.pv <= 3):
-            opts.append(n)
+        if not _holds(p, n) or not _EXEC_PRED[n](q, t):
+            continue
+        if n == 'barde' and p.pv <= 3:
+            continue
+        if n == 'bombe' and not _break_targets(p, exclude='bombe'):
+            continue
+        opts.append(n)
     if _holds(p, 'kebab') and p.turn >= KEBAB_MIN_TURN:
         opts.append('kebab')
-    if q >= p.pv:                                    # lethal -> death-saves are usable
-        if _holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD:   # osselets only arms at PV>=3
+    if _holds(p, 'pomme'):
+        opts.append('pomme')
+    if _holds(p, 'couteau') and _repair_targets(p):
+        opts.append('couteau')
+    if q >= p.pv:
+        if _holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD:
             opts.append('osselets')
         if _holds(p, 'coquille'):
             opts.append('coquille')
-    opts.append('resolve')                           # take the hit (tank, or die if lethal)
+    opts.append('resolve')
     return opts
 
 
@@ -149,6 +169,11 @@ def legal(s):
         return 'flee', [True, False]
     if s.phase == 'object':
         return 'object', _object_options(s, p)
+    if s.phase == 'break':
+        excl = 'bombe' if s.break_then == 'bombe' else None
+        return 'break', _break_targets(p, exclude=excl)
+    if s.phase == 'repair':
+        return 'repair', _repair_targets(p)
     if s.phase == 'replay':
         return 'replay', [True, False]
     return 'terminal', []
@@ -233,6 +258,22 @@ def _finish(s):
     return s
 
 
+def _resolve_hit(s, p):
+    """The player takes the faced card's hit (chose 'resolve' / no object)."""
+    q, t = s.current
+    if q >= p.pv:                                # lethal, no save chosen -> die on purpose
+        p.status = 'dead'
+        return _pass_carried(s)
+    p.pv -= q
+    _defeat(s, p)
+    if t == 'Limon' and _break_targets(p):       # fighting the Limon -> it eats one of your objects
+        s.break_then = 'limon'
+        s.phase = 'break'
+        return s
+    s.phase = 'replay'
+    return s
+
+
 def step(s, action):
     p = s.players[s.to_move]
     if s.phase == 'flee':
@@ -242,14 +283,28 @@ def step(s, action):
             return _pass_carried(s)
         s.phase = 'object'
         return s
+
     if s.phase == 'object':
         q, t = s.current
         if action == 'kebab' and _holds(p, 'kebab') and p.turn >= KEBAB_MIN_TURN:
-            p.pv += HEAL                              # uncapped; stay in the loop
+            p.pv += HEAL
             p.objs['kebab'] = False
+            return s                                       # stay in the loop
+        if action == 'pomme' and _holds(p, 'pomme'):
+            p.pv += POMME_HEAL
+            p.objs['pomme'] = False
+            s.known_until[s.to_move] = max(s.known_until[s.to_move], s.idx + POMME_LOOKAHEAD)
+            return s                                       # stay in the loop
+        if action == 'couteau' and _holds(p, 'couteau') and _repair_targets(p):
+            p.objs['couteau'] = False
+            s.phase = 'repair'
+            return s
+        if action == 'bombe' and _holds(p, 'bombe') and _break_targets(p, exclude='bombe'):
+            s.break_then = 'bombe'                         # break first, then the kill
+            s.phase = 'break'
             return s
         if action == 'osselets' and _holds(p, 'osselets') and q >= p.pv and p.pv >= OSSELETS_THRESHOLD:
-            p.pv = OSSELETS_PV                        # reusable, but only armed at PV>=3
+            p.pv = OSSELETS_PV
             _defeat(s, p)
             s.phase = 'replay'
             return s
@@ -261,64 +316,90 @@ def step(s, action):
             return s
         if action in EXECUTORS and _holds(p, action) and _EXEC_PRED[action](q, t):
             if action == 'midas':
-                p.pv += q                             # heals by the monster's power (uncapped)
+                p.pv += q
                 p.objs['midas'] = False
             elif action == 'barde':
                 p.objs['barde'] = False
-                p.pv -= 3                             # lose the passive +3
-            elif action in _ONESHOT_EXEC:             # hache / calumet
+                p.pv -= 3
+            elif action in _ONESHOT_EXEC:                  # hache / calumet
                 p.objs[action] = False
             _defeat(s, p)
             if action == 'calumet':
-                return _pass_turn(s)                  # ends the current turn
+                return _pass_turn(s)
             s.phase = 'replay'
             return s
-        # 'resolve' (or anything illegal) -> take the hit
-        if q >= p.pv:                                 # lethal, no save chosen -> die on purpose
-            p.status = 'dead'
-            return _pass_carried(s)
-        p.pv -= q
-        _defeat(s, p)
+        return _resolve_hit(s, p)                          # 'resolve' (or anything illegal)
+
+    if s.phase == 'break':
+        if action in p.objs and p.objs[action]:
+            p.objs[action] = False
+            p.pv -= _PASSIVE_PV.get(action, 0)             # lose passive PV if it gave any
+        if s.break_then == 'bombe':                        # bombe's kill happens after the break
+            _defeat(s, p)
+        s.break_then = None
         s.phase = 'replay'
         return s
+
+    if s.phase == 'repair':
+        if action in p.objs and not p.objs[action]:
+            p.objs[action] = True
+            p.pv += _PASSIVE_PV.get(action, 0)             # regain passive PV
+        s.phase = 'object'                                 # back to the loop, same monster
+        return s
+
     if s.phase == 'replay':
         return _continue_same(s) if action else _pass_turn(s)
     return s
 
 
-# --- a reasonable baseline heuristic (returns one action per call; the object phase
-#     is a loop, so it is re-queried until the monster is resolved) -------------------
+# --- baseline heuristic (one action per call; the object loop re-queries it) ---
 def heuristic_action(s):
     kind, opts = legal(s)
     p = s.players[s.to_move]
     opp = s.players[1 - s.to_move]
 
+    if kind == 'break':
+        # eat/sacrifice the least valuable: spend passives last, then by a rough order
+        order = ['pomme', 'kebab', 'couteau', 'midas', 'torche', 'marteau', 'calumet',
+                 'bombe', 'hache', 'coquille', 'osselets', 'coeur', 'barde', 'armure']
+        return next((n for n in order if n in opts), opts[0])
+
+    if kind == 'repair':
+        # restore the most valuable broken object
+        order = ['osselets', 'coquille', 'bombe', 'calumet', 'barde', 'marteau', 'torche',
+                 'midas', 'armure', 'coeur', 'kebab', 'pomme', 'couteau']
+        return next((n for n in order if n in opts), opts[0])
+
     if kind == 'object':
         q, t = s.current
         free = [n for n in ('marteau', 'torche') if n in opts]
         if free:
-            return free[0]                            # free reusable kill: always good
+            return free[0]                                 # free reusable kill (also dodges Limon's eat)
         if q < p.pv:
-            return 'resolve'                          # survivable: tank, save the objects
-        # lethal, no free kill:
+            return 'resolve'                               # survivable: tank, keep objects
         if 'osselets' in opts:
-            return 'osselets'                         # reusable save (-> 1 PV)
-        for n in ('midas', 'hache', 'calumet', 'barde'):   # spend a one-shot executor
+            return 'osselets'
+        for n in ('midas', 'hache', 'calumet'):            # cheap one-shot executors
             if n in opts:
                 return n
         if 'coquille' in opts:
-            return 'coquille'                         # one-shot save (-> 3 PV)
+            return 'coquille'
+        if 'bombe' in opts:
+            return 'bombe'                                 # kill any, at the cost of an object
+        if 'barde' in opts:
+            return 'barde'
         if 'kebab' in opts and p.pv + HEAL > q:
-            return 'kebab'                            # heal enough to survive, then tank
-        return 'resolve'                              # nothing left -> die
+            return 'kebab'
+        if 'pomme' in opts and p.pv + POMME_HEAL > q:
+            return 'pomme'
+        return 'resolve'                                   # nothing left -> die
 
-    # flee / replay: danger read over the remaining deck (composition is legal info)
     def free_kill(q, t):
         return ((t in ('Golem', 'Squelette') and _holds(p, 'marteau'))
                 or (q <= 2 and _holds(p, 'torche')))
     n_deadly = sum(1 for q, t in (DECK[i] for i in s.order[s.idx:])
                    if q >= p.pv and not free_kill(q, t))
-    covers = (sum(1 for n in ('hache', 'calumet', 'barde') if _holds(p, n))
+    covers = (sum(1 for n in ('hache', 'calumet', 'barde', 'bombe') if _holds(p, n))
               + (1 if _holds(p, 'osselets') else 0) + (1 if _holds(p, 'coquille') else 0))
 
     if kind == 'replay':

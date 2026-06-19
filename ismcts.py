@@ -28,11 +28,14 @@ class Node:
         self.children = {}   # action -> Node
 
 
-def _determinize(root, rng):
+def _determinize(root, rng, seat):
     s = root.clone()
-    rem = list(s.order[s.idx:])
+    # keep the cards the searching seat already KNOWS (a pomme revealed the next few) fixed;
+    # only reshuffle the genuinely-unseen tail.
+    keep = max(s.idx, min(s.known_until[seat], len(s.order)))
+    rem = list(s.order[keep:])
     rng.shuffle(rem)
-    s.order = tuple(s.order[:s.idx]) + tuple(rem)
+    s.order = tuple(s.order[:keep]) + tuple(rem)
     s.rng = random.Random(rng.getrandbits(32))   # fresh flee-dice for this sampled world
     return s
 
@@ -55,7 +58,7 @@ def ismcts_decide(root, seat, n_iters, return_visits=False):
     rootnode = Node()
     rng = random.Random(root.idx * 7919 + seat * 31 + 1)
     for _ in range(n_iters):
-        s = _determinize(root, rng)
+        s = _determinize(root, rng, seat)
         node = rootnode
         path = []
         while not s.terminal:

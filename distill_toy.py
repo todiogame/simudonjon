@@ -24,23 +24,16 @@ import ismcts
 import toy_engine as te
 
 HAND_SIZE = 5
-POWERS = [1, 2, 3, 4, 5, 6, 7, 9]
-OBJ = list(te.POOL)                         # 11-object catalogue (embedded)
+OBJ = list(te.POOL)                         # 14-object catalogue (each gets an embedding)
 OBJ_IDX = {n: i for i, n in enumerate(OBJ)}
-# objects that can be *actively used* as an action (armure/coeur are passive only)
-ACTION_OBJS = ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet',
-               'kebab', 'osselets', 'coquille')
+# every object is a poolable action: used in the object loop, or a break/repair TARGET
+ACTION_OBJS = tuple(OBJ)
 ACTIONS = ['flee_no', 'flee_yes', 'replay_no', 'replay_yes', 'resolve'] \
     + ['use_' + o for o in ACTION_OBJS]
 AIDX = {a: i for i, a in enumerate(ACTIONS)}
-NACT = len(ACTIONS)                         # 14
+NACT = len(ACTIONS)                         # 5 + 14 = 19
 EMB_DIM = 16
-
-# encode() layout (a flat float32 vector; the net does the embedding lookups):
-#   own(4) opp(4) rem(8) phase(3) monster(9=power+type1hot) own_inv(11) opp_inv(11) = 50
-SCAL = 4 + 4 + 8 + 3                         # 19 scalar features
-MON = 1 + len(te.TYPES)                      # 9 monster features
-NFEAT = SCAL + MON + 2 * len(OBJ)            # 50
+NTYPES = len(te.TYPES)                       # 9 card types (incl. Limon)
 
 
 def _action_index(kind, action):
@@ -52,22 +45,28 @@ def _action_index(kind, action):
 
 
 def encode(s):
-    """Observation = LEGAL info only, NO per-object rule features (raw card + inventories)."""
+    """Observation = LEGAL info only; NO per-object/per-card rule features. Cards and
+    objects are categorical ids (the net embeds them). Layout:
+      own(4) opp(4) phase(5) power(1) facedtype(9) deck(9) known(3) owninv(14) oppinv(14) = 63
+    """
     p = s.players[s.to_move]
     o = s.players[1 - s.to_move]
-    rem = [0.0] * len(POWERS)
+    deck = [0.0] * NTYPES
     for i in s.order[s.idx:]:
-        rem[POWERS.index(te.DECK[i][0])] += 1.0
+        deck[te.TYPES.index(te.DECK[i][1])] += 1.0
     cur = s.current
     cq = cur[0] if cur else 0
-    mon = [cq / 10.] + [1. if cur is not None and cur[1] == ty else 0. for ty in te.TYPES]
+    ftype = [1. if cur is not None and cur[1] == ty else 0. for ty in te.TYPES]
+    ku = s.known_until[s.to_move]                                  # cards a pomme revealed to us
+    known = [(te.DECK[s.order[s.idx + k]][0] / 10. if s.idx + k < min(ku, len(s.order)) else 0.0)
+             for k in range(te.POMME_LOOKAHEAD)]
     own_inv = [1. if p.objs.get(n) else 0. for n in OBJ]
     opp_inv = [1. if o.objs.get(n) else 0. for n in OBJ]
-    feats = [p.pv / 25., p.score / 26., min(p.turn, 9) / 9., min(p.kills_turn, 5) / 5.,
-             o.pv / 25., o.score / 26., float(o.status == 'dead'), float(o.status == 'fled'),
-             *[c / 4. for c in rem],
-             float(s.phase == 'flee'), float(s.phase == 'object'), float(s.phase == 'replay'),
-             *mon, *own_inv, *opp_inv]
+    feats = [p.pv / 30., p.score / 30., min(p.turn, 9) / 9., min(p.kills_turn, 5) / 5.,
+             o.pv / 30., o.score / 30., float(o.status == 'dead'), float(o.status == 'fled'),
+             float(s.phase == 'flee'), float(s.phase == 'object'), float(s.phase == 'break'),
+             float(s.phase == 'repair'), float(s.phase == 'replay'),
+             cq / 10., *ftype, *[c / 4. for c in deck], *known, *own_inv, *opp_inv]
     return np.asarray(feats, dtype=np.float32)
 
 
@@ -107,6 +106,8 @@ def _gen_worker(arg):
                         st['save_' + best] += 1
                     elif best in OBJ:
                         st['use_' + best] += 1
+                elif kind in ('break', 'repair'):
+                    st[kind] += 1
             else:
                 s = te.step(s, te.heuristic_action(s))
         ag, op = s.players[seat], s.players[1 - seat]
@@ -207,9 +208,10 @@ def stats_from_gen(st):
 # entity too (not raw power+type features) -> ready for cards with powers/effects.
 # encode() is unchanged; we just read its slices and route the categorical ones
 # (faced-card type, remaining-deck composition, both inventories) through embeddings.
-NTYPES = len(te.TYPES)
-# encode() layout: own4 | opp4 | rem8 | phase3 | power1 | facedtype8 | owninv11 | oppinv11
-_SC_END, _REM0, _PH0, _POW, _FT0, _OI0, _PI0 = 8, 8, 16, 19, 20, 28, 28 + len(OBJ)
+# encode() slices: own4 | opp4 | phase5 | power1 | facedtype9 | deck9 | known3 | owninv14 | oppinv14
+_PH0, _POW, _FT0, _DK0, _KN0, _OI0, _PI0 = 8, 13, 14, 14 + NTYPES, 14 + 2 * NTYPES, \
+    14 + 2 * NTYPES + te.POMME_LOOKAHEAD, 14 + 2 * NTYPES + te.POMME_LOOKAHEAD + len(OBJ)
+NOBJ = len(OBJ)
 
 
 def make_net():
@@ -219,9 +221,9 @@ def make_net():
     class Net(nn.Module):
         def __init__(s):
             super().__init__()
-            s.obj_emb = nn.Embedding(len(OBJ), EMB_DIM)        # one embedding per object
+            s.obj_emb = nn.Embedding(NOBJ, EMB_DIM)            # one embedding per object
             s.card_emb = nn.Embedding(NTYPES, EMB_DIM)         # one embedding per card (entity)
-            scal = 4 + 4 + 3 + 1                               # own, opp, phase, faced power
+            scal = 4 + 4 + 5 + 1 + te.POMME_LOOKAHEAD          # own, opp, phase, power, known-cards
             s.trunk = nn.Sequential(nn.Linear(scal + 4 * EMB_DIM, 128), nn.ReLU(),
                                     nn.Linear(128, 128), nn.ReLU())
             s.struct = nn.Linear(128, 5)                       # flee_no/yes, replay_no/yes, resolve
@@ -232,24 +234,25 @@ def make_net():
 
         def forward(s, x):
             own, opp = x[:, 0:4], x[:, 4:8]
-            rem = x[:, _REM0:_PH0]                              # remaining-deck composition (per card)
             phase = x[:, _PH0:_POW]
             power = x[:, _POW:_FT0]                             # faced card's current power (visible)
-            ftype = x[:, _FT0:_OI0]                             # faced card one-hot (entity id)
+            ftype = x[:, _FT0:_DK0]                             # faced card one-hot (entity id)
+            deck = x[:, _DK0:_KN0]                              # remaining-deck composition (per card)
+            known = x[:, _KN0:_OI0]                             # powers of the pomme-revealed next cards
             owninv, oppinv = x[:, _OI0:_PI0], x[:, _PI0:]
             own_oe = owninv @ s.obj_emb.weight                 # pooled held-object embeddings
             opp_oe = oppinv @ s.obj_emb.weight
             faced_ce = ftype @ s.card_emb.weight               # the faced card's embedding
-            deck_ce = rem @ s.card_emb.weight                  # pooled remaining-deck embedding
-            h = s.trunk(torch.cat([own, opp, phase, power, own_oe, opp_oe, faced_ce, deck_ce], 1))
+            deck_ce = deck @ s.card_emb.weight                 # pooled remaining-deck embedding
+            h = s.trunk(torch.cat([own, opp, phase, power, known, own_oe, opp_oe, faced_ce, deck_ce], 1))
             struct = s.struct(h)
             B = h.shape[0]
-            oe = s.obj_emb(s.act_ids)                          # (9,EMB) the usable-object embeddings
-            obj_in = torch.cat([h.unsqueeze(1).expand(B, len(ACTION_OBJS), 128),
-                                oe.unsqueeze(0).expand(B, len(ACTION_OBJS), EMB_DIM),
-                                faced_ce.unsqueeze(1).expand(B, len(ACTION_OBJS), EMB_DIM),
-                                power.unsqueeze(1).expand(B, len(ACTION_OBJS), 1)], 2)
-            obj = s.scorer(obj_in).squeeze(-1)                 # (B,9) pointer scores over usable objects
+            oe = s.obj_emb(s.act_ids)                          # (14,EMB) all object embeddings
+            obj_in = torch.cat([h.unsqueeze(1).expand(B, NOBJ, 128),
+                                oe.unsqueeze(0).expand(B, NOBJ, EMB_DIM),
+                                faced_ce.unsqueeze(1).expand(B, NOBJ, EMB_DIM),
+                                power.unsqueeze(1).expand(B, NOBJ, 1)], 2)
+            obj = s.scorer(obj_in).squeeze(-1)                 # (B,14) pointer scores over every object
             return torch.cat([struct, obj], 1), s.val(h).squeeze(-1)
     return Net()
 
@@ -328,6 +331,8 @@ def _run_collect(agent_fn, seed, seat, ev):
                 ev['save_' + a] += 1
             elif a in OBJ:
                 ev['use_' + a] += 1
+        elif kind in ('break', 'repair'):
+            ev[kind] += 1
     return s
 
 
@@ -364,9 +369,11 @@ def print_stats(label, r):
     print(f"    heuristic  fled/dead/ponce : {r['op_fled']/n*100:.0f}% / {r['op_dead']/n*100:.0f}% / {r['op_ponce']/n*100:.0f}%")
     ev = r['ev']
     per = lambda k: ev.get(k, 0) / n
-    print(f"    saves/game  : osselets {per('save_osselets'):.2f}, coquille {per('save_coquille'):.2f}")
+    print(f"    saves/game  : osselets {per('save_osselets'):.2f}, coquille {per('save_coquille'):.2f}"
+          f"   |  break {per('break'):.2f}, repair {per('repair'):.2f}")
     print(f"    uses/game   : " + ", ".join(
-        f"{o}={per('use_' + o):.2f}" for o in ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet', 'kebab')))
+        f"{o}={per('use_' + o):.2f}" for o in
+        ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet', 'bombe', 'kebab', 'pomme', 'couteau')))
 
 
 def _peek_roll(s):
@@ -396,6 +403,10 @@ def verbose_game(agent_fn, seed, tag0='NET '):
             line = f"{name[mv]} flees {cur[1]}({cur[0]}): roll {roll} -> {'ESCAPE (passes it on)' if roll >= cur[0] else 'FAIL'}"
         elif kind == 'object':
             line = f"{name[mv]} vs {cur[1]}({cur[0]}): {a}"
+        elif kind == 'break':
+            line = f"{name[mv]} breaks {a}"
+        elif kind == 'repair':
+            line = f"{name[mv]} repairs {a}"
         elif kind == 'replay':
             line = f"{name[mv]} {'REPLAY' if a else 'pass turn'}"
         s = te.step(s, a)
@@ -403,6 +414,12 @@ def verbose_game(agent_fn, seed, tag0='NET '):
             ag = s.players[mv]
             if a == 'kebab':
                 line += f"  -> heal (pv {bpv}->{ag.pv})"
+            elif a == 'pomme':
+                line += f"  -> +{ag.pv - bpv}pv, peeks next 3"
+            elif a == 'bombe':
+                line += "  -> (must break an object...)"
+            elif a == 'couteau':
+                line += "  -> (repair...)"
             elif a == 'osselets':
                 line += "  -> survive @1 (+1)"
             elif a == 'coquille':
