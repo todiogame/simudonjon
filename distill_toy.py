@@ -390,17 +390,25 @@ def verbose_game(agent_fn, seed, tag0='NET '):
     while not s.terminal:
         mv = s.to_move
         if mv != last:
-            print(f"  -- turn {s.players[mv].turn}: {name[mv]} (pv{s.players[mv].pv} sc{s.players[mv].score}) "
-                  f"faces {s.current[1]}({s.current[0]}) --")
+            face = f" faces {s.current[1]}({s.current[0]})" if s.current else ""   # fresh turn: card still hidden
+            print(f"  -- turn {s.players[mv].turn}: {name[mv]} (pv{s.players[mv].pv} sc{s.players[mv].score}){face} --")
             last = mv
         kind, _ = te.legal(s)
         cur = s.current
         a = agent_fn(s) if mv == 0 else te.heuristic_action(s)
         bpv, bsc = s.players[mv].pv, s.players[mv].score
+        roll = _peek_roll(s) if (kind == 'flee' and a) else None
+        s = te.step(s, a)
         line = None
-        if kind == 'flee' and a:
-            roll = _peek_roll(s)
-            line = f"{name[mv]} flees {cur[1]}({cur[0]}): roll {roll} -> {'ESCAPE (passes it on)' if roll >= cur[0] else 'FAIL'}"
+        if kind == 'flee':
+            if a:                                          # announce flee -> roll -> reveal
+                shown = s.current
+                rev = f" -> reveals {shown[1]}({shown[0]})" if cur is None else ""
+                head = "flees blind" if cur is None else f"flees {shown[1]}({shown[0]})"
+                verdict = 'ESCAPE (passes it on)' if s.players[mv].status == 'fled' else 'FAIL, must fight'
+                line = f"{name[mv]} {head}: roll {roll}{rev} -> {verdict}"
+            elif cur is None:                              # no flee on a fresh draw -> card revealed now
+                line = f"{name[mv]} draws {s.current[1]}({s.current[0]}) (no flee)"
         elif kind == 'object':
             line = f"{name[mv]} vs {cur[1]}({cur[0]}): {a}"
         elif kind == 'break':
@@ -409,7 +417,6 @@ def verbose_game(agent_fn, seed, tag0='NET '):
             line = f"{name[mv]} repairs {a}"
         elif kind == 'replay':
             line = f"{name[mv]} {'REPLAY' if a else 'pass turn'}"
-        s = te.step(s, a)
         if kind == 'object':
             ag = s.players[mv]
             if a == 'kebab':

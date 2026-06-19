@@ -189,12 +189,13 @@ def _next_in_after(s, start):
     return None
 
 
-def _setup_facing(s):
-    if s.current is None:
-        if s.idx >= len(s.order):
-            return _finish(s)
-        s.current = DECK[s.order[s.idx]]
-        s.idx += 1
+def _face_next(s):
+    """Set the to_move player to face a card. A CARRIED monster (s.current set) is known.
+    A FRESH draw stays HIDDEN (s.current is None) until the flee decision is made -> the
+    flee gamble is BLIND, per the rules: announce flee + roll the d6, THEN draw the card.
+    (The reveal happens inside step()'s flee phase, after the roll / on a no-flee.)"""
+    if s.current is None and s.idx >= len(s.order):
+        return _finish(s)                       # deck empty, nothing to draw -> poncé
     s.phase = 'flee'
     return s
 
@@ -209,7 +210,7 @@ def _begin_fresh_turn(s, seat):
     p.turn += 1
     p.kills_turn = 0
     s.current = None
-    return _setup_facing(s)
+    return _face_next(s)
 
 
 def _begin_carried_turn(s, seat):
@@ -217,8 +218,7 @@ def _begin_carried_turn(s, seat):
     p = s.players[seat]
     p.turn += 1
     p.kills_turn = 0
-    s.phase = 'flee'
-    return s
+    return _face_next(s)                         # current stays (carried = known monster)
 
 
 def _pass_carried(s):
@@ -234,7 +234,7 @@ def _pass_turn(s):
 
 def _continue_same(s):
     s.current = None
-    return _setup_facing(s)
+    return _face_next(s)
 
 
 def _defeat(s, p):
@@ -277,10 +277,18 @@ def _resolve_hit(s, p):
 def step(s, action):
     p = s.players[s.to_move]
     if s.phase == 'flee':
-        power, _ = s.current
-        if action and s.rng.randint(1, 6) >= power:
-            p.status = 'fled'
-            return _pass_carried(s)
+        if action:                                      # announce flee, roll the d6, THEN reveal
+            roll = s.rng.randint(1, 6)
+            if s.current is None:                        # fresh draw -> revealed only now
+                s.current = DECK[s.order[s.idx]]
+                s.idx += 1
+            if roll >= s.current[0]:
+                p.status = 'fled'
+                return _pass_carried(s)
+            # flee failed -> must fight the (now revealed) monster
+        elif s.current is None:                          # no flee on a fresh draw -> reveal to fight
+            s.current = DECK[s.order[s.idx]]
+            s.idx += 1
         s.phase = 'object'
         return s
 
@@ -406,7 +414,14 @@ def heuristic_action(s):
         return n_deadly <= covers
 
     if kind == 'flee':
-        q, t = s.current
+        if s.current is None:                            # BLIND fresh flee (card not revealed yet)
+            if opp.status == 'dead':
+                return True                              # last alive -> try to exit and lock the win
+            if opp.status == 'fled' and p.score > opp.score:
+                return True                              # ahead of a fled opponent -> lock it
+            n_rem = max(1, len(s.order) - s.idx)
+            return bool(p.pv <= 6 and n_deadly > covers and n_deadly / n_rem >= 0.3)  # fragile + risky deck
+        q, t = s.current                                 # carried (known) monster -> informed flee
         if free_kill(q, t) or q < p.pv:
             return False
         fleeable = q <= 6
