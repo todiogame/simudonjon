@@ -27,7 +27,8 @@ Heal:
   kebab    : +7 PV, one-shot, usable only from your 3rd turn on (does NOT end the fight
              -> you keep choosing objects).
 Death-saves (playable only when the monster's damage >= your PV; defeat the monster):
-  osselets : survive at 1 PV, reusable.
+  osselets : survive at 1 PV; reusable but only ARMS at PV>=3 (so re-cross 3 PV -- heal --
+             to trigger it again: the multi-trigger combo).
   coquille : survive at 3 PV, one-shot.
 Passive PV (applied at game start):
   armure   : +5 PV.
@@ -47,6 +48,7 @@ PV_START = 10
 HEAL = 7
 KEBAB_MIN_TURN = 3
 OSSELETS_PV = 1
+OSSELETS_THRESHOLD = 3      # osselets only arms at PV>=3 (re-cross 3 PV -- e.g. heal -- to re-trigger)
 COQUILLE_PV = 3
 
 POOL = ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet',
@@ -133,7 +135,7 @@ def _object_options(s, p):
     if _holds(p, 'kebab') and p.turn >= KEBAB_MIN_TURN:
         opts.append('kebab')
     if q >= p.pv:                                    # lethal -> death-saves are usable
-        if _holds(p, 'osselets'):
+        if _holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD:   # osselets only arms at PV>=3
             opts.append('osselets')
         if _holds(p, 'coquille'):
             opts.append('coquille')
@@ -246,8 +248,8 @@ def step(s, action):
             p.pv += HEAL                              # uncapped; stay in the loop
             p.objs['kebab'] = False
             return s
-        if action == 'osselets' and _holds(p, 'osselets') and q >= p.pv:
-            p.pv = OSSELETS_PV                        # reusable
+        if action == 'osselets' and _holds(p, 'osselets') and q >= p.pv and p.pv >= OSSELETS_THRESHOLD:
+            p.pv = OSSELETS_PV                        # reusable, but only armed at PV>=3
             _defeat(s, p)
             s.phase = 'replay'
             return s
@@ -332,7 +334,7 @@ def heuristic_action(s):
         if fleeable and opp.status == 'fled' and p.score > opp.score:
             return True
         killers = [n for n in EXECUTORS if _holds(p, n) and _EXEC_PRED[n](q, t)]
-        save = _holds(p, 'osselets') or _holds(p, 'coquille')
+        save = (_holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD) or _holds(p, 'coquille')
         heal = _holds(p, 'kebab') and p.turn >= KEBAB_MIN_TURN and p.pv + HEAL > q
         return bool(q >= p.pv and not killers and not save and not heal)
     return opts[0] if opts else None
