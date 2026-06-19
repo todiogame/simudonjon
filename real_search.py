@@ -104,6 +104,12 @@ class _ISMCTSPolicy:
     def decide(self, ctx):
         if ctx.actor is not self.searcher or ctx.kind.name not in TREE_KINDS:
             return self._heur(ctx)                             # opponent / structural -> heuristic
+        keys = legal_keys(ctx)
+        if not keys:                                           # forced / no real choice (e.g. empty
+            return self._heur(ctx)                             # sacrifice) -> heuristic, NOT a tree
+        #                                                        node; must skip BEFORE prefix-replay
+        #                                                        so the prefix (which excludes these)
+        #                                                        stays aligned.
         if self.i < len(self.prefix):                          # replay the searcher's tree decisions
             k = self.prefix[self.i]
             self.i += 1
@@ -114,9 +120,6 @@ class _ISMCTSPolicy:
             determinize_unseen(ctx.game.donjon, np.random)
             self.determinized = True
         if self.rollout:                                       # past the expanded leaf -> roll out
-            return self._heur(ctx)
-        keys = legal_keys(ctx)
-        if not keys:                                           # nothing to branch on -> heuristic
             return self._heur(ctx)
         for k in keys:
             self.node.edges.setdefault(k, [0, 0.0, 0])
@@ -187,7 +190,7 @@ def play_teacher_game(seed, searcher_seat, n_iters, c=1.4, p_heur=0.75):
     prefix, records = [], []
     while not drv.terminal:
         ctx = drv.context
-        if ctx.actor is searcher and ctx.kind.name in TREE_KINDS:
+        if ctx.actor is searcher and ctx.kind.name in TREE_KINDS and legal_keys(ctx):
             rs_state, np_state = _rnd.getstate(), np.random.get_state()   # preserve the live game RNG
             best, visits = ismcts_decide(seed, searcher_seat, prefix, n_iters, c=c, p_heur=p_heur)
             _rnd.setstate(rs_state)

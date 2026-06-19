@@ -9,6 +9,14 @@ to match it and then plays one-forward-per-decision (fast). Toy CONTENT on the r
 
 Usage: python real_distill.py [iters] [games] [workers] [epochs] [p_heur]
 """
+import os
+
+# Single-thread numpy/BLAS: the re-sim engine is pure-Python CPU-bound, so multi-threaded BLAS
+# only oversubscribes the cores across the worker pool. Must be set before numpy is imported
+# (spawn workers re-import this module, so they inherit it too).
+for _v in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+    os.environ.setdefault(_v, '1')
+
 import multiprocessing as mp
 import sys
 import time
@@ -95,7 +103,7 @@ def _gen_worker(arg):
         st['w'] += outcome == 1
         st['d'] += outcome == 0
         st['l'] += outcome == -1
-    return out, dict(st)
+    return out, dict(st), (lo, hi)
 
 
 def _gen_game(seed, seat, iters, p_heur):
@@ -116,7 +124,7 @@ def _gen_game(seed, seat, iters, p_heur):
     recs = []
     while not drv.terminal:
         ctx = drv.context
-        if ctx.actor is s and ctx.kind.name in rs.TREE_KINDS:
+        if ctx.actor is s and ctx.kind.name in rs.TREE_KINDS and rs.legal_keys(ctx):
             st1, st2 = random.getstate(), np.random.get_state()
             best, visits = rs.ismcts_decide(seed, seat, prefix, iters, p_heur=p_heur)
             random.setstate(st1)
@@ -143,34 +151,54 @@ def _gen_game(seed, seat, iters, p_heur):
     return [(f, p, m, z) for f, p, m in recs], z, outcome
 
 
-def gen_data(games, iters, workers, p_heur):
+def gen_data(games, iters, workers, p_heur, cache_path=None):
+    """Resumable: after each chunk, atomically checkpoint (data, stats, done-chunks) to
+    cache_path so an interrupted run continues from where it stopped."""
+    import os
+    import pickle
+    from collections import defaultdict
     chunk = max(1, min(10, games // (workers * 4) or 1))
     chunks, lo = [], 0
     while lo < games:
         chunks.append((lo, min(lo + chunk, games), iters, p_heur))
         lo += chunk
-    from collections import defaultdict
-    data, st = [], defaultdict(int)
+
+    data, st, done_chunks = [], defaultdict(int), set()
+    if cache_path and os.path.exists(cache_path):
+        with open(cache_path, 'rb') as f:
+            ck = pickle.load(f)
+        data, done_chunks = ck['data'], set(ck['done_chunks'])
+        for k, v in ck['st'].items():
+            st[k] += v
+        print(f"    resume: {len(done_chunks)} chunks / {st['games']} games / {len(data)} decisions cached", flush=True)
+    todo = [c for c in chunks if (c[0], c[1]) not in done_chunks]
     t0 = time.perf_counter()
-    done = 0
+    done0 = st['games']
 
     def absorb(res):
-        nonlocal done
-        out, cst = res
+        out, cst, key = res
         data.extend(out)
         for k, v in cst.items():
             st[k] += v
-        done += cst.get('games', 0)
+        done_chunks.add(key)
+        if cache_path:
+            tmp = cache_path + '.tmp'
+            with open(tmp, 'wb') as f:
+                pickle.dump({'data': data, 'st': dict(st), 'done_chunks': list(done_chunks)}, f)
+            os.replace(tmp, cache_path)
         el = time.perf_counter() - t0
-        eta = el / done * (games - done) if done else 0
-        print(f"    ... {done}/{games} games | {len(data)} decisions | {el:.0f}s | ETA {eta:.0f}s", flush=True)
+        d = st['games']
+        eta = el / max(1, d - done0) * (games - d)
+        print(f"    ... {d}/{games} games | {len(data)} decisions | {el:.0f}s | ETA {eta:.0f}s", flush=True)
 
-    if workers <= 1:
-        for c in chunks:
+    if not todo:
+        print("    (all chunks cached)", flush=True)
+    elif workers <= 1:
+        for c in todo:
             absorb(_gen_worker(c))
     else:
         with mp.get_context('spawn').Pool(workers) as pool:
-            for res in pool.imap_unordered(_gen_worker, chunks):
+            for res in pool.imap_unordered(_gen_worker, todo):
                 absorb(res)
     return data, dict(st)
 
@@ -300,7 +328,7 @@ def eval_net(net, n, seed0=500_000):
         s = joueurs[seat]
         while not drv.terminal:
             ctx = drv.context
-            use_net = ctx.actor is s and ctx.kind.name in rs.TREE_KINDS
+            use_net = ctx.actor is s and ctx.kind.name in rs.TREE_KINDS and rs.legal_keys(ctx)
             drv.step(net_action(net, ctx, heur) if use_net else heur.decide(ctx))
         winner = drv.result[0] if drv.result else None
         w += winner is s
@@ -319,7 +347,8 @@ if __name__ == '__main__':
     P_HEUR = float(sys.argv[5]) if len(sys.argv) > 5 else 0.75
 
     print(f"[1] gen data: {GAMES} teacher games @ {ITERS} iters, p_heur={P_HEUR}, {WORKERS} workers...", flush=True)
-    data, st = gen_data(GAMES, ITERS, WORKERS, P_HEUR)
+    cache = f'artifacts/real_gen_{ITERS}_{GAMES}_{int(P_HEUR*100)}.pkl'
+    data, st = gen_data(GAMES, ITERS, WORKERS, P_HEUR, cache_path=cache)
     n = st.get('games', 1)
     print(f"    {len(data)} decisions; TEACHER@{ITERS} vs ai_policy: "
           f"win {st['w']/n*100:.0f}% / lose {st['l']/n*100:.0f}% / draw {st['d']/n*100:.0f}%  (N={n})", flush=True)
