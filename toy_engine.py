@@ -1,45 +1,72 @@
 """Minimal, CLONEABLE, STEPPABLE toy engine -- a clean state machine so MCTS/ISMCTS
 can explore fast (no re-simulation).
 
-Deliberately simple (per the brief): plain monsters (power + type, NO special
-effects), a small set of faithful objects, and the core decisions where skill
-lives: heal / flee / which combat object / replay. Two players share a shuffled
-deck (the hidden info); each turn a player faces cards, fighting or fleeing, and
-may keep replaying (facing the next card) or stop. Winner = top score among the
-non-dead.
+Faithful to the REAL simudonjon (simu.py `ordonnanceur`):
+  - Players ALTERNATE turns. A turn = face one card. After defeating it, the player
+    decides to REPLAY (keep the turn) or PASS. A player stays IN the dungeon across
+    turns; they only leave by fleeing successfully or dying.
+  - MONSTER-PASSING: fleeing/dying hands the monster to the next player. Fleeing is
+    OFFENSIVE.
+  - Round ends on deck-empty (poncé) or all-out. Scoring: poncéurs (still IN) count and
+    exclude fleers; else the alive fleers count; the dead never count. Top score wins.
+  - NO native "heal" or "save" action: using ANY object (kill, heal, survive) is the
+    SAME decision -- the "use an object" phase, which is a LOOP (you may use several
+    objects in a row, e.g. heal then execute). Death-saves are just objects you may
+    play when the monster's damage >= your PV. You may also resolve and die on purpose.
+  - PV has NO ceiling (the real game: pv_total is uncapped; heals can overheal).
 
-API for search:
-    s = new_game(seed, hand)            # initial State (at the first decision)
-    kind, options = legal(s)            # current decision
-    s2 = step(s, action)                # -> next State (advanced to next decision
-                                        #    or terminal); s is unchanged (returns a copy)
-    s.terminal, s.winner                # terminal flag + winner seat (or None=draw)
-States are plain dataclasses -> copy.deepcopy clones them for tree search.
+OBJECT POOL (11 real game objects, faithful rules; a game draws 5 symmetric).
+Executors (defeat the monster, no damage taken):
+  marteau  : kills Golem/Squelette, free, reusable.
+  torche   : kills power<=2, free, reusable.
+  hache    : kills ANY, one-shot, then discarded (not repairable).
+  midas    : kills power<=4, one-shot, AND heals you by the monster's power.
+  barde    : passive +3 PV; may be broken to kill ANY (you lose the +3 PV).
+  calumet  : kills ANY, one-shot, then your current turn ends immediately.
+Heal:
+  kebab    : +7 PV, one-shot, usable only from your 3rd turn on (does NOT end the fight
+             -> you keep choosing objects).
+Death-saves (playable only when the monster's damage >= your PV; defeat the monster):
+  osselets : survive at 1 PV, reusable.
+  coquille : survive at 3 PV, one-shot.
+Passive PV (applied at game start):
+  armure   : +5 PV.
+  coeur    : +3 PV; +1 PV each time you defeat a monster while already >=2 kills this turn.
+(Excluded for now -- need a learned decision the toy doesn't model yet: pomme=see next
+ 3 cards, couteau=repair, bombe=break-another-object.)
+
+API: s=new_game(seed,hand); kind,opts=legal(s); s=step(s,action); s.terminal,s.winner.
 """
 from __future__ import annotations
 
 import copy
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 PV_START = 10
-PV_MAX = 10
 HEAL = 7
-OSSELETS_THRESHOLD = 3
+KEBAB_MIN_TURN = 3
+OSSELETS_PV = 1
+COQUILLE_PV = 3
 
-# --- objects (faithful but minimal; rules are GAME rules, not AI) ------------
-KILLERS = ('marteau', 'torche', 'hache')        # used in combat to negate damage + defeat
-ONE_SHOT = ('hache', 'kebab')                    # consumed on use (intact -> broken)
+POOL = ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet',
+        'osselets', 'coquille', 'kebab', 'armure', 'coeur')
+
+EXECUTORS = ('marteau', 'torche', 'hache', 'midas', 'barde', 'calumet')
+_EXEC_PRED = {
+    'marteau': lambda q, t: t in ('Golem', 'Squelette'),
+    'torche':  lambda q, t: q <= 2,
+    'hache':   lambda q, t: True,
+    'midas':   lambda q, t: q <= 4,
+    'barde':   lambda q, t: True,
+    'calumet': lambda q, t: True,
+}
+_ONESHOT_EXEC = ('hache', 'midas', 'barde', 'calumet')   # consumed/broken on use
+_PASSIVE_PV = {'armure': 5, 'coeur': 3, 'barde': 3}      # +PV at game start
 
 
-def _can_kill(name, power, mtype):
-    if name == 'marteau':
-        return mtype in ('Golem', 'Squelette')
-    if name == 'torche':
-        return power <= 2
-    if name == 'hache':
-        return True
-    return False
+def sample_hand(seed, k=5):
+    return random.Random(seed).sample(POOL, k)
 
 
 # --- the (plain) dungeon -----------------------------------------------------
@@ -52,198 +79,266 @@ DECK = (
     (6, 'Liche'), (6, 'Liche'),
     (7, 'Demon'), (7, 'Demon'),
     (9, 'Dragon'), (9, 'Dragon'),
-)  # 26 cards: 4x power 1-5, 2x Liche(6) / Demon(7) / Dragon(9)
+)  # 26 cards
+TYPES = ('Gobelin', 'Squelette', 'Orc', 'Vampire', 'Golem', 'Liche', 'Demon', 'Dragon')
 
 
 @dataclass
 class Player:
     pv: int
-    pv_max: int
     objs: dict           # name -> intact(bool)
     score: int = 0
     status: str = 'in'   # 'in' | 'fled' | 'dead'
+    turn: int = 0        # turns begun (kebab gated at >=3)
+    kills_turn: int = 0  # defeats this turn (coeur bonus)
 
 
 @dataclass
 class State:
-    order: tuple                 # draw order = permutation of DECK indices (hidden)
-    idx: int                     # next card to draw
-    players: list                # [Player, Player]
+    order: tuple
+    idx: int
+    players: list
     to_move: int
-    phase: str                   # 'heal'|'flee'|'object'|'replay'|'terminal'
-    current: tuple = None        # (power, type) being faced, or None
+    phase: str                   # 'flee' | 'object' | 'replay' | 'terminal'
+    current: tuple = None        # (power, type) being faced (drawn or PASSED), or None
     terminal: bool = False
-    winner: int = None           # seat, or None (draw)
-    rng: object = None           # random.Random for the flee dice (in-state -> cloneable)
+    winner: int = None
+    rng: object = None
 
     def clone(self):
         return copy.deepcopy(self)
 
 
 def new_game(seed, hand):
-    """hand = list of object names both seats start with (e.g. ['marteau','osselets',...])."""
     rng = random.Random(seed)
     order = list(range(len(DECK)))
     rng.shuffle(order)
-    armure = hand.count('armure')
-    players = [Player(pv=PV_START + 5 * armure, pv_max=PV_MAX + 5 * armure,
-                      objs={n: True for n in hand}) for _ in range(2)]
-    s = State(order=tuple(order), idx=0, players=players, to_move=0, phase='descend', rng=rng)
-    return _advance(s)
+    pv0 = PV_START + sum(_PASSIVE_PV.get(n, 0) for n in hand)
+    players = [Player(pv=pv0, objs={n: True for n in hand}) for _ in range(2)]
+    s = State(order=tuple(order), idx=0, players=players, to_move=0, phase='flee', rng=rng)
+    return _begin_fresh_turn(s, 0)
 
 
 def _holds(p, name):
     return p.objs.get(name, False)
 
 
+def _object_options(s, p):
+    """Usable held objects + 'resolve', for the combat object loop."""
+    q, t = s.current
+    opts = []
+    for n in EXECUTORS:
+        if _holds(p, n) and _EXEC_PRED[n](q, t) and not (n == 'barde' and p.pv <= 3):
+            opts.append(n)
+    if _holds(p, 'kebab') and p.turn >= KEBAB_MIN_TURN:
+        opts.append('kebab')
+    if q >= p.pv:                                    # lethal -> death-saves are usable
+        if _holds(p, 'osselets'):
+            opts.append('osselets')
+        if _holds(p, 'coquille'):
+            opts.append('coquille')
+    opts.append('resolve')                           # take the hit (tank, or die if lethal)
+    return opts
+
+
 def legal(s):
-    """(kind, options) for the current decision. options are concrete action values."""
     p = s.players[s.to_move]
-    if s.phase == 'descend':
-        return 'descend', [True, False]   # True = face the next card; False = stop & bank
-    if s.phase == 'heal':
-        return 'heal', [True, False]
     if s.phase == 'flee':
         return 'flee', [True, False]
     if s.phase == 'object':
-        power, mtype = s.current
-        opts = [n for n in KILLERS if _holds(p, n) and _can_kill(n, power, mtype)]
-        opts.append('none')
-        return 'object', opts
+        return 'object', _object_options(s, p)
+    if s.phase == 'replay':
+        return 'replay', [True, False]
     return 'terminal', []
 
 
-def _next_player(s):
-    """The current player's run just ended (stopped / fled / died). Hand the rest
-    of the deck to the other player if they still have a run to take, else finish.
-    (Sequential runs: player A descends, then player B descends what's left.)"""
+# --- turn plumbing -----------------------------------------------------------
+def _next_in_after(s, start):
+    n = len(s.players)
+    for k in range(1, n + 1):
+        cand = (start + k) % n
+        if s.players[cand].status == 'in':
+            return cand
+    return None
+
+
+def _setup_facing(s):
+    if s.current is None:
+        if s.idx >= len(s.order):
+            return _finish(s)
+        s.current = DECK[s.order[s.idx]]
+        s.idx += 1
+    s.phase = 'flee'
+    return s
+
+
+def _begin_fresh_turn(s, seat):
+    if seat is None or s.players[seat].status != 'in':
+        seat = _next_in_after(s, s.to_move)
+        if seat is None:
+            return _finish(s)
+    s.to_move = seat
+    p = s.players[seat]
+    p.turn += 1
+    p.kills_turn = 0
     s.current = None
-    other = 1 - s.to_move
-    if s.players[other].status == 'in' and s.idx < len(s.order):
-        s.to_move = other
-        s.phase = 'descend'
-        return s
-    return _finish(s)
+    return _setup_facing(s)
+
+
+def _begin_carried_turn(s, seat):
+    s.to_move = seat
+    p = s.players[seat]
+    p.turn += 1
+    p.kills_turn = 0
+    s.phase = 'flee'
+    return s
+
+
+def _pass_carried(s):
+    nxt = _next_in_after(s, s.to_move)
+    return _begin_carried_turn(s, nxt) if nxt is not None else _finish(s)
+
+
+def _pass_turn(s):
+    s.current = None
+    nxt = _next_in_after(s, s.to_move)
+    return _begin_fresh_turn(s, nxt if nxt is not None else s.to_move)
+
+
+def _continue_same(s):
+    s.current = None
+    return _setup_facing(s)
+
+
+def _defeat(s, p):
+    p.score += 1
+    p.kills_turn += 1
+    if _holds(p, 'coeur') and p.kills_turn >= 2:
+        p.pv += 1
 
 
 def _finish(s):
     s.phase = 'terminal'
     s.terminal = True
-    alive = [(pl.score, i) for i, pl in enumerate(s.players) if pl.status != 'dead']
-    if not alive:
+    ins = [i for i, pl in enumerate(s.players) if pl.status == 'in']
+    finalists = ins if ins else [i for i, pl in enumerate(s.players) if pl.status == 'fled']
+    if not finalists:
         s.winner = None
     else:
-        top = max(sc for sc, _ in alive)
-        winners = [i for sc, i in alive if sc == top]
-        s.winner = winners[0] if len(winners) == 1 else None  # tie -> draw
-    return s
-
-
-def _advance(s):
-    """Resolve auto-steps until the next decision or terminal. Currently every
-    phase is a decision, so this just ensures terminal/empty-deck handling."""
-    if s.terminal:
-        return s
-    if s.phase == 'heal':
-        p = s.players[s.to_move]
-        if not _holds(p, 'kebab'):                  # no heal -> skip to drawing
-            return _draw(s)
-    return s
-
-
-def _draw(s):
-    """Draw the top card -> the player must flee/fight it. Deck empty -> run ends."""
-    if s.idx >= len(s.order):
-        s.players[s.to_move].status = 'done'        # nothing left -> banked
-        return _next_player(s)
-    s.current = DECK[s.order[s.idx]]
-    s.idx += 1
-    s.phase = 'flee'
+        top = max(s.players[i].score for i in finalists)
+        winners = [i for i in finalists if s.players[i].score == top]
+        s.winner = winners[0] if len(winners) == 1 else None
     return s
 
 
 def step(s, action):
-    """Apply `action` IN PLACE; advance to the next decision/terminal and return s.
-    Callers that need to preserve a state (e.g. MCTS at the root) clone first via
-    s.clone(); within a simulation we mutate freely -- far faster than cloning every
-    step (deepcopy per call was the bottleneck)."""
     p = s.players[s.to_move]
-    if s.phase == 'descend':
-        if not action:                              # STOP: bank the score, run ends
-            p.status = 'done'
-            return _next_player(s)
-        s.phase = 'heal'                            # keep descending: heal? then draw
-        return _advance(s)
-    if s.phase == 'heal':
-        if action and _holds(p, 'kebab'):
-            p.pv = min(p.pv_max, p.pv + HEAL)
-            p.objs['kebab'] = False
-        return _draw(s)
     if s.phase == 'flee':
-        if action:                                  # attempt to flee: d6 vs monster power
-            power, _ = s.current
-            if s.rng.randint(1, 6) >= power:        # escaped -> leave the dungeon (banked)
-                p.status = 'done'
-                return _next_player(s)
-            # flee FAILED -> forced to fight this monster (power 7/9 always fail)
+        power, _ = s.current
+        if action and s.rng.randint(1, 6) >= power:
+            p.status = 'fled'
+            return _pass_carried(s)
         s.phase = 'object'
         return s
     if s.phase == 'object':
-        power, mtype = s.current
-        if action in KILLERS and _holds(p, action) and _can_kill(action, power, mtype):
-            if action in ONE_SHOT:
+        q, t = s.current
+        if action == 'kebab' and _holds(p, 'kebab') and p.turn >= KEBAB_MIN_TURN:
+            p.pv += HEAL                              # uncapped; stay in the loop
+            p.objs['kebab'] = False
+            return s
+        if action == 'osselets' and _holds(p, 'osselets') and q >= p.pv:
+            p.pv = OSSELETS_PV                        # reusable
+            _defeat(s, p)
+            s.phase = 'replay'
+            return s
+        if action == 'coquille' and _holds(p, 'coquille') and q >= p.pv:
+            p.objs['coquille'] = False
+            p.pv = COQUILLE_PV
+            _defeat(s, p)
+            s.phase = 'replay'
+            return s
+        if action in EXECUTORS and _holds(p, action) and _EXEC_PRED[action](q, t):
+            if action == 'midas':
+                p.pv += q                             # heals by the monster's power (uncapped)
+                p.objs['midas'] = False
+            elif action == 'barde':
+                p.objs['barde'] = False
+                p.pv -= 3                             # lose the passive +3
+            elif action in _ONESHOT_EXEC:             # hache / calumet
                 p.objs[action] = False
-            p.score += 1                            # executed: defeat, no damage
-        elif power >= p.pv:                         # lethal hit, no killing object
-            if _holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD:
-                p.pv = 1                            # death-save (reusable), defeat
-                p.score += 1
-            else:
-                p.status = 'dead'
-                return _next_player(s)
-        else:
-            p.pv -= power                           # survive the hit, defeat
-            p.score += 1
-        s.phase = 'descend'                         # survived -> keep descending or stop
+            _defeat(s, p)
+            if action == 'calumet':
+                return _pass_turn(s)                  # ends the current turn
+            s.phase = 'replay'
+            return s
+        # 'resolve' (or anything illegal) -> take the hit
+        if q >= p.pv:                                 # lethal, no save chosen -> die on purpose
+            p.status = 'dead'
+            return _pass_carried(s)
+        p.pv -= q
+        _defeat(s, p)
+        s.phase = 'replay'
         return s
+    if s.phase == 'replay':
+        return _continue_same(s) if action else _pass_turn(s)
     return s
 
 
-# --- a reasonable baseline heuristic for this engine -------------------------
+# --- a reasonable baseline heuristic (returns one action per call; the object phase
+#     is a loop, so it is re-queried until the monster is resolved) -------------------
 def heuristic_action(s):
     kind, opts = legal(s)
     p = s.players[s.to_move]
-    if kind == 'descend':
-        # keep descending only while we could survive a FORCED Dragon (9): tank it,
-        # hache it, or osselets-save it. Otherwise stop & bank (a drawn Dragon is
-        # unfleeable). This is the push-your-luck lever.
-        backstop = (p.pv > 9 or _holds(p, 'hache')
-                    or (_holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD))
-        return bool(backstop)
-    if kind == 'heal':
-        return bool(p.pv <= 6 and _holds(p, 'kebab'))          # heal when low-ish
-    if kind == 'flee':
-        power, mtype = s.current
-        killers = [n for n in KILLERS if _holds(p, n) and _can_kill(n, power, mtype)]
-        save = _holds(p, 'osselets') and p.pv >= OSSELETS_THRESHOLD
-        # attempt to flee a monster we can't kill and don't want to tank (osselets
-        # would save a lethal hit -> rather fight + score). Power 7/9 will fail anyway.
-        return bool(not killers and not save and power >= 4)
+    opp = s.players[1 - s.to_move]
+
     if kind == 'object':
-        power, mtype = s.current
+        q, t = s.current
         free = [n for n in ('marteau', 'torche') if n in opts]
-        if power < p.pv:
-            return free[0] if free else 'none'                 # survivable: save pv if free kill
         if free:
-            return free[0]
-        if 'hache' in opts:
-            return 'hache'
-        return 'none'                                          # osselets saves, or die
+            return free[0]                            # free reusable kill: always good
+        if q < p.pv:
+            return 'resolve'                          # survivable: tank, save the objects
+        # lethal, no free kill:
+        if 'osselets' in opts:
+            return 'osselets'                         # reusable save (-> 1 PV)
+        for n in ('midas', 'hache', 'calumet', 'barde'):   # spend a one-shot executor
+            if n in opts:
+                return n
+        if 'coquille' in opts:
+            return 'coquille'                         # one-shot save (-> 3 PV)
+        if 'kebab' in opts and p.pv + HEAL > q:
+            return 'kebab'                            # heal enough to survive, then tank
+        return 'resolve'                              # nothing left -> die
+
+    # flee / replay: danger read over the remaining deck (composition is legal info)
+    def free_kill(q, t):
+        return ((t in ('Golem', 'Squelette') and _holds(p, 'marteau'))
+                or (q <= 2 and _holds(p, 'torche')))
+    n_deadly = sum(1 for q, t in (DECK[i] for i in s.order[s.idx:])
+                   if q >= p.pv and not free_kill(q, t))
+    covers = (sum(1 for n in ('hache', 'calumet', 'barde') if _holds(p, n))
+              + (1 if _holds(p, 'osselets') else 0) + (1 if _holds(p, 'coquille') else 0))
+
+    if kind == 'replay':
+        return n_deadly <= covers
+
+    if kind == 'flee':
+        q, t = s.current
+        if free_kill(q, t) or q < p.pv:
+            return False
+        fleeable = q <= 6
+        if fleeable and opp.status == 'dead':
+            return True
+        if fleeable and opp.status == 'fled' and p.score > opp.score:
+            return True
+        killers = [n for n in EXECUTORS if _holds(p, n) and _EXEC_PRED[n](q, t)]
+        save = _holds(p, 'osselets') or _holds(p, 'coquille')
+        heal = _holds(p, 'kebab') and p.turn >= KEBAB_MIN_TURN and p.pv + HEAL > q
+        return bool(q >= p.pv and not killers and not save and not heal)
     return opts[0] if opts else None
 
 
 def play(seed, hand, pol0, pol1):
-    """Play one game; policies are functions State->action. Returns the final State."""
     s = new_game(seed, hand)
     pols = (pol0, pol1)
     while not s.terminal:
