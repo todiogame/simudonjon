@@ -408,7 +408,9 @@ def verbose_game(agent_fn, seed, tag0='NET '):
 
 
 if __name__ == '__main__':
+    import os
     import torch
+    os.makedirs('artifacts', exist_ok=True)         # so cache/checkpoint saving works on a fresh clone
     torch.set_num_threads(1)
     ITERS = int(sys.argv[1]) if len(sys.argv) > 1 else 1500
     GAMES = int(sys.argv[2]) if len(sys.argv) > 2 else 900
