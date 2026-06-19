@@ -162,6 +162,39 @@ def ismcts_decide(seed, searcher_seat, prefix, n_iters, c=1.4):
     return best, {k: e[0] for k, e in root.edges.items()}
 
 
+def play_teacher_game(seed, searcher_seat, n_iters):
+    """Play one real game: the searcher seat is the ISMCTS teacher (searching at each of its
+    gameplay decisions), the other seat is the real ai_policy.py heuristic. Returns
+    (outcome in {+1,0,-1} for the searcher, records=[(DecisionContext, visit-dict), ...])."""
+    from ai_policy import DefaultDungeonPolicy
+    from rl_toy_env import build_toy_match, make_dungeon
+    from real_driver import RealGameDriver
+    _rnd.seed(seed)
+    np.random.seed(seed & 0x7FFFFFFF)
+    joueurs, reserve = build_toy_match(seed, deck='toy')
+    donjon = make_dungeon('toy')
+    heur = DefaultDungeonPolicy()
+    drv = RealGameDriver(joueurs, donjon, reserve)
+    searcher = joueurs[searcher_seat]
+    prefix, records = [], []
+    while not drv.terminal:
+        ctx = drv.context
+        if ctx.actor is searcher and ctx.kind.name in TREE_KINDS:
+            rs_state, np_state = _rnd.getstate(), np.random.get_state()   # preserve the live game RNG
+            best, visits = ismcts_decide(seed, searcher_seat, prefix, n_iters)
+            _rnd.setstate(rs_state)
+            np.random.set_state(np_state)                                # the search reseeded globals
+            if best is None:
+                best = action_key(ctx, heur.decide(ctx))
+            records.append((ctx, visits))
+            prefix.append(best)
+            drv.step(action_from_key(ctx, best, heur, lambda: heur.decide(ctx)))
+        else:
+            drv.step(heur.decide(ctx))
+    winner = drv.result[0] if drv.result else None
+    return (1 if winner is searcher else (0 if winner is None else -1)), records
+
+
 # --- proof: reshuffling the unseen tail at decision K keeps the seen prefix, diverges after ---
 if __name__ == '__main__':
     import random
