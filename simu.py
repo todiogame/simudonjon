@@ -449,13 +449,52 @@ def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, do
             and carte not in Jeu.defausse and carte.index not in Jeu.donjon.ordre[Jeu.donjon.index:]):
         donjon.rajoute_en_haut_de_la_pile(carte)
 
-def ordonnanceur(joueurs, donjon, objets_dispo, log=True, policy=None):
-    # arreter la simulation si on a un objet casse dans une main
-    for j in joueurs:
-        for o in j.objets:
-            if not o.intact: 1/0
+def ordonnanceur(joueurs, donjon, objets_dispo, log=True, policy=None,
+                 resume_state=None, resume_index=0, on_turn_start=None):
+    """Joue une partie.
 
+    Mode normal (resume_state=None): setup complet puis boucle.
+    Mode reprise (resume_state=Jeu): reprend une partie en milieu de course depuis un etat
+    (typiquement un clone deepcopy pris a une frontiere de tour). Permet le clonage pour la
+    recherche a cout lineaire -- aucun re-setup, aucun melange. `on_turn_start(Jeu, index)`,
+    si fourni, est appele en haut de chaque tour (le seul point ou (Jeu, index) capture toute
+    la position): c'est la pour prendre les snapshots de recherche.
+    """
     log_details = []
+    if resume_state is None:
+        # arreter la simulation si on a un objet casse dans une main
+        for j in joueurs:
+            for o in j.objets:
+                if not o.intact: 1/0
+
+        donjon.melange()
+        Jeu = GameState(joueurs, donjon, objets_dispo, policy)
+        index_joueur = 0  # Initialisation de l'index du joueur courant
+
+        for j in joueurs:
+            j.partie_joueurs = joueurs  # utilise par perdre_medaille (Parfum de Scandale)
+            j.ordonner_objets_pour_ia()
+            j.appliquer_panoplies(log_details)  # +2 PV par 3 objets de meme couleur (bonus d'avant-partie)
+            j.perso_obj.debut_partie(j, Jeu, log_details)  # reset aussi l'etat une-fois-par-partie du perso
+            for objet in j.objets:
+                objet.debut_partie(j, Jeu, log_details)
+
+        if log:
+            for detail in log_details:
+                print(detail)
+            print("\n")
+        log_details = []
+    else:
+        # Reprise depuis un etat clone : pas de setup, pas de melange.
+        Jeu = resume_state
+        joueurs = Jeu.joueurs
+        donjon = Jeu.donjon
+        index_joueur = resume_index
+        if policy is not None:                 # brancher une nouvelle politique (ex: recherche)
+            Jeu.policy = Jeu._normalize_policy(policy)
+            for j in joueurs:
+                j.policy = Jeu.policy
+
     nb_joueurs = len(joueurs)
 
     # tables de dispatch : pour chaque hook, les classes qui ne l'implementent pas
@@ -473,26 +512,10 @@ def ordonnanceur(joueurs, donjon, objets_dispo, log=True, policy=None):
     P_FUITE = SANS_HOOK_PERSO['en_fuite']
     P_DEBUT = SANS_HOOK_PERSO['debut_tour']; P_FIN = SANS_HOOK_PERSO['fin_tour']
 
-    donjon.melange()
-    Jeu = GameState(joueurs, donjon, objets_dispo, policy)
-    log_details = []
-    index_joueur = 0  # Initialisation de l'index du joueur courant
-    
-    for j in joueurs:
-        j.partie_joueurs = joueurs  # utilise par perdre_medaille (Parfum de Scandale)
-        j.ordonner_objets_pour_ia()
-        j.appliquer_panoplies(log_details)  # +2 PV par 3 objets de meme couleur (bonus d'avant-partie)
-        j.perso_obj.debut_partie(j, Jeu, log_details)  # reset aussi l'etat une-fois-par-partie du perso
-        for objet in j.objets:
-            objet.debut_partie(j, Jeu, log_details)
-    
-    if log:
-        for detail in log_details:
-            print(detail)
-        print("\n")
-    log_details = []
     # Boucle de jeu principale
     while not Jeu.donjon.vide:
+        if on_turn_start is not None:
+            on_turn_start(Jeu, index_joueur)
         Jeu.tour += 1
         
         if log:
