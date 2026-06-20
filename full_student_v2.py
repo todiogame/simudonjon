@@ -10,7 +10,9 @@ import os
 
 _THREADS = str(min(10, os.cpu_count() or 4))
 for _v in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
-    os.environ.setdefault(_v, '1')                     # workers single-thread (avoid oversubscription)
+    os.environ.setdefault(_v, _THREADS)                # set BEFORE importing torch so TRAINING is
+# multi-threaded. Gen workers are pure-Python (engine + np.shuffle/indexing, no heavy BLAS), so a
+# high thread count doesn't oversubscribe them.
 
 import multiprocessing as mp
 import pickle
@@ -154,6 +156,7 @@ def eval_student(net, n, seed0=800000):
 if __name__ == '__main__':
     import torch
     torch.set_num_threads(min(10, os.cpu_count() or 4))
+    os.makedirs('artifacts', exist_ok=True)            # fresh machine may not have it
     ITERS = int(sys.argv[1]) if len(sys.argv) > 1 else 300
     GAMES = int(sys.argv[2]) if len(sys.argv) > 2 else 500
     WORKERS = int(sys.argv[3]) if len(sys.argv) > 3 else 10
