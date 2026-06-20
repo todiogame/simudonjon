@@ -21,8 +21,32 @@ import sys
 import numpy as np
 
 from ai_policy import DefaultDungeonPolicy
+from heros import Perso
+from joueurs import Joueur
+from monstres import CarteEvent, CarteMonstre
+from objets import Objet
 from rl_toy_env import build_toy_match, make_dungeon
-from simu import ordonnanceur
+from simu import GameState, ordonnanceur
+
+# A1b (lossless): a memo-aware fast __deepcopy__ for the leaf game classes (objects, cards).
+# Default deepcopy pays __reduce_ex__/_reconstruct per object; this shares immutables by ref and
+# deepcopies the rest THROUGH THE MEMO -- so cross-refs / shared card identities / cycles stay
+# correct, just faster. Applied to Objet + the card classes (they hold only scalars + lists, no
+# refs to other game objects, but the memo handles it if any ever appear).
+_IMMUTABLE = (int, float, bool, str, bytes, type(None))
+
+
+def _fast_deepcopy(self, memo):
+    new = type(self).__new__(type(self))
+    memo[id(self)] = new
+    nd = new.__dict__
+    for k, v in self.__dict__.items():
+        nd[k] = v if type(v) in _IMMUTABLE else copy.deepcopy(v, memo)
+    return new
+
+
+for _cls in (Objet, CarteMonstre, CarteEvent, Joueur, Perso, GameState):
+    _cls.__deepcopy__ = _fast_deepcopy
 
 
 def _fast_clone_clean(o):
