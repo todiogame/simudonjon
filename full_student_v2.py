@@ -154,8 +154,6 @@ def eval_student(net, n, seed0=800000):
 
 
 if __name__ == '__main__':
-    import torch
-    torch.set_num_threads(min(10, os.cpu_count() or 4))
     os.makedirs('artifacts', exist_ok=True)            # fresh machine may not have it
     ITERS = int(sys.argv[1]) if len(sys.argv) > 1 else 300
     GAMES = int(sys.argv[2]) if len(sys.argv) > 2 else 500
@@ -166,6 +164,13 @@ if __name__ == '__main__':
     cache = f'artifacts/full_v2_gen_{ITERS}_{GAMES}.pkl'
     data, w, n = gen_data(GAMES, ITERS, WORKERS, P_HEUR, cache)
     print(f"    {len(data)} decisions; TEACHER@{ITERS} seat-win {w}/{n}={w/n:.1%}", flush=True)
+    # A2: gen-only mode is torch-free -> runnable under PyPy (engine + numpy only). Train later
+    # with train_cached.py under CPython+torch.
+    if os.environ.get('GEN_ONLY') or (len(sys.argv) > 6 and sys.argv[6] == 'gen'):
+        print(f"    GEN-ONLY: cache saved to {cache}. Train with: python train_cached.py {cache}", flush=True)
+        sys.exit(0)
+    import torch
+    torch.set_num_threads(min(10, os.cpu_count() or 4))
     print("[2] training v2 net...", flush=True)
     net = fe.make_net()
     train(net, data, EPOCHS)
