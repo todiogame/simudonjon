@@ -12,8 +12,11 @@ Usage: python full_warmstart.py [heur_games] [epochs] [teacher_cache]
 """
 import os
 
+# single training process -> let BLAS use all cores (set BEFORE importing full_distill/torch,
+# so full_distill's setdefault(...,'1') no-ops and torch's MKL/OpenMP backend sees the high count)
+_THREADS = str(min(10, os.cpu_count() or 4))
 for _v in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
-    os.environ.setdefault(_v, '1')
+    os.environ[_v] = _THREADS
 
 import pickle
 import random
@@ -73,9 +76,9 @@ def gen_heuristic_data(games, seed0=300000):
 
 if __name__ == '__main__':
     import torch
-    torch.set_num_threads(1)
+    torch.set_num_threads(min(10, os.cpu_count() or 4))   # single training process -> use all cores
     HG = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
-    EPOCHS = int(sys.argv[2]) if len(sys.argv) > 2 else 150
+    EPOCHS = int(sys.argv[2]) if len(sys.argv) > 2 else 60
     CACHE = sys.argv[3] if len(sys.argv) > 3 else 'artifacts/full_gen_300_500.pkl'
 
     print(f"[1] heuristic behavior-clone data: {HG} games...", flush=True)
