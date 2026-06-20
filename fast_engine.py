@@ -25,21 +25,47 @@ from rl_toy_env import build_toy_match, make_dungeon
 from simu import ordonnanceur
 
 
+def _fast_clone_clean(o):
+    """Fast clone of a 'clean' object (undealt reserve item): shallow-copy __dict__ + one level of
+    container attrs. Reserve objects hold only scalars (+ a types/tags list), no refs to other
+    game objects, so this is independent and correct -- and far cheaper than reflective deepcopy."""
+    n = object.__new__(type(o))
+    d = o.__dict__.copy()
+    for k, v in d.items():
+        t = type(v)
+        if t is list:
+            d[k] = v[:]
+        elif t is dict:
+            d[k] = dict(v)
+        elif t is set:
+            d[k] = set(v)
+    n.__dict__ = d
+    return n
+
+
 def clone_state(Jeu):
     """Deep-copy the game state, detaching the policy first (don't clone it; it's rebound at
     resume time). deepcopy's memo keeps shared card identities consistent across the deck,
-    the players' vaincu piles, and cartes_connues."""
+    the players' vaincu piles, and cartes_connues.
+
+    A1: the bulky UNSEEN RESERVE (objets_dispo, ~265 undealt objects) is excluded from the
+    reflective deepcopy and cloned fast (its objects are clean), giving an independent copy --
+    so a rollout that draws/mutates a reserve object stays isolated, byte-identically."""
     pol = Jeu.policy
     saved = [(j, getattr(j, 'policy', None)) for j in Jeu.joueurs]
+    reserve = Jeu.objets_dispo
     Jeu.policy = None
     for j in Jeu.joueurs:
         j.policy = None
+    Jeu.objets_dispo = ()                       # keep the heavy reserve out of the reflective copy
     try:
         new = copy.deepcopy(Jeu)
     finally:
         Jeu.policy = pol
+        Jeu.objets_dispo = reserve
         for j, p in saved:
             j.policy = p
+    new.objets_dispo = [_fast_clone_clean(o) for o in reserve]
     return new
 
 

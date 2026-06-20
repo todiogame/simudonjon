@@ -18,6 +18,7 @@ fraction of the wall time.
 
 Usage: python fast_search.py [n_seeds] [iters]   (equivalence + speed vs real_search)
 """
+import gc
 import math
 import random
 import sys
@@ -38,22 +39,29 @@ def fast_ismcts_decide(snapshot, within_prefix, searcher_seat, seed, n_iters, c=
     iter_seed scheme matches real_search exactly so the two searches are identical."""
     clone0, turn_index, rng_state = snapshot
     root = rs.Node()
-    for it in range(n_iters):
-        random.setstate(rng_state[0])                  # turn-start RNG: within-turn replay reproduces live
-        np.random.set_state(rng_state[1])
-        clone = clone_state(clone0)
-        searcher = clone.joueurs[searcher_seat]
-        pol = rs._ISMCTSPolicy(searcher, within_prefix, root,
-                               iter_seed=(seed * 1000003 + it + 1), c=c, p_heur=p_heur)
-        try:
-            winner, _ = ordonnanceur(None, None, None, log=False, policy=pol,
-                                     resume_state=clone, resume_index=turn_index)
-        except Exception:
-            continue
-        outcome = 1.0 if winner is searcher else (0.0 if winner is None else -1.0)
-        for nd, k in pol.path:
-            nd.edges[k][0] += 1
-            nd.edges[k][1] += outcome
+    _gc_on = gc.isenabled()
+    gc.disable()                                       # A4: per-iter clones churn the allocator;
+    try:                                               # skip GC scans, free the batch at the end
+        for it in range(n_iters):
+            random.setstate(rng_state[0])              # turn-start RNG: within-turn replay reproduces live
+            np.random.set_state(rng_state[1])
+            clone = clone_state(clone0)
+            searcher = clone.joueurs[searcher_seat]
+            pol = rs._ISMCTSPolicy(searcher, within_prefix, root,
+                                   iter_seed=(seed * 1000003 + it + 1), c=c, p_heur=p_heur)
+            try:
+                winner, _ = ordonnanceur(None, None, None, log=False, policy=pol,
+                                         resume_state=clone, resume_index=turn_index)
+            except Exception:
+                continue
+            outcome = 1.0 if winner is searcher else (0.0 if winner is None else -1.0)
+            for nd, k in pol.path:
+                nd.edges[k][0] += 1
+                nd.edges[k][1] += outcome
+    finally:
+        if _gc_on:
+            gc.enable()
+        gc.collect()
     if not root.edges:
         return None, {}
     best = max(root.edges, key=lambda k: root.edges[k][0])
