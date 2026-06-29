@@ -1,5 +1,6 @@
 from objets import *
 from objets import SANS_HOOK_OBJET
+from ia_strategies import DEFAULT_STRATEGY_NAME, get_strategy
 import math
 import random
 
@@ -38,7 +39,10 @@ _PROFIL_CODES = {
 }
 
 class Joueur:
-    def __init__(self, nom, perso_instance, objets=None, medailles=0):
+    default_strategy = DEFAULT_STRATEGY_NAME
+
+    def __init__(self, nom, perso_instance, objets=None, medailles=0, strategy=None,
+                 control="ai", decision_provider=None):
         self.nom = nom
         self.perso_obj = perso_instance
         self.personnage_nom = self.perso_obj.nom
@@ -64,10 +68,100 @@ class Joueur:
         self.tiebreaker = False
         self.cartes_connues = set()  # cartes du Donjon vues via les objets de divination
         self.partie_joueurs = None   # tous les joueurs de la partie (pose par l'ordonnanceur, pour le Parfum de Scandale)
-        self.strategie_traquenard = 'net_gain'
+        self.strategy = strategy if strategy is not None else self.default_strategy
+        self.control = control
+        self.decision_provider = decision_provider
+        self.strategie_traquenard = self.ia_strategy().traquenard_strategy
         self.traquenard_opportunites = 0
         self.traquenard_payes = 0
         self.traquenard_execs = 0
+
+    def is_human(self):
+        return self.control == "human"
+
+    def _decision_option_label(self, value):
+        if hasattr(value, "nom"):
+            return value.nom
+        if hasattr(value, "titre"):
+            return value.titre
+        return str(value)
+
+    def _decision_option_description(self, value):
+        parts = []
+        if hasattr(value, "pv_bonus"):
+            parts.append(f"PV {value.pv_bonus:+}")
+        if hasattr(value, "modificateur_de") and value.modificateur_de:
+            parts.append(f"fuite {value.modificateur_de:+}")
+        if hasattr(value, "puissance"):
+            parts.append(f"power {value.puissance}")
+        if hasattr(value, "types") and value.types:
+            parts.append(", ".join(value.types))
+        desc = getattr(value, "description", None) or getattr(value, "effet", None)
+        if desc:
+            parts.append(str(desc).replace("<b>", "").replace("</b>", "").replace("\n", " "))
+        return " | ".join(parts)
+
+    def demander_choix(self, kind, prompt, candidats, default=None, label_func=None,
+                       context=None):
+        candidats = list(candidats)
+        if not candidats:
+            return None
+        if default is None or default not in candidats:
+            default = candidats[0]
+        default_index = candidats.index(default)
+        options = []
+        for idx, candidat in enumerate(candidats):
+            label = label_func(candidat) if label_func else self._decision_option_label(candidat)
+            options.append({
+                "id": str(idx),
+                "label": label,
+                "description": self._decision_option_description(candidat),
+            })
+        provider = getattr(self, "decision_provider", None)
+        if provider is None:
+            return default
+        selected = provider.choose(
+            self,
+            kind=kind,
+            prompt=prompt,
+            options=options,
+            default_id=str(default_index),
+            context=context or {},
+        )
+        try:
+            return candidats[int(selected)]
+        except (TypeError, ValueError, IndexError):
+            return default
+
+    def demander_oui_non(self, kind, prompt, default=False, context=None):
+        provider = getattr(self, "decision_provider", None)
+        if provider is None:
+            return bool(default)
+        default_id = "yes" if default else "no"
+        selected = provider.choose(
+            self,
+            kind=kind,
+            prompt=prompt,
+            options=[
+                {"id": "yes", "label": "Yes", "description": ""},
+                {"id": "no", "label": "No", "description": ""},
+            ],
+            default_id=default_id,
+            context=context or {},
+        )
+        return selected == "yes"
+
+    def enregistrer_decision_bot(self, kind, prompt, result, label=None, context=None):
+        provider = getattr(self, "decision_provider", None)
+        if provider is not None and hasattr(provider, "record"):
+            provider.record(
+                self,
+                kind=kind,
+                prompt=prompt,
+                result=result,
+                label=label,
+                context=context or {},
+            )
 
     def ajouter_objet(self, objet):
         self.objets.append(objet)
@@ -177,7 +271,243 @@ class Joueur:
         return score_calcule_par_effets
 
     def trier_objets_par_priorite(self):
-        self.objets = sorted(self.objets, key=lambda obj: obj.priorite, reverse=True)
+        if self.ia_strategy().draw_item_policy == "strategic":
+            self.objets = sorted(self.objets, key=lambda obj: self.valeur_objet(obj, None), reverse=True)
+        else:
+            self.objets = sorted(self.objets, key=lambda obj: obj.priorite, reverse=True)
+
+    def ia_strategy(self):
+        return get_strategy(self.strategy)
+
+    def prochaine_carte_strategy(self, Jeu, strategy=None):
+        strategy = strategy or self.ia_strategy()
+        if not getattr(strategy, 'use_exact_next', False):
+            return self.connait_prochaine_carte(Jeu)
+        donjon = Jeu.donjon
+        if donjon.vide:
+            return None
+        return donjon.cartes[donjon.ordre[donjon.index]]
+
+    def prochain_adversaire_dans_donjon(self, Jeu):
+        joueurs = getattr(Jeu, 'joueurs', ())
+        if not joueurs:
+            return None
+        try:
+            depart = getattr(Jeu, 'index_joueur')
+        except AttributeError:
+            try:
+                depart = joueurs.index(self)
+            except ValueError:
+                return None
+        for offset in range(1, len(joueurs) + 1):
+            autre = joueurs[(depart + offset) % len(joueurs)]
+            if autre is not self and autre.dans_le_dj:
+                return autre
+        return None
+
+    def valeur_objet(self, objet, jeu):
+        """Heuristic object value used only for AI ordering/choice, not rules."""
+        valeur = float(getattr(objet, 'priorite', 49.5))
+        valeur += 2.0 * getattr(objet, 'pv_bonus', 0)
+        valeur += 4.0 * getattr(objet, 'modificateur_de', 0)
+        if getattr(objet, 'actif', False):
+            valeur -= 2.0
+        if getattr(objet, 'protege_medailles', False) and self.medailles:
+            valeur += 12.0
+        if not (getattr(objet, 'types_tags', None) or getattr(objet, 'puissance_tags', None)):
+            return valeur
+        if jeu is None:
+            return valeur
+        donjon = jeu.donjon
+        cibles = 0
+        danger = 0.0
+        for idx in donjon.ordre[donjon.index:]:
+            carte = donjon.cartes[idx]
+            if getattr(carte, 'event', False):
+                continue
+            cible = (
+                any(t in getattr(carte, 'types_initiaux', ()) for t in getattr(objet, 'types_tags', ()))
+                or getattr(carte, 'puissance_initiale', None) in getattr(objet, 'puissance_tags', ())
+            )
+            if cible:
+                cibles += 1
+                danger += self._degats_attendus(carte, jeu)
+        return valeur * cibles / (1 + cibles) + 0.15 * danger
+
+    def objets_pour_combat(self, carte, Jeu, hooks_sans_effet):
+        objets = [o for o in self.objets if type(o) not in hooks_sans_effet]
+        if self.ia_strategy().item_order_policy != "dynamic":
+            return objets
+
+        def score(objet):
+            s = self.valeur_objet(objet, Jeu)
+            if not objet.intact:
+                return -10000.0
+            if getattr(carte, 'puissance', None) in getattr(objet, 'puissance_tags', ()):
+                s += 80.0
+            if any(t in getattr(carte, 'types', ()) for t in getattr(objet, 'types_tags', ())):
+                s += 80.0
+            if getattr(objet, 'actif', False):
+                s -= 5.0
+                if getattr(carte, 'dommages', 0) >= self.pv_total:
+                    s += 60.0
+            return s
+
+        return sorted(objets, key=score, reverse=True)
+
+    def _ai_decide_utiliser_source(self, objet, carte, Jeu, log_details, baseline_worth):
+        strategy = self.ia_strategy()
+        if strategy.item_use_policy == "baseline":
+            return baseline_worth
+        if strategy.item_use_policy == "lethal_only":
+            return baseline_worth and getattr(carte, 'dommages', 0) >= self.pv_total
+        if strategy.item_use_policy == "conserve":
+            if not baseline_worth:
+                return False
+            if not getattr(objet, 'actif', False):
+                return True
+            dommages = getattr(carte, 'dommages', 0)
+            if dommages >= self.pv_total:
+                return True
+            if self.pv_total - dommages <= strategy.item_conserve_min_pv:
+                return True
+            gain = 2 if getattr(carte, 'effet', None) == "GOLD" else 1
+            cible = self._score_a_battre_strategy(Jeu, strategy) + strategy.replay_target_lead
+            return self._score_estime_strategy(strategy) < cible and gain > 1
+        if baseline_worth:
+            return True
+        if strategy.item_use_policy == "aggressive":
+            dommages = getattr(carte, 'dommages', 0)
+            seuil = max(strategy.item_aggressive_min_damage,
+                        int(max(1, self.pv_total) * strategy.item_aggressive_damage_ratio))
+            if dommages >= self.pv_total or dommages >= seuil:
+                return True
+        if strategy.item_use_policy == "combat_value":
+            dommages = getattr(carte, 'dommages', 0)
+            seuil = max(strategy.item_aggressive_min_damage,
+                        int(max(1, self.pv_total) * strategy.item_aggressive_damage_ratio))
+            noms = set(getattr(type(objet).combat_effet, "__code__", None).co_names
+                       if getattr(type(objet).combat_effet, "__code__", None) else ())
+            protecteur = bool(noms & {
+                "execute", "executeEtDefausse", "remetDansDonjon", "absorbe",
+                "reduc_damage", "survit", "_utiliser",
+            })
+            if protecteur and (dommages >= self.pv_total or dommages >= seuil):
+                return True
+        if strategy.item_use_policy == "score_value":
+            dommages = getattr(carte, 'dommages', 0)
+            code = getattr(type(objet).combat_effet, "__code__", None)
+            noms = set(code.co_names if code else ())
+            protecteur = bool(noms & {
+                "execute", "executeEtDefausse", "remetDansDonjon", "absorbe",
+                "reduc_damage", "survit", "_utiliser",
+            })
+            if not protecteur:
+                return False
+            score_actuel = self._score_estime_strategy(strategy)
+            cible = self._score_a_battre_strategy(Jeu, strategy) + strategy.replay_target_lead
+            gain = 2 if getattr(carte, 'effet', None) == "GOLD" else 1
+            seuil = max(strategy.item_aggressive_min_damage,
+                        int(max(1, self.pv_total) * strategy.item_aggressive_damage_ratio))
+            if dommages >= self.pv_total or dommages >= seuil:
+                return True
+            if score_actuel < cible and (gain > 1 or dommages >= 2):
+                return True
+        return False
+
+    def decide_utiliser_source(self, source, carte, Jeu, log_details, baseline_worth):
+        source_name = self._decision_option_label(source)
+        card_name = self._decision_option_label(carte)
+        prompt = f"Use {source_name} against {card_name}?"
+        context = {
+            "source": source_name,
+            "card": card_name,
+            "baseline": bool(baseline_worth),
+            "pv": self.pv_total,
+            "damage": getattr(carte, "dommages", None),
+            "power": getattr(carte, "puissance", None),
+        }
+        if self.is_human():
+            return self.demander_oui_non(
+                "combat_source",
+                prompt,
+                default=bool(baseline_worth),
+                context=context,
+            )
+        decision = self._ai_decide_utiliser_source(source, carte, Jeu, log_details, baseline_worth)
+        if decision:
+            self.enregistrer_decision_bot(
+                "combat_source",
+                prompt,
+                decision,
+                label="use",
+                context=context,
+            )
+        return decision
+
+    def decide_utiliser_objet(self, objet, carte, Jeu, log_details, baseline_worth):
+        return self.decide_utiliser_source(objet, carte, Jeu, log_details, baseline_worth)
+
+    def choisir_objet(self, candidats, jeu, usage="generic"):
+        if not candidats:
+            return None
+        strategy = self.ia_strategy()
+        if usage == "repair":
+            if strategy.repair_policy == "strategic":
+                choix = max(candidats, key=lambda o: (self.valeur_objet(o, jeu), getattr(o, 'pv_bonus', 0)))
+            else:
+                choix = max(candidats, key=lambda o: getattr(o, 'pv_bonus', 0))
+            return self.demander_choix(
+                f"choose_object_{usage}",
+                "Choose an object.",
+                candidats,
+                default=choix,
+                context={"usage": usage},
+            ) if self.is_human() else choix
+        if usage in ("draw_keep", "copy"):
+            if ((usage == "draw_keep" and strategy.draw_item_policy == "strategic")
+                    or (usage == "copy" and strategy.copy_policy == "strategic")):
+                choix = max(candidats, key=lambda o: self.valeur_objet(o, jeu))
+            else:
+                choix = max(candidats, key=lambda o: o.priorite)
+            return self.demander_choix(
+                f"choose_object_{usage}",
+                "Choose an object.",
+                candidats,
+                default=choix,
+                context={"usage": usage},
+            ) if self.is_human() else choix
+        if usage.startswith("sacrifice") and strategy.sacrifice_policy == "future_value":
+            choix = min(candidats, key=lambda o: (
+                getattr(o, 'pv_bonus', 0) >= self.pv_total,
+                self.valeur_objet(o, jeu) + 8.0 * getattr(o, 'pv_bonus', 0),
+            ))
+        else:
+            choix = min(candidats, key=lambda o: (getattr(o, 'pv_bonus', 0), o.priorite))
+        if self.is_human():
+            return self.demander_choix(
+                f"choose_object_{usage}",
+                "Choose an object.",
+                candidats,
+                default=choix,
+                context={"usage": usage},
+            )
+        return choix
+
+    def choisir_monstre(self, candidats, jeu=None, usage="generic", default=None):
+        if not candidats:
+            return None
+        if default is None:
+            default = min(candidats, key=lambda m: (0 if getattr(m, "is_X", False) else getattr(m, "puissance", 0)))
+        if self.is_human():
+            return self.demander_choix(
+                f"choose_monster_{usage}",
+                "Choose a monster.",
+                candidats,
+                default=default,
+                context={"usage": usage},
+            )
+        return default
 
     def rollDice(self, Jeu, log_details, jet_voulu=4, reversed=False, rerolled=False): #de base on se considere content avec un 4.
         jet_voulu = min(6,max(1, jet_voulu))
@@ -234,6 +564,36 @@ class Joueur:
                 d += 2 * self.medailles  # Saigneur Vampire : +2 dommages par Médaille
         return d
 
+    def _degats_carte_connue(self, carte, Jeu):
+        if not getattr(carte, 'is_X', False):
+            return self._degats_attendus(carte, Jeu)
+        effet = getattr(carte, 'effet', None)
+        if effet == "MEDAIL":
+            d = sum(j.medailles for j in Jeu.joueurs)
+        elif effet == "MIMIC":
+            d = sum(1 for objet in self.objets if objet.intact)
+        elif effet == "MONKEY_TEAM":
+            d = 2 * sum(1 for j in Jeu.joueurs if j.dans_le_dj)
+        elif effet == "REAPER":
+            d = self.pv_total // 2
+        elif effet == "SCAVENGER":
+            d = len(self.pile_monstres_vaincus)
+        elif effet == "MIROIR":
+            d = self.pile_monstres_vaincus[-1].puissance if self.pile_monstres_vaincus else 0
+        elif effet == "TROLL":
+            d = self.pile_monstres_vaincus[0].puissance if self.pile_monstres_vaincus else 0
+        elif effet == "SLEEPING":
+            d = 9
+        else:
+            d = 10
+        if effet and "ADD_2_DOM" in effet:
+            d += 2
+        if effet == "LORD" and self.medailles:
+            d += 2 * self.medailles
+        if effet == "NOOB" and self.medailles:
+            d = 2
+        return d
+
     def _couverture_objets(self):
         """Types et puissances que les objets intacts du joueur savent gerer (tags).
         Mis en cache tant que la liste d'objets intacts ne change pas (boucle chaude)."""
@@ -263,10 +623,196 @@ class Joueur:
         types_couverts, puissances_couvertes = couverture if couverture is not None else self._couverture_objets()
         return carte.puissance in puissances_couvertes or any(t in types_couverts for t in types)
 
+    def _carte_est_mortelle_pour(self, joueur, carte, Jeu):
+        if getattr(carte, 'event', False):
+            return False
+        return (joueur._degats_attendus(carte, Jeu) >= joueur.pv_total
+                and not joueur.peut_executer_facilement(carte))
+
+    def _score_a_battre_rapide(self, Jeu):
+        meilleur = 0
+        for autre in getattr(Jeu, 'joueurs', ()):
+            if autre is self or not autre.vivant:
+                continue
+            meilleur = max(meilleur, autre._score_rapide())
+        return meilleur
+
+    def _score_a_battre_strategy(self, Jeu, strategy):
+        policy = getattr(strategy, 'score_target_policy', 'alive')
+        joueurs = getattr(Jeu, 'joueurs', ())
+        if policy == "dungeon_only":
+            candidats = [j for j in joueurs if j is not self and j.dans_le_dj]
+        elif policy == "contextual":
+            joueurs_dj = [j for j in joueurs if j is not self and j.dans_le_dj]
+            candidats = joueurs_dj or [j for j in joueurs if j is not self and j.vivant]
+        else:
+            candidats = [j for j in joueurs if j is not self and j.vivant]
+        return max((j._score_estime_strategy(strategy) for j in candidats), default=0)
+
+    def _event_connue_interessante(self, carte, Jeu, strategy):
+        effet = getattr(carte, 'effet', None)
+        policy = getattr(strategy, 'event_policy', 'strict')
+        loose = policy in ("loose", "greedy")
+        greedy = policy == "greedy"
+        resource = policy == "resource"
+        if resource:
+            loose = True
+        if effet == "HEAL":
+            return loose or self.pv_total <= 8
+        if effet == "ALLY":
+            prochaine = self._carte_apres_position(Jeu, 1)
+            return prochaine is not None and not getattr(prochaine, 'event', False)
+        if effet == "REPAIR":
+            return any(not o.intact for o in self.objets)
+        if effet == "SHOP":
+            intacts = [o for o in self.objets if o.intact]
+            if len(intacts) < (5 if loose else 4):
+                return True
+            return greedy and any(o.pv_bonus <= 1 and o.priorite < 45 for o in intacts)
+        if effet == "FORTUNE_WHEEL":
+            return self.pv_total <= (10 if greedy else 8 if loose else 5) and any(
+                not (getattr(m, 'effet', None) and "GOLD" in m.effet)
+                for m in self.pile_monstres_vaincus
+            )
+        if effet == "INJECTION":
+            mes_golems = sum(1 for m in self.pile_monstres_vaincus if "Golem" in getattr(m, 'types', ()))
+            adv_golems = max(
+                (sum(1 for m in j.pile_monstres_vaincus if "Golem" in getattr(m, 'types', ()))
+                 for j in getattr(Jeu, 'joueurs', ()) if j is not self and j.dans_le_dj),
+                default=0,
+            )
+            return mes_golems > 0 and (greedy or mes_golems >= adv_golems)
+        if effet == "SOULSTORM":
+            return self._score_estime_strategy(strategy) + strategy.replay_target_lead < self._score_a_battre_strategy(Jeu, strategy)
+        if loose and effet == "INCEPTION":
+            return True
+        if resource and effet == "DRAG":
+            mes_dragons = sum(1 for m in self.pile_monstres_vaincus if "Dragon" in getattr(m, 'types', ()))
+            intacts = sum(1 for o in self.objets if getattr(o, 'intact', False))
+            return (
+                mes_dragons > 0
+                and (self.pv_total <= strategy.resource_drag_max_pv
+                     or intacts < strategy.resource_drag_min_intacts)
+            )
+        if greedy and effet == "DRAG":
+            mes_dragons = sum(1 for m in self.pile_monstres_vaincus if "Dragon" in getattr(m, 'types', ()))
+            adv_dragons = sum(
+                1 for j in getattr(Jeu, 'joueurs', ()) if j is not self and j.dans_le_dj
+                for m in j.pile_monstres_vaincus if "Dragon" in getattr(m, 'types', ())
+            )
+            return adv_dragons > mes_dragons
+        return False
+
+    def _carte_apres_position(self, Jeu, offset):
+        donjon = Jeu.donjon
+        pos = donjon.index + offset
+        if pos >= donjon.nb_cartes:
+            return None
+        return donjon.cartes[donjon.ordre[pos]]
+
+    def _decision_rejouer_strategy(self, Jeu, log_details, strategy):
+        if strategy.replay_policy not in ("oracle_safe", "greedy_safe", "oracle_predatory", "oracle_score"):
+            return None
+        carte = self.prochaine_carte_strategy(Jeu, strategy)
+        if carte is None:
+            return None
+        if getattr(carte, 'event', False):
+            if strategy.replay_policy == "oracle_score":
+                decision = self._event_connue_interessante(carte, Jeu, strategy)
+                if decision:
+                    log_details.append(f"{self.nom} continue sur un evenement utile ({strategy.name}).")
+                return decision
+            if strategy.replay_allow_events:
+                log_details.append(f"{self.nom} continue de piocher selon sa strategie ({strategy.name}).")
+                return True
+            return False
+        if not getattr(carte, 'is_X', False) or getattr(strategy, 'replay_allow_estimated_x', False):
+            if strategy.replay_policy == "oracle_score":
+                score_actuel = self._score_estime_strategy(strategy)
+                cible = self._score_a_battre_strategy(Jeu, strategy) + strategy.replay_target_lead
+                besoin_score = score_actuel < cible
+                executable = strategy.replay_allow_executable and self.peut_executer_facilement(carte)
+                degats = self._degats_carte_connue(carte, Jeu)
+                gain = 2 if getattr(carte, 'effet', None) == "GOLD" else 1
+                prend_safe = getattr(strategy, 'replay_take_safe_when_ahead', False)
+                if getattr(strategy, 'replay_predatory_pass', False) and not besoin_score and gain <= 1:
+                    adversaire = self.prochain_adversaire_dans_donjon(Jeu)
+                    if (adversaire is not None
+                            and self._carte_est_mortelle_pour(adversaire, carte, Jeu)
+                            and not self._carte_est_mortelle_pour(self, carte, Jeu)):
+                        log_details.append(f"{self.nom} passe une carte dangereuse a l'adversaire ({strategy.name}).")
+                        return False
+                if executable and (prend_safe or besoin_score or gain > 1 or degats >= strategy.replay_safe_damage):
+                    log_details.append(f"{self.nom} continue pour prendre un monstre gerable ({strategy.name}).")
+                    return True
+                if degats <= strategy.replay_safe_damage and self.pv_total - degats >= 2:
+                    return prend_safe or besoin_score or gain > 1
+                if besoin_score and self.pv_total - degats >= strategy.replay_score_margin:
+                    log_details.append(f"{self.nom} continue pour rattraper le score ({strategy.name}).")
+                    return True
+                if (not besoin_score
+                        and getattr(strategy, 'replay_take_margin_when_ahead', False)
+                        and self.pv_total - degats >= strategy.replay_score_margin):
+                    log_details.append(f"{self.nom} continue avec une grosse marge de PV ({strategy.name}).")
+                    return True
+                if (besoin_score and strategy.replay_use_options_for_score
+                        and self._nb_options_combat() > 0
+                        and self.pv_total + strategy.replay_option_buffer - degats >= strategy.replay_score_margin):
+                    log_details.append(f"{self.nom} continue avec options pour rattraper le score ({strategy.name}).")
+                    return True
+                return False
+            if strategy.replay_policy == "oracle_predatory":
+                adversaire = self.prochain_adversaire_dans_donjon(Jeu)
+                mortel_pour_adv = (
+                    adversaire is not None and self._carte_est_mortelle_pour(adversaire, carte, Jeu)
+                )
+                mortel_pour_moi = self._carte_est_mortelle_pour(self, carte, Jeu)
+                if mortel_pour_adv and not mortel_pour_moi:
+                    if (strategy.replay_hunt_setup
+                            and self._score_rapide() >= strategy.oracle_hunt_min_score
+                            and self._proba_fuite_sur(carte, Jeu) >= strategy.oracle_hunt_min_escape):
+                        log_details.append(f"{self.nom} continue pour fuir et passer la menace ({strategy.name}).")
+                        return True
+                    log_details.append(f"{self.nom} passe une carte dangereuse a l'adversaire ({strategy.name}).")
+                    return False
+            if strategy.replay_allow_executable and self.peut_executer_facilement(carte):
+                log_details.append(f"{self.nom} continue sur une carte gerable ({strategy.name}).")
+                return True
+            degats = self._degats_attendus(carte, Jeu)
+            marge = strategy.replay_greedy_margin if strategy.replay_policy == "greedy_safe" else strategy.replay_safe_margin
+            if degats <= strategy.replay_safe_damage or self.pv_total - degats >= marge:
+                log_details.append(f"{self.nom} continue sur une carte acceptable ({strategy.name}).")
+                return True
+            if self._nb_options_combat() > 0 and self.pv_total + strategy.replay_option_buffer > degats:
+                log_details.append(f"{self.nom} continue avec des options de combat ({strategy.name}).")
+                return True
+            if strategy.replay_flee_setup and degats >= self.pv_total and self._proba_fuite_sur(carte, Jeu) >= strategy.oracle_flee_min_escape:
+                log_details.append(f"{self.nom} continue pour tenter une fuite preparee ({strategy.name}).")
+                return True
+            return False
+        return None
+
     def deciderDeRejouer(self, Jeu, log_details):
         """IA: decide de repiocher volontairement au lieu de passer son tour."""
         if not self.dans_le_dj or Jeu.donjon.vide or Jeu.traquenard_actif or self.doit_passer:
             return False
+
+        if self.is_human():
+            return self.demander_oui_non(
+                "replay",
+                "Draw another card this turn?",
+                default=False,
+                context={
+                    "pv": self.pv_total,
+                    "score": self._score_rapide(),
+                    "remaining_cards": max(0, Jeu.donjon.nb_cartes - Jeu.donjon.index),
+                },
+            )
+
+        strategy = self.ia_strategy()
+        decision_strategy = self._decision_rejouer_strategy(Jeu, log_details, strategy)
+        if decision_strategy is not None:
+            return decision_strategy
 
         # 1) la prochaine carte est connue (objets de divination): decision informee
         carte_connue = self.connait_prochaine_carte(Jeu)
@@ -327,6 +873,44 @@ class Joueur:
         if any(m.effet == "GOLD" for m in self.pile_monstres_vaincus):
             s += 1
         return s
+
+    def _score_estime_strategy(self, strategy):
+        score = self._score_rapide()
+        if getattr(strategy, 'score_estimate_policy', 'rapid') != "static":
+            return score
+
+        pile = self.pile_monstres_vaincus
+        objets = [o for o in self.objets if getattr(o, 'intact', False)]
+        score_fixe = {
+            "Katana": -1,
+            "ValisesDeCash": 3,
+            "TuniqueClasse": 1,
+            "ArmureDamnee": -1,
+            "AnneauPlussain": 1,
+            "MarteauDEternite": -1,
+            "BourseGarnie": 1,
+            "ParfumDeScandale": 1,
+            "PerleRare": 2,
+            "RoseDOr": 2,
+        }
+        for objet in objets:
+            nom_classe = type(objet).__name__
+            score += score_fixe.get(nom_classe, 0)
+            if nom_classe == "PierreDAme" and any("Dragon" in m.types for m in pile):
+                score += 3
+            elif nom_classe == "PeigneEnOr":
+                score += sum(1 for m in pile if "Gobelin" in m.types)
+            elif nom_classe == "LampeMagique":
+                score += 2 * sum(1 for m in pile if "Démon" in m.types)
+            elif nom_classe == "CorbeilleDOr":
+                score += sum(1 for o in self.objets if not getattr(o, 'intact', False))
+            elif nom_classe == "BagouzeDuParrain":
+                if sum(1 for o in self.objets if getattr(o, 'intact', False)) == 4:
+                    score += 2
+            elif nom_classe == "MainInvisible":
+                gros_types = ("Liche", "Démon", "Dragon")
+                score += sum(1 for m in pile if any(t in m.types for t in gros_types))
+        return score
 
     def _profil_cartes_restantes(self, Jeu):
         """Profil probabiliste des cartes restantes du Donjon pour CE joueur.
@@ -428,7 +1012,7 @@ class Joueur:
             profils[cle] = get(cle, 0.0) + 1.0
         return profils, len(restantes), poids_events
 
-    def _decision_fuite_ev(self, Jeu):
+    def _decision_fuite_ev(self, Jeu, strategy=None):
         """Fuir maintenant ou continuer ? On compare par DP F (tenter la fuite a chaque
         tour jusqu'a reussite) et V (piocher puis re-decider), sur la composition exacte
         du Donjon restant. La fuite se joue d6+modificateurs contre la puissance de la
@@ -440,6 +1024,7 @@ class Joueur:
         n = donjon.nb_cartes - donjon.index
         if n <= 0:
             return False
+        strategy = strategy or self.ia_strategy()
         # Court-circuit (boucle chaude) : borne superieure des degats encore possibles ;
         # si nos PV la depassent, aucune carte ne peut nous tuer et on ne fuit jamais.
         total_medailles = sum(j.medailles for j in Jeu.joueurs)
@@ -462,7 +1047,7 @@ class Joueur:
         if not n:
             return False
         # mes pioches restantes : le Donjon est partage entre les joueurs encore dedans
-        horizon = min(FUITE_EV_HORIZON, max(1, -(-n // nb_dans_dj)))
+        horizon = min(int(strategy.fuite_ev_horizon), max(1, -(-n // nb_dans_dj)))
         masse_mortelle = sum(w for (degats, _, _, peut_tuer), w in profils.items()
                              if peut_tuer and degats >= self.pv_total) / n
         if masse_mortelle == 0.0:
@@ -478,20 +1063,20 @@ class Joueur:
                 continue
             s_j = j._score_rapide()
             if j.dans_le_dj:
-                s_j += TAUX_GAIN_PAR_PIOCHE * n / nb_dans_dj  # ses pioches restantes
+                s_j += strategy.taux_gain_par_pioche * n / nb_dans_dj  # ses pioches restantes
             meilleur_adverse = max(meilleur_adverse, s_j)
         poids_verrou = 1.0 / (1.0 + math.exp(-(score_actuel - meilleur_adverse) / 2.0))
 
         # cout de la mort, en points de score (relatif a une fuite reussie : score garde)
-        cout_mort = VALEUR_SURVIE_PTS + score_actuel * poids_verrou
+        cout_mort = strategy.valeur_survie_pts + score_actuel * poids_verrou
         if self.medailles and not any(getattr(o, 'protege_medailles', False) and o.intact
                                       for o in self.objets):
-            cout_mort += VALEUR_MEDAILLE_PTS
+            cout_mort += strategy.valeur_medaille_pts
 
         # Les objets actifs de combat/survie sans tags (potions, armes a usage unique...)
         # peuvent neutraliser une carte mortelle chacun : on couvre une fraction des
         # rencontres mortelles attendues sur l'horizon, avec une efficacite forfaitaire.
-        couverture_options = min(1.0, EFFICACITE_OPTION * self._nb_options_combat()
+        couverture_options = min(1.0, strategy.efficacite_option * self._nb_options_combat()
                                  / (masse_mortelle * horizon))
 
         # quantites par pioche (stationnaires) : esperance immediate et masse qui reste
@@ -514,7 +1099,7 @@ class Joueur:
                 fuir_imm += p * (1.0 - p_esc) * gain
                 rester_f += p * (1.0 - p_esc)
 
-        V = BONUS_PONCEUR_PTS  # vivant au bout du Donjon : les fuyards sont exclus du decompte
+        V = strategy.bonus_ponceur_pts  # vivant au bout du Donjon : les fuyards sont exclus du decompte
         F = 0.0                # sorti du Donjon : on ne marque plus rien
         for _ in range(horizon):
             W = max(F, V)
@@ -522,14 +1107,15 @@ class Joueur:
             F = fuir_imm + rester_f * W
         return F > V
 
-    def _decision_fuite_seuils(self, Jeu):
+    def _decision_fuite_seuils(self, Jeu, strategy=None):
         """Ancienne politique a seuils (conservee pour comparaison, politique_fuite='seuils')."""
+        strategy = strategy or self.ia_strategy()
         # Certains objets (Ceinture du Ponceur) doivent anticiper la fuite: leurs PV "de decision"
         # sont reduits pour fuir a temps (avant que la fuite ne devienne interdite)
         # Mode soiree: mourir avec des Medailles en coute une, on fuit donc plus tot.
         pv_decision = self.pv_total - sum(getattr(objet, 'malus_pv_decision_fuite', 0)
                                           for objet in self.objets if objet.intact)
-        seuil_pv = self.pv_min_fuite + PRUDENCE_PV_PAR_MEDAILLE * self.medailles
+        seuil_pv = self.pv_min_fuite + strategy.prudence_pv_par_medaille * self.medailles
         if self._nb_options_combat() > 1:
             return False
         if pv_decision <= seuil_pv:
@@ -550,10 +1136,115 @@ class Joueur:
             if (self._degats_attendus(c, Jeu) >= self.pv_total
                     and not self.peut_executer_facilement(c, couverture)):
                 mortelles += 1
-        seuil_risque = max(0.10, 0.25 - PRUDENCE_RISQUE_PAR_MEDAILLE * self.medailles)
+        seuil_risque = max(0.10, 0.25 - strategy.prudence_risque_par_medaille * self.medailles)
         return mortelles / len(restantes) >= seuil_risque
 
     politique_fuite = 'ev'  # attribut de classe : 'ev' (esperance) ou 'seuils' (ancienne)
+
+    def _proba_fuite_sur(self, carte, Jeu):
+        puissance = getattr(carte, 'puissance', getattr(carte, 'puissance_initiale', 0))
+        if getattr(carte, 'is_X', False):
+            puissance = self._degats_attendus(carte, Jeu)
+        mod = self.calculer_modificateurs()
+        return min(1.0, max(0.0, (7 + mod - puissance) / 6.0))
+
+    def _decision_fuite_oracle(self, Jeu, log_details, strategy):
+        carte = self.prochaine_carte_strategy(Jeu, strategy)
+        if carte is None:
+            return None
+        if getattr(carte, 'event', False):
+            return False
+        if self.peut_executer_facilement(carte):
+            return False
+
+        degats = self._degats_attendus(carte, Jeu)
+        p_fuite = self._proba_fuite_sur(carte, Jeu)
+        if strategy.oracle_flee_on_lethal and degats >= self.pv_total:
+            return p_fuite >= strategy.oracle_flee_min_escape
+        adversaire = self.prochain_adversaire_dans_donjon(Jeu)
+        if (adversaire is not None
+                and self._score_rapide() >= strategy.oracle_hunt_min_score
+                and self._carte_est_mortelle_pour(adversaire, carte, Jeu)
+                and p_fuite >= strategy.oracle_hunt_min_escape):
+            return True
+        if degats >= max(1, self.pv_total) * strategy.oracle_flee_danger_ratio:
+            return p_fuite >= strategy.oracle_flee_danger_escape
+        return False
+
+    def _decision_fuite_exact_score(self, Jeu, strategy):
+        carte = self.prochaine_carte_strategy(Jeu, strategy)
+        if carte is None:
+            return None
+        if getattr(carte, 'event', False):
+            return False
+        if getattr(Jeu, 'execute_next_monster', False) or self.peut_executer_facilement(carte):
+            return False
+        if getattr(carte, 'is_X', False):
+            return None
+
+        degats = self._degats_attendus(carte, Jeu)
+        gain = 2 if getattr(carte, 'effet', None) == "GOLD" else 1
+        if degats <= strategy.replay_safe_damage and self.pv_total - degats >= 2:
+            return False
+        if gain > 1 and self.pv_total - degats >= strategy.replay_score_margin:
+            return False
+
+        score_actuel = self._score_estime_strategy(strategy)
+        cible = self._score_a_battre_strategy(Jeu, strategy) + strategy.oracle_flee_min_score_lead
+        if score_actuel < cible:
+            return None
+
+        p_fuite = self._proba_fuite_sur(carte, Jeu)
+        if p_fuite < strategy.oracle_flee_min_escape:
+            return None
+        if degats >= self.pv_total:
+            return True
+        if (degats >= max(1, self.pv_total) * strategy.oracle_flee_danger_ratio
+                and self.pv_total - degats < strategy.replay_score_margin):
+            return True
+        return None
+
+    def _devrait_prendre_carte_connue_pour_score(self, Jeu, strategy):
+        carte = self.prochaine_carte_strategy(Jeu, strategy)
+        if carte is None:
+            return False
+        if getattr(carte, 'event', False):
+            return self._event_connue_interessante(carte, Jeu, strategy)
+        if getattr(Jeu, 'execute_next_monster', False):
+            return True
+        if getattr(carte, 'is_X', False):
+            return False
+        score_actuel = self._score_estime_strategy(strategy)
+        cible = self._score_a_battre_strategy(Jeu, strategy) + strategy.replay_target_lead
+        besoin_score = score_actuel < cible
+        degats = self._degats_attendus(carte, Jeu)
+        gain = 2 if getattr(carte, 'effet', None) == "GOLD" else 1
+        prend_safe = getattr(strategy, 'replay_take_safe_when_ahead', False)
+        if self.peut_executer_facilement(carte):
+            return prend_safe or besoin_score or gain > 1
+        if degats <= strategy.replay_safe_damage and self.pv_total - degats >= 2:
+            return prend_safe or besoin_score or gain > 1
+        if (not besoin_score
+                and getattr(strategy, 'replay_take_margin_when_ahead', False)
+                and self.pv_total - degats >= strategy.replay_score_margin):
+            return True
+        return besoin_score and self.pv_total - degats >= strategy.replay_score_margin
+
+    def _devrait_verrouiller_score(self, Jeu, strategy):
+        if getattr(strategy, 'score_lock_only_last', False):
+            if any(j is not self and j.dans_le_dj for j in getattr(Jeu, 'joueurs', ())):
+                return False
+        if self._score_estime_strategy(strategy) < strategy.score_lock_min_score:
+            return False
+        if self._score_estime_strategy(strategy) < self._score_a_battre_strategy(Jeu, strategy) + strategy.score_lock_lead:
+            return False
+        carte = self.prochaine_carte_strategy(Jeu, strategy)
+        if carte is not None:
+            if getattr(carte, 'event', False):
+                return False
+            if self._proba_fuite_sur(carte, Jeu) < strategy.score_lock_min_escape:
+                return False
+        return True
 
     def deciderDeFuir(self, Jeu, log_details):
         # --- NOUVELLE Condition : Interdiction de fuir au Tour 1 ---
@@ -567,6 +1258,23 @@ class Joueur:
         # Certains objets (Ceinture du Ponceur) interdisent de tenter la fuite avec moins de 6 PV
         if self.pv_total < 6 and any(getattr(objet, 'bloque_fuite_pv_bas', False) and objet.intact for objet in self.objets):
             return False
+
+        if self.is_human():
+            carte = getattr(Jeu, 'carte_courante', None)
+            return self.demander_oui_non(
+                "flee",
+                "Try to flee before resolving this card?",
+                default=False,
+                context={
+                    "pv": self.pv_total,
+                    "score": self._score_rapide(),
+                    "card": self._decision_option_label(carte) if carte is not None else None,
+                    "power": getattr(carte, "puissance", None),
+                    "modifier": self.calculer_modificateurs(),
+                },
+            )
+
+        strategy = self.ia_strategy()
 
         # La prochaine carte est connue (objets de divination): decision informee
         carte_connue = self.connait_prochaine_carte(Jeu)
@@ -587,12 +1295,54 @@ class Joueur:
             return True
 
         # Coeur de la decision, selon la politique du joueur
-        if self.politique_fuite == 'ev':
-            veut_fuir = self._decision_fuite_ev(Jeu)
+        if strategy.flee_policy == 'oracle_next':
+            decision_oracle = self._decision_fuite_oracle(Jeu, log_details, strategy)
+            veut_fuir = decision_oracle if decision_oracle is not None else self._decision_fuite_ev(Jeu, strategy)
+        elif strategy.flee_policy == 'ev_hunter':
+            decision_oracle = self._decision_fuite_oracle(Jeu, log_details, strategy)
+            veut_fuir = True if decision_oracle else self._decision_fuite_ev(Jeu, strategy)
+        elif strategy.flee_policy == 'ev_score':
+            if self._devrait_verrouiller_score(Jeu, strategy):
+                veut_fuir = True
+            elif self._devrait_prendre_carte_connue_pour_score(Jeu, strategy):
+                veut_fuir = False
+            else:
+                veut_fuir = self._decision_fuite_ev(Jeu, strategy)
+        elif strategy.flee_policy == 'ev_lock':
+            if self._devrait_verrouiller_score(Jeu, strategy):
+                veut_fuir = True
+            else:
+                veut_fuir = self._decision_fuite_ev(Jeu, strategy)
+        elif strategy.flee_policy == 'ev_exact':
+            decision_exacte = self._decision_fuite_exact_score(Jeu, strategy)
+            if decision_exacte is not None:
+                veut_fuir = decision_exacte
+            elif self._devrait_verrouiller_score(Jeu, strategy):
+                veut_fuir = True
+            else:
+                veut_fuir = self._decision_fuite_ev(Jeu, strategy)
+        elif strategy.flee_policy == 'ev':
+            veut_fuir = self._decision_fuite_ev(Jeu, strategy)
+        elif strategy.flee_policy == 'seuils':
+            veut_fuir = self._decision_fuite_seuils(Jeu, strategy)
+        elif strategy.flee_policy == 'never':
+            veut_fuir = False
+        elif self.politique_fuite == 'ev':
+            veut_fuir = self._decision_fuite_ev(Jeu, strategy)
         else:
-            veut_fuir = self._decision_fuite_seuils(Jeu)
+            veut_fuir = self._decision_fuite_seuils(Jeu, strategy)
         if not veut_fuir:
             return False
+
+        rival_block = getattr(strategy, 'flee_rival_block_lead', -999)
+        if rival_block > -999 and any(j is not self and j.dans_le_dj for j in getattr(Jeu, 'joueurs', ())):
+            cible_rivaux = max(
+                (j._score_estime_strategy(strategy) for j in getattr(Jeu, 'joueurs', ())
+                 if j is not self and j.dans_le_dj),
+                default=0,
+            )
+            if self._score_estime_strategy(strategy) < cible_rivaux + rival_block:
+                return False
 
         # Blocage fuyard : fuir avec moins de points qu'un fuyard = defaite assuree,
         # autant continuer a marquer (ou mourir en essayant).
@@ -626,6 +1376,18 @@ class Joueur:
         if not objets_intacts:
             return None
 
+        if self.is_human():
+            objet = self.demander_choix(
+                "choose_object_sacrifice_limon",
+                "Choose an intact object to break.",
+                objets_intacts,
+                default=min(objets_intacts, key=lambda o: (o.pv_bonus >= self.pv_total, getattr(o, "priorite", 0))),
+                context={"usage": "sacrifice_limon"},
+            )
+            objet.destroy(self, jeu, log_details)
+            self._gerer_pv_bonus(objet, log_details)
+            return objet
+
         donjon = jeu.donjon
         restants = [donjon.cartes[i] for i in donjon.ordre[donjon.index:]]
 
@@ -637,7 +1399,14 @@ class Joueur:
                          or getattr(c, 'puissance_initiale', None) in o.puissance_tags)
             return o.priorite * cibles / (1 + cibles)
 
-        objet = min(objets_intacts, key=lambda o: (o.pv_bonus >= self.pv_total, valeur(o)))
+        if self.ia_strategy().sacrifice_policy == "future_value":
+            objet = self.choisir_objet(
+                [o for o in objets_intacts],
+                jeu,
+                usage="sacrifice_limon",
+            )
+        else:
+            objet = min(objets_intacts, key=lambda o: (o.pv_bonus >= self.pv_total, valeur(o)))
         objet.destroy(self, jeu, log_details)
         self._gerer_pv_bonus(objet, log_details)
         return objet

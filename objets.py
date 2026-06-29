@@ -50,9 +50,16 @@ class Objet:
         # worth it to use the item?
         return True
     def condition(self, joueur, carte, Jeu, log_details): # check if we use the item or not
-        return (self.intact 
-            and self.rules(joueur, carte, Jeu, log_details)
-            and self.worthit(joueur, carte, Jeu, log_details))
+        if not self.intact or not self.rules(joueur, carte, Jeu, log_details):
+            return False
+        baseline_worth = self.worthit(joueur, carte, Jeu, log_details)
+        decide_source = getattr(joueur, 'decide_utiliser_source', None)
+        if decide_source is not None:
+            return decide_source(self, carte, Jeu, log_details, baseline_worth)
+        decide = getattr(joueur, 'decide_utiliser_objet', None)
+        if decide is not None:
+            return decide(self, carte, Jeu, log_details, baseline_worth)
+        return baseline_worth
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         pass
@@ -2451,6 +2458,13 @@ def _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=False):
         return None
     cle = lambda m: 0 if m.is_X else m.puissance
     monstre = max(candidats, key=cle) if plus_puissant else min(candidats, key=cle)
+    if getattr(joueur, "is_human", lambda: False)():
+        monstre = joueur.choisir_monstre(
+            candidats,
+            Jeu,
+            usage="discard_from_pile",
+            default=monstre,
+        )
     joueur.pile_monstres_vaincus.remove(monstre)
     Jeu.defausse.append(monstre)
     return monstre
@@ -2460,6 +2474,10 @@ def _choisir_objet_a_sacrifier(joueur, exclus):
     candidats = [o for o in joueur.objets if o.intact and o not in exclus and o.pv_bonus < joueur.pv_total]
     if not candidats:
         return None
+    choisir = getattr(joueur, 'choisir_objet', None)
+    if choisir is not None and (getattr(joueur, "is_human", lambda: False)()
+                                or joueur.ia_strategy().sacrifice_policy == "future_value"):
+        return choisir(candidats, None, usage="sacrifice")
     return min(candidats, key=lambda o: (o.pv_bonus, o.priorite))
 
 
@@ -2485,13 +2503,18 @@ def _choisir_objet_a_sacrifier_comme_limon(joueur, Jeu, exclus):
     candidats = [o for o in joueur.objets if o.intact and o not in exclus and o.pv_bonus < joueur.pv_total]
     if not candidats:
         return None
+    choisir = getattr(joueur, 'choisir_objet', None)
+    if choisir is not None and (getattr(joueur, "is_human", lambda: False)()
+                                or joueur.ia_strategy().sacrifice_policy == "future_value"):
+        return choisir(candidats, Jeu, usage="sacrifice_limon")
     return min(candidats, key=lambda o: _valeur_objet_sacrifie_comme_limon(joueur, o, Jeu))
 
 
 def _pioche_deux_objets_garde_le_meilleur(joueur, Jeu, log_details, source):
     if len(Jeu.objets_dispo) >= 2:
         choix = random.sample(Jeu.objets_dispo, 2)
-        garde = max(choix, key=lambda o: o.priorite)
+        choisir = getattr(joueur, 'choisir_objet', None)
+        garde = choisir(choix, Jeu, usage="draw_keep") if choisir is not None else max(choix, key=lambda o: o.priorite)
         jete = choix[0] if garde is choix[1] else choix[1]
         Jeu.objets_dispo.remove(garde)
         Jeu.objets_dispo.remove(jete)
@@ -2519,7 +2542,8 @@ def _repare_un_objet(joueur, exclus, log_details, source):
     brises = [o for o in joueur.objets if not o.intact and o not in exclus]
     if not brises:
         return None
-    objet_repare = max(brises, key=lambda o: o.pv_bonus)
+    choisir = getattr(joueur, 'choisir_objet', None)
+    objet_repare = choisir(brises, None, usage="repair") if choisir is not None else max(brises, key=lambda o: o.pv_bonus)
     objet_repare.repare()
     if objet_repare.pv_bonus:
         joueur.pv_total += objet_repare.pv_bonus
@@ -2695,7 +2719,8 @@ class Imprimante(Objet):
         autres = [o for o in joueur.objets if o is not self and o.intact and type(o) is not Imprimante]
         if not autres:
             return
-        modele = max(autres, key=lambda o: o.priorite)
+        choisir = getattr(joueur, 'choisir_objet', None)
+        modele = choisir(autres, Jeu, usage="copy") if choisir is not None else max(autres, key=lambda o: o.priorite)
         copie = type(modele)()
         joueur.objets.remove(self)
         joueur.ajouter_objet(copie)
@@ -3501,7 +3526,8 @@ class CoursierVolant(Objet):
             inutiles = [o for o in joueur.objets
                         if o.intact and o is not self and not o.actif and o.pv_bonus == 0 and o.priorite < 40]
             if inutiles:
-                jete = min(inutiles, key=lambda o: o.priorite)
+                choisir = getattr(joueur, 'choisir_objet', None)
+                jete = choisir(inutiles, Jeu, usage="sacrifice_coursier") if choisir is not None else min(inutiles, key=lambda o: o.priorite)
                 joueur.objets.remove(jete)
                 log_details.append(f"{joueur.nom} défausse {jete.nom} pour piocher ({self.nom}).")
                 self.piocheItem(joueur, Jeu, log_details)

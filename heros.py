@@ -21,8 +21,13 @@ class Perso:
         # worth it to use the item?
         return True
     def condition(self, joueur, carte, Jeu, log_details): # check if we use the item or not
-        return (self.rules(joueur, carte, Jeu, log_details)
-            and self.worthit(joueur, carte, Jeu, log_details))
+        if not self.rules(joueur, carte, Jeu, log_details):
+            return False
+        baseline_worth = self.worthit(joueur, carte, Jeu, log_details)
+        decide_source = getattr(joueur, 'decide_utiliser_source', None)
+        if decide_source is not None:
+            return decide_source(self, carte, Jeu, log_details, baseline_worth)
+        return baseline_worth
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         pass
@@ -192,8 +197,8 @@ class Princesse(Perso):
             self.capacite_utilisee = True
             if self.level == 2 and len(Jeu.objets_dispo) >= 2:
                 choix = random.sample(Jeu.objets_dispo, 2)
-                # TODO: heuristique moteur temporaire; la politique IA devra choisir quel objet garder.
-                garde = max(choix, key=lambda o: o.priorite)
+                choisir = getattr(joueur, 'choisir_objet', None)
+                garde = choisir(choix, Jeu, usage="draw_keep") if choisir is not None else max(choix, key=lambda o: o.priorite)
                 jete = choix[0] if garde is choix[1] else choix[1]
                 Jeu.objets_dispo.remove(garde)
                 Jeu.objets_dispo.remove(jete)
@@ -307,7 +312,16 @@ class InventeurGenial(Perso):
                 log_details.append(f"{joueur.nom} ({self.nom}) utilise sa capacité ({self.compteur}/{self.level}).")
 
                 # Choisir 2 objets brisés au hasard à défausser
-                objets_a_defausser = random.sample(objets_brises, 2)
+                choisir = getattr(joueur, 'choisir_objet', None)
+                if choisir is not None and joueur.ia_strategy().sacrifice_policy == "future_value":
+                    objets_a_defausser = []
+                    candidats = list(objets_brises)
+                    for _ in range(2):
+                        choisi = choisir(candidats, Jeu, usage="sacrifice_inventeur")
+                        objets_a_defausser.append(choisi)
+                        candidats.remove(choisi)
+                else:
+                    objets_a_defausser = random.sample(objets_brises, 2)
                 noms_defausse = [o.nom for o in objets_a_defausser]
                 log_details.append(f"--> Défausse {noms_defausse}.")
 

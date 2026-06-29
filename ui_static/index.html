@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SimuDonjon</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>SimuDonjon</h1>
+          <p id="statusLine">No game running</p>
+        </div>
+        <form id="newGameForm" class="controls">
+          <label>
+            Mode
+            <select id="mode">
+              <option value="random">Random</option>
+              <option value="draft">Draft</option>
+              <option value="party">Party</option>
+            </select>
+          </label>
+          <label>
+            Players
+            <select id="playerCount">
+              <option value="4">4</option>
+              <option value="3">3</option>
+            </select>
+          </label>
+          <label>
+            Name
+            <input id="playerName" value="Human" />
+          </label>
+          <label>
+            Seed
+            <input id="seed" type="number" placeholder="random" />
+          </label>
+          <label>
+            Bot delay
+            <input id="botDelay" type="number" min="0" step="100" value="800" />
+          </label>
+          <button type="submit">Start</button>
+        </form>
+      </header>
+
+      <section class="board">
+        <section class="panel card-panel">
+          <div class="panel-title">
+            <span>Current Card</span>
+            <span id="phaseBadge" class="badge">setup</span>
+          </div>
+          <div id="currentCard" class="empty">Start a game to draw cards.</div>
+        </section>
+
+        <section class="panel decision-panel">
+          <div class="panel-title">
+            <span>Decision</span>
+            <span id="roundLabel" class="muted"></span>
+          </div>
+          <div id="decisionBox" class="empty">Waiting for the next human decision.</div>
+        </section>
+      </section>
+
+      <section class="panel draft-panel" id="draftPanel" hidden>
+        <div class="panel-title">
+          <span>Draft Hand</span>
+          <span id="draftMeta" class="muted"></span>
+        </div>
+        <div id="draftHand" class="item-grid"></div>
+      </section>
+
+      <section class="players" id="players"></section>
+
+      <section class="panel logs">
+        <div class="tabs">
+          <button id="basicTab" class="active" type="button">Basic log</button>
+          <button id="fullTab" type="button">Full log</button>
+        </div>
+        <ol id="logList"></ol>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
