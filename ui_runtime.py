@@ -28,6 +28,7 @@ from simu import ordonnanceur
 BOT_NAMES = ["Bot 1", "Bot 2", "Bot 3"]
 DEFAULT_PLAYER_COUNT = 4
 RANDOM_SEUIL_PV_ESSAI_FUITE = 6
+TEACHER_STRATEGY_NAME = "teacher_best"
 
 
 def _json_safe(value):
@@ -343,12 +344,13 @@ def make_players(names, heroes, builds, provider, medals=None):
     players = []
     medals = medals or [0] * len(names)
     for idx, name in enumerate(names):
-        control = "human" if idx == 0 else "ai"
+        control = "human" if idx == 0 else "teacher ai"
         player = Joueur(
             name,
             heroes[idx],
             list(builds[idx]),
             medailles=medals[idx],
+            strategy=None if idx == 0 else TEACHER_STRATEGY_NAME,
             control=control,
             decision_provider=provider,
         )

@@ -2,6 +2,9 @@ import time
 
 import pytest
 
+from heros import Perso
+from joueurs import Joueur
+from objets import Objet
 from ui_runtime import GameSession
 
 
@@ -68,3 +71,59 @@ def test_decision_validation_rejects_illegal_option():
 
     session.submit_decision("decision-1", "a")
     assert session._decision_answer == "a"
+
+
+class _Provider:
+    def __init__(self, answer):
+        self.answer = answer
+        self.calls = []
+
+    def choose(self, joueur, kind, prompt, options, default_id, context=None):
+        self.calls.append({
+            "kind": kind,
+            "prompt": prompt,
+            "options": options,
+            "default_id": default_id,
+            "context": context or {},
+        })
+        return self.answer
+
+
+class _CombatItem(Objet):
+    def __init__(self, name, worth):
+        super().__init__(name, actif=True)
+        self._worth = worth
+
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return self._worth
+
+
+class _Card:
+    titre = "Test Monster"
+    dommages = 6
+    puissance = 6
+    types = ["Golem"]
+
+
+def test_human_can_choose_any_legal_combat_item_directly():
+    first = _CombatItem("First legal item", False)
+    second = _CombatItem("Second legal item", True)
+    provider = _Provider("1")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [first, second],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+
+    choice = joueur.choisir_source_combat([first, second], _Card(), object(), [])
+
+    assert choice is second
+    assert provider.calls[0]["kind"] == "choose_combat_source"
+    assert [option["label"] for option in provider.calls[0]["options"]] == [
+        "First legal item",
+        "Second legal item",
+        "Resolve now",
+    ]

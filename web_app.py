@@ -47,9 +47,9 @@ def metadata():
         "playerCounts": [3, 4],
         "ai": [
             {
-                "id": "simudonjon_default",
-                "label": "SimuDonjon default",
-                "description": "Uses the existing Joueur strategy system.",
+                "id": "teacher_best",
+                "label": "Teacher best",
+                "description": "Uses the strongest teacher-style bot profile available in the UI branch.",
             }
         ],
     }

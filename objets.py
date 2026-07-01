@@ -49,8 +49,10 @@ class Objet:
     def worthit(self, joueur, carte, Jeu, log_details):
         # worth it to use the item?
         return True
+    def can_use_in_combat(self, joueur, carte, Jeu, log_details):
+        return self.intact and self.rules(joueur, carte, Jeu, log_details)
     def condition(self, joueur, carte, Jeu, log_details): # check if we use the item or not
-        if not self.intact or not self.rules(joueur, carte, Jeu, log_details):
+        if not self.can_use_in_combat(joueur, carte, Jeu, log_details):
             return False
         baseline_worth = self.worthit(joueur, carte, Jeu, log_details)
         decide_source = getattr(joueur, 'decide_utiliser_source', None)
@@ -130,7 +132,14 @@ class Objet:
                 # Troll : la carte ne peut pas etre executee, l'objet reste range
                 log_details.append(f"{carte.titre} ne peut pas être exécuté : {joueur.nom} n'utilise pas {self.nom}.")
 
-    
+    def apply_in_combat(self, joueur, carte, Jeu, log_details):
+        try:
+            self.combat_effet(joueur, carte, Jeu, log_details)
+        except ExecutionImpossible:
+            # Troll: the card cannot be executed, so the item stays unused.
+            log_details.append(f"{carte.titre} ne peut pas etre execute : {joueur.nom} n'utilise pas {self.nom}.")
+
+
     def en_vaincu(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         # attention, check si les items sont intacts
         if(joueur_proprietaire.dans_le_dj):

@@ -154,6 +154,12 @@ def _traq_action_kind(source, late=False):
 
 def _traq_condition(source, joueur, carte, Jeu, late=False):
     try:
+        if isinstance(source, Objet):
+            return source.can_use_in_combat(joueur, carte, Jeu, [])
+        if late and hasattr(source, "can_use_in_combat_late"):
+            return source.can_use_in_combat_late(joueur, carte, Jeu, [])
+        if hasattr(source, "can_use_in_combat"):
+            return source.can_use_in_combat(joueur, carte, Jeu, [])
         return source.condition(joueur, carte, Jeu, [])
     except Exception:
         return False
@@ -292,6 +298,48 @@ def _decision_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, 
             f"[{strategie}] gain_net={gain_net:.2f}, PV succes={pv_succes:.1f}."
         )
     return decision
+
+
+def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, attempted_ids=()):
+    attempted_ids = set(attempted_ids)
+    candidates = []
+    for objet in joueur.objets:
+        if type(objet) in O_COMBAT or id(objet) in attempted_ids:
+            continue
+        try:
+            legal = objet.can_use_in_combat(joueur, carte, Jeu, [])
+        except Exception:
+            legal = False
+        if legal:
+            candidates.append(objet)
+    return tuple(candidates)
+
+
+def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT):
+    attempted_ids = set()
+    while True:
+        if carte.executed or joueur.fuite_reussie or not joueur.vivant or joueur.pv_total <= 0:
+            return carte, False, False
+        if getattr(Jeu, 'carte_ignoree', False):
+            return carte, True, False
+        if getattr(Jeu, 'carte_forcee', None) is not None:
+            return Jeu.carte_forcee, False, True
+
+        options = _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, attempted_ids)
+        if not options:
+            return carte, False, False
+
+        choice = joueur.choisir_source_combat(options, carte, Jeu, log_details)
+        if choice is None:
+            return carte, False, False
+
+        attempted_ids.add(id(choice))
+        choice.apply_in_combat(joueur, carte, Jeu, log_details)
+
+        if getattr(Jeu, 'carte_ignoree', False):
+            return carte, True, False
+        if getattr(Jeu, 'carte_forcee', None) is not None:
+            return Jeu.carte_forcee, False, True
 
 
 def _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC):
@@ -1049,24 +1097,19 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                             effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
                             remplacement = True
                         else:
-                            # comprehension = copie filtree: certains objets se retirent de la liste (Hache de Glace).
-                            # Chaque objet decide via ses rules/worthit ; on ne s'arrete que si le monstre
-                            # est execute ou si le joueur a fui (l'ancien break a dommages<=0 empechait
-                            # d'executer les monstres a 0 dommages comme la Fee des que le 1er objet etait inerte).
-                            for objet in joueur.objets_pour_combat(carte, Jeu, O_COMBAT):
-                                if carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
-                                    break
-                                objet.en_combat(joueur, carte, Jeu, log_details)
-                                if getattr(Jeu, 'carte_ignoree', False):
-                                    carte_ignoree = True
-                                if not joueur.vivant or joueur.pv_total <= 0:
-                                    break
-                                if getattr(Jeu, 'carte_forcee', None) is not None:
-                                    carte = Jeu.carte_forcee
-                                    del Jeu.carte_forcee
-                                    effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
-                                    remplacement = True
-                                    break
+                            carte_courante, combat_ignoree, remplacement = _run_combat_object_phase(
+                                joueur,
+                                carte,
+                                Jeu,
+                                log_details,
+                                O_COMBAT,
+                            )
+                            carte = carte_courante
+                            if combat_ignoree:
+                                carte_ignoree = True
+                            if remplacement:
+                                del Jeu.carte_forcee
+                                effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
                         if not remplacement or carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
                             break
                     if not joueur.vivant or joueur.pv_total <= 0:

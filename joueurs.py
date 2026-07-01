@@ -448,6 +448,103 @@ class Joueur:
     def decide_utiliser_objet(self, objet, carte, Jeu, log_details, baseline_worth):
         return self.decide_utiliser_source(objet, carte, Jeu, log_details, baseline_worth)
 
+    def _combat_source_score(self, source, carte, Jeu, baseline_worth):
+        dommages = getattr(carte, "dommages", 0) or 0
+        score = 100.0 if baseline_worth else 0.0
+        if dommages >= self.pv_total:
+            score += 80.0
+        elif dommages >= max(3, int(max(1, self.pv_total) * 0.45)):
+            score += 35.0
+
+        code = getattr(type(source).combat_effet, "__code__", None)
+        names = set(code.co_names if code else ())
+        if names & {"execute", "executeEtDefausse", "absorbe", "remetDansDonjon"}:
+            score += 45.0
+        if names & {"reduc_damage", "survit", "gagnePV"}:
+            score += min(30.0, float(dommages) * 4.0)
+        if getattr(carte, "puissance", None) in getattr(source, "puissance_tags", ()):
+            score += 30.0
+        if any(t in getattr(carte, "types", ()) for t in getattr(source, "types_tags", ())):
+            score += 30.0
+
+        # Spending a high-value active object is a cost; passive lines are cheap.
+        if getattr(source, "actif", False):
+            score -= 0.12 * self.valeur_objet(source, Jeu)
+        return score
+
+    def _best_combat_source(self, candidats, carte, Jeu, log_details, require_use=True):
+        scored = []
+        for source in candidats:
+            try:
+                baseline = source.worthit(self, carte, Jeu, log_details)
+            except Exception:
+                baseline = False
+            use_it = self._ai_decide_utiliser_source(source, carte, Jeu, log_details, baseline)
+            if require_use and not use_it:
+                continue
+            scored.append((self._combat_source_score(source, carte, Jeu, baseline), source))
+        if not scored:
+            return None
+        return max(scored, key=lambda item: item[0])[1]
+
+    def choisir_source_combat(self, candidats, carte, Jeu, log_details):
+        candidats = list(candidats)
+        if not candidats:
+            return None
+
+        card_name = self._decision_option_label(carte)
+        context = {
+            "card": card_name,
+            "pv": self.pv_total,
+            "damage": getattr(carte, "dommages", None),
+            "power": getattr(carte, "puissance", None),
+            "options": [self._decision_option_label(c) for c in candidats],
+        }
+
+        if self.is_human():
+            default_source = self._best_combat_source(candidats, carte, Jeu, log_details, require_use=True)
+            options = [
+                {
+                    "id": str(idx),
+                    "label": self._decision_option_label(source),
+                    "description": self._decision_option_description(source),
+                }
+                for idx, source in enumerate(candidats)
+            ]
+            options.append({
+                "id": "resolve",
+                "label": "Resolve now",
+                "description": "Take the card as-is without using another item.",
+            })
+            default_id = str(candidats.index(default_source)) if default_source in candidats else "resolve"
+            provider = getattr(self, "decision_provider", None)
+            if provider is None:
+                return default_source
+            selected = provider.choose(
+                self,
+                kind="choose_combat_source",
+                prompt=f"Choose an item to use against {card_name}.",
+                options=options,
+                default_id=default_id,
+                context=context,
+            )
+            if selected == "resolve":
+                return None
+            try:
+                return candidats[int(selected)]
+            except (TypeError, ValueError, IndexError):
+                return default_source
+
+        choice = self._best_combat_source(candidats, carte, Jeu, log_details, require_use=True)
+        self.enregistrer_decision_bot(
+            "choose_combat_source",
+            f"Choose an item against {card_name}.",
+            choice is not None,
+            label=self._decision_option_label(choice) if choice is not None else "resolve",
+            context=context,
+        )
+        return choice
+
     def choisir_objet(self, candidats, jeu, usage="generic"):
         if not candidats:
             return None
