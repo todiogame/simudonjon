@@ -31,6 +31,15 @@ BOT_NAMES = ["Bot 1", "Bot 2", "Bot 3"]
 DEFAULT_PLAYER_COUNT = 4
 RANDOM_SEUIL_PV_ESSAI_FUITE = 6
 TEACHER_STRATEGY_NAME = "teacher_best"
+HEURISTIC_STRATEGY_NAME = "baseline"
+BOT_STRATEGY_LABELS = {
+    TEACHER_STRATEGY_NAME: "Teacher",
+    HEURISTIC_STRATEGY_NAME: "Heuristic",
+}
+BOT_CONTROL_LABELS = {
+    TEACHER_STRATEGY_NAME: "teacher ai",
+    HEURISTIC_STRATEGY_NAME: "heuristic ai",
+}
 ITEM_COLOR_HEX = {
     1: "#c84b4b",
     2: "#3f9464",
@@ -116,10 +125,16 @@ def serialize_hero(hero):
     }
 
 
+def _strategy_name(strategy):
+    return getattr(strategy, "name", strategy or "")
+
+
 def serialize_player(player):
+    control = getattr(player, "control", "ai")
     return {
         "name": player.nom,
-        "control": getattr(player, "control", "ai"),
+        "control": control,
+        "strategy": "" if control == "human" else _strategy_name(getattr(player, "strategy", "")),
         "hero": serialize_hero(getattr(player, "perso_obj", None)),
         "pv": player.pv_total,
         "medals": getattr(player, "medailles", 0),
@@ -385,17 +400,34 @@ def build_names(player_name, count):
     return names
 
 
-def make_players(names, heroes, builds, provider, medals=None):
+def normalize_bot_strategies(config, count):
+    requested = config.get("botStrategies") or []
+    strategies = []
+    for bot_idx in range(max(0, count - 1)):
+        strategy = requested[bot_idx] if bot_idx < len(requested) else TEACHER_STRATEGY_NAME
+        if strategy not in BOT_STRATEGY_LABELS:
+            strategy = TEACHER_STRATEGY_NAME
+        strategies.append(strategy)
+    return strategies
+
+
+def make_players(names, heroes, builds, provider, medals=None, bot_strategies=None):
     players = []
     medals = medals or [0] * len(names)
+    bot_strategies = bot_strategies or [TEACHER_STRATEGY_NAME] * max(0, len(names) - 1)
     for idx, name in enumerate(names):
-        control = "human" if idx == 0 else "teacher ai"
+        if idx == 0:
+            control = "human"
+            strategy = None
+        else:
+            strategy = bot_strategies[idx - 1] if idx - 1 < len(bot_strategies) else TEACHER_STRATEGY_NAME
+            control = BOT_CONTROL_LABELS.get(strategy, "ai")
         player = Joueur(
             name,
             heroes[idx],
             list(builds[idx]),
             medailles=medals[idx],
-            strategy=None if idx == 0 else TEACHER_STRATEGY_NAME,
+            strategy=strategy,
             control=control,
             decision_provider=provider,
         )
@@ -422,7 +454,8 @@ def choose_draft_pick(session, draft_player, hand, default_pick, round_no, pick_
     )
 
 
-def run_draft_phase(session, provider, names, heroes, medals=None, party_mode=False):
+def run_draft_phase(session, provider, names, heroes, medals=None, party_mode=False,
+                    bot_strategies=None):
     session.set_phase("draft", session.round_label)
     pool = fresh_item_pool()
     hands = []
@@ -434,7 +467,14 @@ def run_draft_phase(session, provider, names, heroes, medals=None, party_mode=Fa
         hands.append(hand)
 
     builds = [[] for _ in names]
-    draft_players = make_players(names, heroes, [[] for _ in names], provider, medals=medals)
+    draft_players = make_players(
+        names,
+        heroes,
+        [[] for _ in names],
+        provider,
+        medals=medals,
+        bot_strategies=bot_strategies,
+    )
     priors = _charger_priors()
     total_medals = sum(medals or [0])
     round_no = 1
@@ -495,7 +535,7 @@ def run_dungeon(session, provider, players, remaining_items, threshold):
     return winner, final_players
 
 
-def run_random(session, provider, names):
+def run_random(session, provider, names, bot_strategies):
     heroes = random.sample(fresh_hero_pool(), len(names))
     pool = fresh_item_pool()
     builds = []
@@ -504,7 +544,7 @@ def run_random(session, provider, names):
         for obj in build:
             pool.remove(obj)
         builds.append(build)
-    players = make_players(names, heroes, builds, provider)
+    players = make_players(names, heroes, builds, provider, bot_strategies=bot_strategies)
     session.emit({"kind": "setup", "text": "Random game started.", "basic": True})
     winner, final_players = run_dungeon(
         session, provider, players, pool, RANDOM_SEUIL_PV_ESSAI_FUITE
@@ -515,10 +555,12 @@ def run_random(session, provider, names):
     }
 
 
-def run_draft(session, provider, names):
+def run_draft(session, provider, names, bot_strategies):
     heroes = random.sample(fresh_hero_pool(), len(names))
-    builds, remaining = run_draft_phase(session, provider, names, heroes)
-    players = make_players(names, heroes, builds, provider)
+    builds, remaining = run_draft_phase(
+        session, provider, names, heroes, bot_strategies=bot_strategies
+    )
+    players = make_players(names, heroes, builds, provider, bot_strategies=bot_strategies)
     winner, final_players = run_dungeon(
         session, provider, players, remaining, RANDOM_SEUIL_PV_ESSAI_FUITE
     )
@@ -528,7 +570,7 @@ def run_draft(session, provider, names):
     }
 
 
-def run_party(session, provider, names):
+def run_party(session, provider, names, bot_strategies):
     count = len(names)
     class_pool = list(_classes_persos)
     random.shuffle(class_pool)
@@ -558,9 +600,17 @@ def run_party(session, provider, names):
             "basic": True,
         })
         builds, remaining = run_draft_phase(
-            session, provider, names, heroes, medals=medals, party_mode=True
+            session,
+            provider,
+            names,
+            heroes,
+            medals=medals,
+            party_mode=True,
+            bot_strategies=bot_strategies,
         )
-        players = make_players(names, heroes, builds, provider, medals=medals)
+        players = make_players(
+            names, heroes, builds, provider, medals=medals, bot_strategies=bot_strategies
+        )
         winner, final_players = run_dungeon(
             session, provider, players, remaining, PARTY_SEUIL_PV_ESSAI_FUITE
         )
@@ -617,6 +667,7 @@ def run_game(session):
     count = int(session.config.get("playerCount") or DEFAULT_PLAYER_COUNT)
     count = max(3, min(4, count))
     names = build_names(session.config.get("playerName") or "Human", count)
+    bot_strategies = normalize_bot_strategies(session.config, count)
     provider = BlockingDecisionProvider(session)
 
     session.emit({
@@ -625,17 +676,18 @@ def run_game(session):
         "payload": {
             "mode": session.mode,
             "players": names,
+            "botStrategies": dict(zip(names[1:], bot_strategies)),
             "strategies": list_strategy_names(),
         },
         "basic": True,
     })
 
     if session.mode == "draft":
-        result = run_draft(session, provider, names)
+        result = run_draft(session, provider, names, bot_strategies)
     elif session.mode == "party":
-        result = run_party(session, provider, names)
+        result = run_party(session, provider, names, bot_strategies)
     else:
-        result = run_random(session, provider, names)
+        result = run_random(session, provider, names, bot_strategies)
     session.finish(result)
     session.emit({
         "kind": "finished",

@@ -221,11 +221,21 @@ class ChevalierDragon(Perso):
         super().__init__(nom="Chevalier Dragon" + _suffixe(level), pv_bonus=3)
         self.level = level
 
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (
+            "Dragon" in getattr(carte, 'types', [])
+            and not Jeu.traquenard_actif
+            and not carte.executed
+            and (
+                self.level == 2
+                or not any("Dragon" in m.types for m in joueur.pile_monstres_vaincus)
+            )
+        )
+
     def combat_effet(self, joueur, carte, Jeu, log_details):
         # N1: execute les Dragons (et les garde) si pas de Dragon dans la pile. N2: sans condition.
-        if "Dragon" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
-            if self.level == 2 or not any("Dragon" in m.types for m in joueur.pile_monstres_vaincus):
-                self.execute(joueur, carte, log_details)
+        if self.rules(joueur, carte, Jeu, log_details):
+            self.execute(joueur, carte, log_details)
 
 class PersoUseless2PV(Perso):
     def __init__(self):
@@ -268,8 +278,11 @@ class DocteurDePeste(Perso):
         self.level = level
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
-        if "Rat" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed:
+        if self.rules(joueur, carte, Jeu, log_details):
             self.execute(joueur, carte, log_details)
+
+    def rules(self, joueur, carte, Jeu, log_details):
+        return "Rat" in getattr(carte, 'types', []) and not Jeu.traquenard_actif and not carte.executed
 
     def en_fuite(self, joueur, Jeu, log_details):
         # N2: jet de fuite +1 par Rat dans la pile
@@ -301,7 +314,7 @@ class InventeurGenial(Perso):
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         # Vérifier si capacité dispo et conditions remplies
-        if self.compteur < self.level:
+        if self.rules(joueur, carte, Jeu, log_details):
             # Trouver les objets brisés (non intacts)
             objets_brises = [o for o in joueur.objets if not getattr(o, 'intact', True)]
 
@@ -331,6 +344,12 @@ class InventeurGenial(Perso):
 
                 self.piocheItem(joueur, Jeu, log_details)
 
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (
+            self.compteur < self.level
+            and len([o for o in joueur.objets if not getattr(o, 'intact', True)]) >= 2
+        )
+
 
 
 class Flutiste(Perso):
@@ -345,7 +364,7 @@ class Flutiste(Perso):
             log_details.append(f"{carte.titre} est booste de {self.dommages_suppl} dommages par {joueur_proprietaire.nom} ({self.nom})")
 
     def rules(self, joueur, carte, Jeu, log_details):
-        return ("Gobelin" in carte.types) and not Jeu.traquenard_actif
+        return ("Gobelin" in carte.types) and not Jeu.traquenard_actif and not carte.executed
 
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
@@ -376,12 +395,20 @@ class Avatar(Perso):
 
     def combat_effet_late(self, joueur, carte, Jeu, log_details):
         # Une fois par partie: execute et defausse un monstre (N2: execute et le garde)
-        if not self.capacite_utilisee and not Jeu.traquenard_actif and not carte.executed and carte.dommages > (joueur.pv_total / 2) :
+        if self.rules(joueur, carte, Jeu, log_details):
             self.capacite_utilisee = True
             if self.level == 2:
                 self.execute(joueur, carte, log_details)
             else:
                 self.executeEtDefausse(joueur, carte, Jeu, log_details)
+
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (
+            not self.capacite_utilisee
+            and not Jeu.traquenard_actif
+            and not carte.executed
+            and carte.dommages > (joueur.pv_total / 2)
+        )
 
 class Berserker(Perso):
     def __init__(self, level=1):

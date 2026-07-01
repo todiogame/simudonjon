@@ -2,12 +2,19 @@ import time
 
 import pytest
 
-from heros import Perso
+from heros import Avatar, ChevalierDragon, Perso
 from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
-from objets import Objet
-from simu import _emit_dungeon_state
-from ui_runtime import GameSession, fresh_item_pool, serialize_object
+from objets import Objet, OiseauDeMauvaisAugure
+from simu import _basic_log, _emit_dungeon_state
+from ui_runtime import (
+    GameSession,
+    HEURISTIC_STRATEGY_NAME,
+    TEACHER_STRATEGY_NAME,
+    fresh_item_pool,
+    normalize_bot_strategies,
+    serialize_object,
+)
 
 
 def drive_defaults(session, timeout=30):
@@ -53,6 +60,41 @@ def test_ui_sessions_finish_with_default_human_choices(mode, extra):
     assert decisions > 0
     assert snap["lastEventId"] > 0
     assert len(snap["players"]) in {0, 3}
+
+
+def test_bot_strategies_are_configured_per_ai_player():
+    config = {
+        "mode": "random",
+        "playerName": "Tester",
+        "playerCount": 4,
+        "seed": 13,
+        "botDelayMs": 0,
+        "botStrategies": [
+            HEURISTIC_STRATEGY_NAME,
+            TEACHER_STRATEGY_NAME,
+            "not-a-strategy",
+        ],
+    }
+    assert normalize_bot_strategies(config, 4) == [
+        HEURISTIC_STRATEGY_NAME,
+        TEACHER_STRATEGY_NAME,
+        TEACHER_STRATEGY_NAME,
+    ]
+    session = GameSession(config)
+    session.start()
+
+    _, snap = drive_defaults(session)
+
+    assert [player["strategy"] for player in snap["players"][1:]] == [
+        HEURISTIC_STRATEGY_NAME,
+        TEACHER_STRATEGY_NAME,
+        TEACHER_STRATEGY_NAME,
+    ]
+    assert [player["control"] for player in snap["players"][1:]] == [
+        "heuristic ai",
+        "teacher ai",
+        "teacher ai",
+    ]
 
 
 def test_decision_validation_rejects_illegal_option():
@@ -131,6 +173,49 @@ def test_human_can_choose_any_legal_combat_item_directly():
     ]
 
 
+class _Jeu:
+    traquenard_actif = False
+
+
+def test_human_combat_perso_does_not_prompt_when_rules_cannot_work():
+    provider = _Provider("yes")
+    hero = ChevalierDragon()
+    joueur = Joueur(
+        "Tester",
+        hero,
+        [],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+    card = CarteMonstre("Orc", 3, ["Orc"])
+    card.dommages = 3
+
+    hero.en_combat(joueur, card, _Jeu(), [])
+
+    assert provider.calls == []
+    assert not card.executed
+
+    provider = _Provider("yes")
+    avatar = Avatar()
+    avatar.capacite_utilisee = True
+    joueur = Joueur(
+        "Tester",
+        avatar,
+        [],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+    card = CarteMonstre("Dragon", 9, ["Dragon"])
+    card.dommages = 9
+
+    avatar.en_combat_late(joueur, card, _Jeu(), [])
+
+    assert provider.calls == []
+    assert not card.executed
+
+
 def test_serialized_items_expose_color_and_description_for_ui():
     item = next(obj for obj in fresh_item_pool() if getattr(obj, "couleur", None))
     payload = serialize_object(item)
@@ -191,3 +276,70 @@ def test_dungeon_state_hides_deck_order_but_orders_discard():
     assert payload["remainingSummary"][0]["count"] >= 1
     assert payload["discardOrder"] == "top-first"
     assert [card["title"] for card in payload["discard"]] == ["Top", "Bottom"]
+
+
+def test_bad_omen_bird_asks_human_before_moving_card_under_dungeon():
+    bird = OiseauDeMauvaisAugure()
+    provider = _Provider("yes")
+    owner = Joueur(
+        "Owner",
+        Perso("Hero", 5),
+        [bird],
+        control="human",
+        decision_provider=provider,
+    )
+    opponent = Joueur("Other", Perso("Other", 5), [])
+    donjon = DonjonDeck()
+    dragon_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Dragon")
+    donjon.ordre = [dragon_idx]
+    donjon.nb_cartes = 1
+    donjon.index = 0
+
+    class Jeu:
+        joueurs = [owner, opponent]
+        defausse = []
+
+    Jeu.donjon = donjon
+    log = []
+
+    bird.fin_tour(owner, Jeu, log)
+
+    assert provider.calls[0]["kind"] == "bad_omen_bird_bottom"
+    assert provider.calls[0]["context"]["card"] == "Dragon"
+    assert provider.calls[0]["context"]["recommended"] == "leave"
+    assert any("envoie Dragon sous le Donjon" in row for row in log)
+    assert donjon.index == 1
+    assert int(donjon.ordre[-1]) == dragon_idx
+
+
+def test_bad_omen_bird_human_can_leave_card_on_top():
+    bird = OiseauDeMauvaisAugure()
+    provider = _Provider("no")
+    owner = Joueur(
+        "Owner",
+        Perso("Hero", 5),
+        [bird],
+        control="human",
+        decision_provider=provider,
+    )
+    opponent = Joueur("Other", Perso("Other", 5), [])
+    donjon = DonjonDeck()
+    dragon_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Dragon")
+    donjon.ordre = [dragon_idx]
+    donjon.nb_cartes = 1
+    donjon.index = 0
+
+    class Jeu:
+        joueurs = [owner, opponent]
+        defausse = []
+
+    Jeu.donjon = donjon
+    log = []
+
+    bird.fin_tour(owner, Jeu, log)
+
+    assert provider.calls[0]["kind"] == "bad_omen_bird_bottom"
+    assert any("voit Dragon" in row for row in log)
+    assert any(_basic_log(row) for row in log)
+    assert donjon.index == 0
+    assert donjon.cartes[dragon_idx] in owner.cartes_connues

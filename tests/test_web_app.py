@@ -5,6 +5,16 @@ from fastapi.testclient import TestClient
 from web_app import app, sessions
 
 
+def test_metadata_exposes_teacher_and_heuristic_ai():
+    client = TestClient(app)
+
+    response = client.get("/api/metadata")
+
+    assert response.status_code == 200
+    ai_ids = {row["id"] for row in response.json()["ai"]}
+    assert {"teacher_best", "baseline"} <= ai_ids
+
+
 def test_api_game_flow_finishes_with_default_choices():
     sessions.clear()
     client = TestClient(app)

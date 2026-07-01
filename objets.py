@@ -3993,12 +3993,36 @@ class OiseauDeMauvaisAugure(Objet):
             bonne_carte = getattr(prochaine, 'event', False) or (
                 isinstance(prochaine, CarteMonstre) and not prochaine.is_X
                 and prochaine.puissance_initiale <= 2)
-            if bonne_carte:
+            envoyer_sous_donjon = bonne_carte
+            decision_context = {
+                "card": prochaine.titre,
+                "event": bool(getattr(prochaine, 'event', False)),
+                "power": getattr(prochaine, 'puissance', None),
+                "types": list(getattr(prochaine, 'types', []) or []),
+                "recommended": "bottom" if bonne_carte else "leave",
+            }
+            if joueur.is_human():
+                envoyer_sous_donjon = joueur.demander_oui_non(
+                    "bad_omen_bird_bottom",
+                    f"Send {prochaine.titre} under the Dungeon with {self.nom}?",
+                    default=bonne_carte,
+                    context=decision_context,
+                )
+            else:
+                joueur.enregistrer_decision_bot(
+                    "bad_omen_bird_bottom",
+                    f"Send {prochaine.titre} under the Dungeon with {self.nom}?",
+                    envoyer_sous_donjon,
+                    label="put under dungeon" if envoyer_sous_donjon else "leave on top",
+                    context=decision_context,
+                )
+            if envoyer_sous_donjon:
                 Jeu.donjon.prochaine_carte()
                 Jeu.donjon.rajoute_en_bas_de_la_pile(prochaine)
                 log_details.append(f"{joueur.nom} envoie {prochaine.titre} sous le Donjon ({self.nom}).")
             else:
                 joueur.cartes_connues.add(prochaine)
+                log_details.append(f"{joueur.nom} voit {prochaine.titre} et le laisse sur le Donjon ({self.nom}).")
 
 class FilDuDestin(Objet):
     def __init__(self):

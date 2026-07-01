@@ -30,6 +30,13 @@ _BASIC_LOG_MARKERS = (
     "perd",
     "repare",
     "defausse",
+    "regarde",
+    "voit",
+    "envoie",
+    "consulte",
+    "sous le Donjon",
+    "sur le Donjon",
+    "ordonne",
 )
 
 

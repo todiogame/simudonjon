@@ -3,6 +3,7 @@ let snapshot = null;
 let lastEventId = 0;
 let logLevel = "basic";
 let renderedDecisionId = null;
+let renderedLogKey = "";
 const logs = { basic: [], full: [] };
 
 const $ = (id) => document.getElementById(id);
@@ -211,12 +212,13 @@ function renderPlayers(players) {
     const [status, statusClass] = statusFor(player);
     const itemList = (player.items || []).map(renderItem).join("");
     const monsterText = (player.monsters || []).map((m) => m.title).slice(-8).join(", ");
+    const strategyText = player.strategy ? ` | ${player.strategy}` : "";
     return `
       <article class="player ${player.control === "human" ? "human" : ""} ${player.alive ? "" : "dead"}">
         <div class="player-head">
           <div>
             <div class="player-name">${escapeHtml(player.name)}</div>
-            <div class="muted">${escapeHtml(player.control)}</div>
+            <div class="muted">${escapeHtml(`${player.control}${strategyText}`)}</div>
           </div>
           <div class="${statusClass}">${status}</div>
         </div>
@@ -237,11 +239,24 @@ function renderPlayers(players) {
   }).join("");
 }
 
-function renderLogs() {
+function renderLogs(force = false) {
   const list = $("logList");
   const active = logs[logLevel];
+  const lastId = active.length ? active[active.length - 1].id : 0;
+  const renderKey = `${logLevel}:${active.length}:${lastId}`;
+  if (!force && renderKey === renderedLogKey) {
+    return;
+  }
+  const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  const wasAtBottom = distanceFromBottom < 12;
+  const previousTop = list.scrollTop;
   list.innerHTML = active.map((event) => `<li>${escapeHtml(event.text)}</li>`).join("");
-  list.scrollTop = list.scrollHeight;
+  if (wasAtBottom) {
+    list.scrollTop = list.scrollHeight;
+  } else {
+    list.scrollTop = Math.min(previousTop, Math.max(0, list.scrollHeight - list.clientHeight));
+  }
+  renderedLogKey = renderKey;
 }
 
 function render() {
@@ -262,10 +277,27 @@ function collapsePiles() {
   }
 }
 
+function botStrategiesForGame() {
+  const count = Math.max(0, Number($("playerCount").value || 0) - 1);
+  return Array.from({ length: count }, (_, idx) => $(`botStrategy${idx + 1}`).value);
+}
+
+function updateBotStrategyControls() {
+  const count = Math.max(0, Number($("playerCount").value || 0) - 1);
+  document.querySelectorAll(".bot-ai-control").forEach((control) => {
+    const slot = Number(control.dataset.botSlot || 0);
+    const visible = slot <= count;
+    control.hidden = !visible;
+    const select = control.querySelector("select");
+    if (select) select.disabled = !visible;
+  });
+}
+
 async function createGame(event) {
   event.preventDefault();
   lastEventId = 0;
   renderedDecisionId = null;
+  renderedLogKey = "";
   collapsePiles();
   logs.basic = [];
   logs.full = [];
@@ -276,6 +308,7 @@ async function createGame(event) {
     playerCount: Number($("playerCount").value),
     seed: seedValue ? Number(seedValue) : null,
     botDelayMs: Number($("botDelay").value || 0),
+    botStrategies: botStrategiesForGame(),
   };
   const response = await fetch("/api/games", {
     method: "POST",
@@ -285,7 +318,7 @@ async function createGame(event) {
   snapshot = await response.json();
   sessionId = snapshot.id;
   render();
-  renderLogs();
+  renderLogs(true);
 }
 
 async function submitDecision(decisionId, optionId) {
@@ -332,10 +365,12 @@ function setLogLevel(level) {
   logLevel = level;
   $("basicTab").classList.toggle("active", level === "basic");
   $("fullTab").classList.toggle("active", level === "full");
-  renderLogs();
+  renderLogs(true);
 }
 
 $("newGameForm").addEventListener("submit", createGame);
+$("playerCount").addEventListener("change", updateBotStrategyControls);
 $("basicTab").addEventListener("click", () => setLogLevel("basic"));
 $("fullTab").addEventListener("click", () => setLogLevel("full"));
+updateBotStrategyControls();
 setInterval(poll, 700);

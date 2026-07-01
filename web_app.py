@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from ui_runtime import GameSession
+from ui_runtime import GameSession, HEURISTIC_STRATEGY_NAME, TEACHER_STRATEGY_NAME
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -24,6 +24,7 @@ class GameCreate(BaseModel):
     seed: int | None = None
     botDelayMs: int = 800
     partyRounds: int | None = None
+    botStrategies: list[str] | None = None
 
 
 class DecisionSubmit(BaseModel):
@@ -47,10 +48,15 @@ def metadata():
         "playerCounts": [3, 4],
         "ai": [
             {
-                "id": "teacher_best",
-                "label": "Teacher best",
+                "id": TEACHER_STRATEGY_NAME,
+                "label": "Teacher",
                 "description": "Uses the strongest teacher-style bot profile available in the UI branch.",
-            }
+            },
+            {
+                "id": HEURISTIC_STRATEGY_NAME,
+                "label": "Heuristic",
+                "description": "Uses the baseline heuristic bot.",
+            },
         ],
     }
 

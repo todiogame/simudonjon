@@ -915,6 +915,7 @@ class Joueur:
             return False
 
         if self.is_human():
+            carte_connue = self.connait_prochaine_carte(Jeu)
             return self.demander_oui_non(
                 "replay",
                 "Draw another card this turn?",
@@ -923,6 +924,8 @@ class Joueur:
                     "pv": self.pv_total,
                     "score": self._score_rapide(),
                     "remaining_cards": max(0, Jeu.donjon.nb_cartes - Jeu.donjon.index),
+                    "known_next": self._decision_option_label(carte_connue) if carte_connue is not None else None,
+                    "known_next_power": getattr(carte_connue, "puissance", None),
                 },
             )
 
