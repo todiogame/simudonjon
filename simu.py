@@ -51,6 +51,104 @@ def _card_payload(carte):
     }
 
 
+def _card_summary(cards):
+    groups = {}
+    for carte in cards:
+        payload = _card_payload(carte)
+        key = (
+            payload.get("title"),
+            payload.get("event"),
+            payload.get("power"),
+            payload.get("effect"),
+            tuple(payload.get("types") or []),
+        )
+        if key not in groups:
+            groups[key] = dict(payload, count=0)
+        groups[key]["count"] += 1
+    return sorted(
+        groups.values(),
+        key=lambda row: (
+            bool(row.get("event")),
+            str(row.get("title") or ""),
+            row.get("power") if row.get("power") is not None else -1,
+        ),
+    )
+
+
+def _remaining_cards(donjon):
+    if donjon is None or donjon.ordre is None:
+        return []
+    return [donjon.cartes[int(i)] for i in donjon.ordre[donjon.index:]]
+
+
+def _emit_dungeon_state(event_sink, Jeu):
+    if event_sink is None:
+        return
+    remaining = _remaining_cards(getattr(Jeu, "donjon", None))
+    discard = list(getattr(Jeu, "defausse", []))
+    _emit_event(
+        event_sink,
+        "dungeon_state",
+        "Dungeon state updated.",
+        payload={
+            "remainingCount": len(remaining),
+            "remainingSummary": _card_summary(remaining),
+            "discardCount": len(discard),
+            "discard": [_card_payload(carte) for carte in reversed(discard)],
+            "discardOrder": "top-first",
+        },
+    )
+
+
+class _TrackedDiscard(list):
+    def __init__(self, on_change):
+        super().__init__()
+        self._on_change = on_change
+
+    def _changed(self):
+        if self._on_change is not None:
+            self._on_change()
+
+    def append(self, item):
+        super().append(item)
+        self._changed()
+
+    def extend(self, items):
+        super().extend(items)
+        self._changed()
+
+    def insert(self, index, item):
+        super().insert(index, item)
+        self._changed()
+
+    def remove(self, item):
+        result = super().remove(item)
+        self._changed()
+        return result
+
+    def pop(self, index=-1):
+        item = super().pop(index)
+        self._changed()
+        return item
+
+    def clear(self):
+        super().clear()
+        self._changed()
+
+    def __setitem__(self, index, item):
+        super().__setitem__(index, item)
+        self._changed()
+
+    def __delitem__(self, index):
+        super().__delitem__(index)
+        self._changed()
+
+    def __iadd__(self, items):
+        result = super().__iadd__(items)
+        self._changed()
+        return result
+
+
 def _emit_event(event_sink, kind, text, payload=None, basic=False):
     if event_sink is None:
         return
@@ -513,9 +611,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
     P_FUITE = SANS_HOOK_PERSO['en_fuite']
     P_DEBUT = SANS_HOOK_PERSO['debut_tour']; P_FIN = SANS_HOOK_PERSO['fin_tour']
 
-    donjon.melange()
     class Jeu:
-        defausse = []
         tour = 0
         execute_next_monster = False
         traquenard_actif = False
@@ -525,11 +621,16 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
         donjon
     Jeu.joueurs = joueurs
     Jeu.donjon = donjon
+    Jeu.defausse = _TrackedDiscard(lambda: _emit_dungeon_state(event_sink, Jeu))
     Jeu.objets_dispo = objets_dispo
     Jeu.nb_joueurs = nb_joueurs
     Jeu.event_sink = event_sink
     Jeu.decision_provider = decision_provider
     Jeu.bot_delay_ms = bot_delay_ms
+    if event_sink is not None:
+        donjon.on_change = lambda: _emit_dungeon_state(event_sink, Jeu)
+    donjon.melange()
+    _emit_dungeon_state(event_sink, Jeu)
     log_details = _make_log(event_sink)
     index_joueur = 0  # Initialisation de l'index du joueur courant
     

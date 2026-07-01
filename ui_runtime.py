@@ -1,9 +1,11 @@
 import copy
+import json
 import random
 import threading
 import time
 import traceback
 import uuid
+from pathlib import Path
 
 import numpy as np
 
@@ -12,7 +14,7 @@ from heros import _classes_persos, persos_disponibles
 from ia_strategies import list_strategy_names
 from joueurs import Joueur
 from monstres import DonjonDeck
-from objets import objets_disponibles
+from objets import COULEUR_NOMS, _cle_nom, objets_disponibles
 from party import (
     MAX_MANCHES_PAR_SOIREE,
     MANCHES_MAX,
@@ -29,6 +31,27 @@ BOT_NAMES = ["Bot 1", "Bot 2", "Bot 3"]
 DEFAULT_PLAYER_COUNT = 4
 RANDOM_SEUIL_PV_ESSAI_FUITE = 6
 TEACHER_STRATEGY_NAME = "teacher_best"
+ITEM_COLOR_HEX = {
+    1: "#c84b4b",
+    2: "#3f9464",
+    3: "#3f6fb5",
+    4: "#7a5cb8",
+    5: "#d2a728",
+}
+_ITEM_VISUALS = None
+
+
+def _item_visuals():
+    global _ITEM_VISUALS
+    if _ITEM_VISUALS is None:
+        path = Path(__file__).resolve().parent / "item_visuals.json"
+        with path.open("r", encoding="utf-8") as f:
+            _ITEM_VISUALS = {_cle_nom(name): data for name, data in json.load(f).items()}
+    return _ITEM_VISUALS
+
+
+def _item_visual(obj):
+    return _item_visuals().get(_cle_nom(getattr(obj, "nom", "")), {})
 
 
 def _json_safe(value):
@@ -58,6 +81,12 @@ def serialize_card(card):
 
 
 def serialize_object(obj):
+    visual = _item_visual(obj)
+    color_code = getattr(obj, "couleur", None) or visual.get("color_code")
+    try:
+        color_code = int(color_code) if color_code is not None else None
+    except (TypeError, ValueError):
+        color_code = None
     return {
         "name": getattr(obj, "nom", str(obj)),
         "pv": getattr(obj, "pv_bonus", 0),
@@ -66,6 +95,10 @@ def serialize_object(obj):
         "intact": bool(getattr(obj, "intact", True)),
         "priority": round(float(getattr(obj, "priorite", 0)), 2),
         "effect": (getattr(obj, "effet", "") or ""),
+        "description": (visual.get("description", "") or ""),
+        "colorCode": color_code,
+        "colorName": COULEUR_NOMS.get(color_code, ""),
+        "color": ITEM_COLOR_HEX.get(color_code, "#cfd8d2"),
         "types": list(getattr(obj, "types_tags", []) or []),
         "powers": list(getattr(obj, "puissance_tags", []) or []),
     }
@@ -132,6 +165,13 @@ class GameSession:
         self.round_label = ""
         self.players = []
         self.current_card = None
+        self.dungeon_state = {
+            "remainingCount": 0,
+            "remainingSummary": [],
+            "discardCount": 0,
+            "discard": [],
+            "discardOrder": "top-first",
+        }
         self.draft_state = None
         self.result = None
         self.error = None
@@ -165,6 +205,10 @@ class GameSession:
             kind = event.get("kind", "log")
             if kind == "card_drawn":
                 self.current_card = payload.get("card")
+            if kind == "dungeon_state":
+                self.dungeon_state = payload
+                self.condition.notify_all()
+                return
             row = {
                 "id": self.next_event_id,
                 "kind": kind,
@@ -255,6 +299,7 @@ class GameSession:
                 "round": self.round_label,
                 "players": [serialize_player(p) for p in self.players],
                 "currentCard": self.current_card,
+                "dungeon": self.dungeon_state,
                 "draft": self.draft_state,
                 "pendingDecision": self.pending_decision,
                 "result": self.result,
@@ -358,12 +403,15 @@ def make_players(names, heroes, builds, provider, medals=None):
     return players
 
 
-def choose_draft_pick(session, draft_player, hand, default_pick, round_no, pick_no):
+def choose_draft_pick(session, draft_player, hand, default_pick, round_no, pick_no,
+                      picked=None, your_picked=None):
     session.set_draft_state({
         "round": round_no,
         "pick": pick_no,
         "player": draft_player.nom,
         "hand": [serialize_object(o) for o in hand],
+        "picked": [serialize_object(o) for o in (picked or [])],
+        "yourPicked": [serialize_object(o) for o in (your_picked or [])],
     })
     return draft_player.demander_choix(
         "draft_pick",
@@ -411,6 +459,8 @@ def run_draft_phase(session, provider, names, heroes, medals=None, party_mode=Fa
                     default_pick,
                     round_no,
                     len(builds[idx]) + 1,
+                    picked=builds[idx],
+                    your_picked=builds[0],
                 )
                 builds[idx].append(pick)
                 hand.remove(pick)

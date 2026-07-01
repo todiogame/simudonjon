@@ -1,5 +1,5 @@
 from objets import *
-from objets import SANS_HOOK_OBJET
+from objets import COULEUR_NOMS, SANS_HOOK_OBJET
 from ia_strategies import DEFAULT_STRATEGY_NAME, get_strategy
 import math
 import random
@@ -88,7 +88,7 @@ class Joueur:
 
     def _decision_option_description(self, value):
         parts = []
-        if hasattr(value, "pv_bonus"):
+        if getattr(value, "pv_bonus", 0):
             parts.append(f"PV {value.pv_bonus:+}")
         if hasattr(value, "modificateur_de") and value.modificateur_de:
             parts.append(f"fuite {value.modificateur_de:+}")
@@ -100,6 +100,25 @@ class Joueur:
         if desc:
             parts.append(str(desc).replace("<b>", "").replace("</b>", "").replace("\n", " "))
         return " | ".join(parts)
+
+    def _decision_option_metadata(self, value):
+        metadata = {}
+        color_code = getattr(value, "couleur", None)
+        if color_code:
+            try:
+                color_code = int(color_code)
+            except (TypeError, ValueError):
+                color_code = None
+        if color_code:
+            metadata["colorCode"] = color_code
+            metadata["colorName"] = globals().get("COULEUR_NOMS", {}).get(color_code, "")
+        if hasattr(value, "pv_bonus"):
+            metadata["pv"] = getattr(value, "pv_bonus", 0)
+        if hasattr(value, "modificateur_de"):
+            metadata["flee"] = getattr(value, "modificateur_de", 0)
+        if hasattr(value, "actif"):
+            metadata["active"] = bool(getattr(value, "actif", False))
+        return metadata
 
     def demander_choix(self, kind, prompt, candidats, default=None, label_func=None,
                        context=None):
@@ -116,6 +135,7 @@ class Joueur:
                 "id": str(idx),
                 "label": label,
                 "description": self._decision_option_description(candidat),
+                **self._decision_option_metadata(candidat),
             })
         provider = getattr(self, "decision_provider", None)
         if provider is None:

@@ -2,6 +2,7 @@ let sessionId = null;
 let snapshot = null;
 let lastEventId = 0;
 let logLevel = "basic";
+let renderedDecisionId = null;
 const logs = { basic: [], full: [] };
 
 const $ = (id) => document.getElementById(id);
@@ -14,6 +15,44 @@ function cleanText(value) {
     .trim();
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[char]);
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/\n/g, "&#10;");
+}
+
+function cleanOptionDescription(value) {
+  return cleanText(value)
+    .split("|")
+    .map((part) => part.trim())
+    .filter((part) => !/^PV\s*\+?0\b/i.test(part))
+    .join(" | ");
+}
+
+function itemColorCode(item) {
+  const code = Number(item?.colorCode || 0);
+  return Number.isFinite(code) ? code : 0;
+}
+
+function itemColorStyle(item) {
+  const color = String(item?.color || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? ` style="background-color: ${escapeAttr(color)}"` : "";
+}
+
+function itemColorSwatch(item, extraClass = "") {
+  const code = itemColorCode(item);
+  const colorClass = code ? " has-color" : "";
+  return `<span class="item-color ${extraClass}${colorClass}" data-color="${code}"${itemColorStyle(item)} aria-label="${escapeAttr(item?.colorName || "No color")}"></span>`;
+}
+
 function statusFor(player) {
   if (!player.alive) return ["dead", "status-dead"];
   if (player.fled) return ["fled", "status-fled"];
@@ -22,7 +61,16 @@ function statusFor(player) {
 }
 
 function chip(label) {
-  return `<span class="chip">${label}</span>`;
+  return `<span class="chip">${escapeHtml(label)}</span>`;
+}
+
+function cardChips(card) {
+  const stats = [];
+  if (card.event) stats.push(chip("event"));
+  if (card.power !== null && card.power !== undefined) stats.push(chip(`power ${card.power}`));
+  if (card.damage !== null && card.damage !== undefined) stats.push(chip(`damage ${card.damage}`));
+  for (const type of card.types || []) stats.push(chip(type));
+  return stats.join("");
 }
 
 function renderCard(card) {
@@ -30,25 +78,58 @@ function renderCard(card) {
     $("currentCard").innerHTML = `<div class="empty">No current card.</div>`;
     return;
   }
-  const stats = [];
-  if (card.event) stats.push(chip("event"));
-  if (card.power !== null && card.power !== undefined) stats.push(chip(`power ${card.power}`));
-  if (card.damage !== null && card.damage !== undefined) stats.push(chip(`damage ${card.damage}`));
-  for (const type of card.types || []) stats.push(chip(type));
   $("currentCard").innerHTML = `
     <div class="card-detail">
-      <div class="card-name">${card.title || "Card"}</div>
-      <div class="stats">${stats.join("")}</div>
-      <div class="muted">${cleanText(card.description || card.effect || "")}</div>
+      <div class="card-name">${escapeHtml(card.title || "Card")}</div>
+      <div class="stats">${cardChips(card)}</div>
+      <div class="muted">${escapeHtml(cleanText(card.description || card.effect || ""))}</div>
     </div>
   `;
 }
 
+function renderPileCard(card, index = null) {
+  const description = cleanText(card.description || card.effect || "");
+  const tooltip = description ? ` title="${escapeAttr(description)}"` : "";
+  const count = Number(card.count || 1);
+  const countLabel = count > 1 ? `<span class="pile-count">x${count}</span>` : "";
+  const indexLabel = index === null ? "" : `<span class="pile-index">${index}</span>`;
+  return `
+    <article class="pile-card ${card.event ? "event-card" : "monster-card"}"${tooltip}>
+      <div class="pile-card-head">
+        ${indexLabel}
+        <span class="pile-card-name">${escapeHtml(card.title || "Card")}</span>
+        ${countLabel}
+      </div>
+      <div class="stats">${cardChips(card)}</div>
+    </article>
+  `;
+}
+
+function renderDungeon(dungeon) {
+  const state = dungeon || {};
+  const remaining = state.remainingSummary || [];
+  const discard = state.discard || [];
+  $("pilesMeta").textContent = "dungeon grouped | discard top first";
+  $("dungeonCount").textContent = `${state.remainingCount || 0} left`;
+  $("discardCount").textContent = `${state.discardCount || 0} cards`;
+  $("dungeonRemaining").innerHTML = remaining.length
+    ? remaining.map((card) => renderPileCard(card)).join("")
+    : `<div class="empty">No remaining dungeon cards.</div>`;
+  $("discardCards").innerHTML = discard.length
+    ? discard.map((card, index) => renderPileCard(card, index + 1)).join("")
+    : `<div class="empty">No discarded cards yet.</div>`;
+}
+
 function renderDecision(decision) {
   if (!decision) {
+    renderedDecisionId = null;
     $("decisionBox").innerHTML = `<div class="empty">Waiting for the next human decision.</div>`;
     return;
   }
+  if (decision.id === renderedDecisionId) {
+    return;
+  }
+  renderedDecisionId = decision.id;
   const contextRows = Object.entries(decision.context || {})
     .filter(([, value]) => value !== null && value !== "" && value !== undefined)
     .slice(0, 8)
@@ -57,16 +138,17 @@ function renderDecision(decision) {
   const buttons = decision.options
     .map((option) => {
       const cls = option.id === decision.defaultId ? "default" : "secondary";
-      const desc = cleanText(option.description || "");
+      const desc = cleanOptionDescription(option.description || "");
+      const optionColor = itemColorCode(option) || option.color ? itemColorSwatch(option, "decision-color") : "";
       return `<button class="${cls}" data-decision="${decision.id}" data-option="${option.id}" type="button">
-        ${option.label}${desc ? `<span class="button-desc">${desc}</span>` : ""}
+        <span class="button-main">${optionColor}<span>${escapeHtml(option.label)}</span></span>${desc ? `<span class="button-desc">${escapeHtml(desc)}</span>` : ""}
       </button>`;
     })
     .join("");
   $("decisionBox").innerHTML = `
     <div class="decision-content">
-      <div class="muted">${decision.player}</div>
-      <div class="card-name">${decision.prompt}</div>
+      <div class="muted">${escapeHtml(decision.player)}</div>
+      <div class="card-name">${escapeHtml(decision.prompt)}</div>
       <div class="stats">${contextRows}</div>
       <div class="decision-actions">${buttons}</div>
     </div>
@@ -83,19 +165,28 @@ function renderDraft(draft) {
   const panel = $("draftPanel");
   if (!draft) {
     panel.hidden = true;
+    $("draftPickedWrap").hidden = true;
+    $("draftPicked").innerHTML = "";
     $("draftHand").innerHTML = "";
     return;
   }
   panel.hidden = false;
   $("draftMeta").textContent = `${draft.player || ""} round ${draft.round || ""} pick ${draft.pick || ""}`;
+  const picked = draft.yourPicked || draft.picked || [];
+  $("draftPickedWrap").hidden = picked.length === 0;
+  $("draftPicked").innerHTML = picked.map(renderItem).join("");
   $("draftHand").innerHTML = (draft.hand || []).map(renderItem).join("");
 }
 
 function renderItem(item) {
   const status = item.intact === false ? "broken" : "";
+  const description = cleanText(item.description || item.effect || "");
+  const tooltip = description ? ` title="${escapeAttr(description)}"` : "";
+  const pv = Number(item.pv || 0);
+  const flee = Number(item.flee || 0);
   const meta = [
-    `PV ${item.pv >= 0 ? "+" : ""}${item.pv || 0}`,
-    item.flee ? `flee ${item.flee >= 0 ? "+" : ""}${item.flee}` : "",
+    pv !== 0 ? `PV ${pv > 0 ? "+" : ""}${pv}` : "",
+    flee ? `flee ${flee > 0 ? "+" : ""}${flee}` : "",
     item.active ? "active" : "passive",
   ].filter(Boolean).join(" | ");
   const tags = [
@@ -103,11 +194,14 @@ function renderItem(item) {
     ...(item.powers || []).map((p) => `power ${p}`),
   ].join(", ");
   return `
-    <div class="item-card ${status}">
-      <div class="item-name">${item.name}</div>
-      <div class="item-meta">${meta}</div>
-      ${tags ? `<div class="item-meta">${tags}</div>` : ""}
-      ${item.effect ? `<div class="item-effect">${cleanText(item.effect)}</div>` : ""}
+    <div class="item-card ${status}"${tooltip}>
+      <div class="item-name">
+        ${itemColorSwatch(item)}
+        <span>${escapeHtml(item.name)}</span>
+      </div>
+      <div class="item-meta">${escapeHtml(meta)}</div>
+      ${tags ? `<div class="item-meta">${escapeHtml(tags)}</div>` : ""}
+      ${item.effect ? `<div class="item-effect">${escapeHtml(cleanText(item.effect))}</div>` : ""}
     </div>
   `;
 }
@@ -121,13 +215,13 @@ function renderPlayers(players) {
       <article class="player ${player.control === "human" ? "human" : ""} ${player.alive ? "" : "dead"}">
         <div class="player-head">
           <div>
-            <div class="player-name">${player.name}</div>
-            <div class="muted">${player.control}</div>
+            <div class="player-name">${escapeHtml(player.name)}</div>
+            <div class="muted">${escapeHtml(player.control)}</div>
           </div>
           <div class="${statusClass}">${status}</div>
         </div>
         <div class="player-body">
-          <div class="hero-line">${player.hero ? player.hero.name : "No hero"}</div>
+          <div class="hero-line">${escapeHtml(player.hero ? player.hero.name : "No hero")}</div>
           <div class="stats">
             ${chip(`PV ${player.pv}`)}
             ${chip(`score ${player.currentScore}`)}
@@ -135,7 +229,7 @@ function renderPlayers(players) {
             ${chip(`medals ${player.medals}`)}
             ${chip(`turn ${player.turn}`)}
           </div>
-          <div class="muted">Recent monsters: ${monsterText || "none"}</div>
+          <div class="muted">Recent monsters: ${escapeHtml(monsterText || "none")}</div>
           <div class="mini-list">${itemList}</div>
         </div>
       </article>
@@ -146,7 +240,7 @@ function renderPlayers(players) {
 function renderLogs() {
   const list = $("logList");
   const active = logs[logLevel];
-  list.innerHTML = active.map((event) => `<li>${event.text}</li>`).join("");
+  list.innerHTML = active.map((event) => `<li>${escapeHtml(event.text)}</li>`).join("");
   list.scrollTop = list.scrollHeight;
 }
 
@@ -156,14 +250,23 @@ function render() {
   $("phaseBadge").textContent = snapshot.phase || "setup";
   $("roundLabel").textContent = snapshot.round || "";
   renderCard(snapshot.currentCard);
+  renderDungeon(snapshot.dungeon);
   renderDecision(snapshot.pendingDecision);
   renderDraft(snapshot.draft);
   renderPlayers(snapshot.players);
 }
 
+function collapsePiles() {
+  for (const id of ["dungeonDetails", "discardDetails"]) {
+    $(id)?.removeAttribute("open");
+  }
+}
+
 async function createGame(event) {
   event.preventDefault();
   lastEventId = 0;
+  renderedDecisionId = null;
+  collapsePiles();
   logs.basic = [];
   logs.full = [];
   const seedValue = $("seed").value.trim();

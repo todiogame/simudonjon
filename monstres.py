@@ -96,10 +96,16 @@ class DonjonDeck:
         self.nb_cartes = len(self.cartes)
         self.ordre = None
         self.index = 0
+        self.on_change = None
+
+    def _notify_change(self):
+        if self.on_change is not None:
+            self.on_change()
 
     def melange(self):
         self.ordre = np.random.permutation(self.nb_cartes)
         self.index = 0
+        self._notify_change()
 
     def remelange(self):
         # Conserver les cartes restantes
@@ -109,12 +115,14 @@ class DonjonDeck:
         # Réinitialiser l'index
         self.index = 0
         self.nb_cartes = len(self.ordre)
+        self._notify_change()
     
     def ajouter_monstre(self, monstre_remis):
         # monstre_remis.executed = False --> maintenant quand on pioche la carte
         self.ordre = np.append(self.ordre, monstre_remis.index)
         self.nb_cartes += 1
         # Cette Fct ne re melange pas, le faire separement
+        self._notify_change()
 
     @property
     def vide(self):
@@ -124,21 +132,26 @@ class DonjonDeck:
     def prochaine_carte(self):
         index = self.index
         self.index += 1
-        return self.cartes[self.ordre[index]]
+        carte = self.cartes[self.ordre[index]]
+        self._notify_change()
+        return carte
 
 
     def rajoute_en_haut_de_la_pile(self, carte):
         # carte.executed = False
         self.ordre = np.insert(self.ordre, self.index, carte.index)
         self.nb_cartes += 1
+        self._notify_change()
 
     def rajoute_en_bas_de_la_pile(self, carte):
         # carte.executed = False
         self.ordre = np.append(self.ordre, carte.index)  # Ajoute la carte à la fin
         self.nb_cartes += 1
+        self._notify_change()
         
     def ajouter_carte(self, carte):
         assert carte not in self.cartes # faut copy pour pas avoir la meme instance
         self.cartes.append(carte)
         self.nb_cartes += 1
         self.ordre = np.append(self.ordre, len(self.cartes) - 1)
+        self._notify_change()

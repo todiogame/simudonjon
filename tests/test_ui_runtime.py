@@ -4,8 +4,10 @@ import pytest
 
 from heros import Perso
 from joueurs import Joueur
+from monstres import CarteEvent, CarteMonstre, DonjonDeck
 from objets import Objet
-from ui_runtime import GameSession
+from simu import _emit_dungeon_state
+from ui_runtime import GameSession, fresh_item_pool, serialize_object
 
 
 def drive_defaults(session, timeout=30):
@@ -127,3 +129,65 @@ def test_human_can_choose_any_legal_combat_item_directly():
         "Second legal item",
         "Resolve now",
     ]
+
+
+def test_serialized_items_expose_color_and_description_for_ui():
+    item = next(obj for obj in fresh_item_pool() if getattr(obj, "couleur", None))
+    payload = serialize_object(item)
+
+    assert payload["colorCode"] in {1, 2, 3, 4, 5}
+    assert payload["colorName"]
+    assert payload["color"].startswith("#")
+    assert payload["description"]
+
+
+def test_human_item_choice_options_hide_zero_pv_and_expose_color():
+    item = Objet("Zero PV Test", actif=True, pv_bonus=0, modificateur_de=0)
+    item.couleur = 1
+    provider = _Provider("0")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [item],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+
+    assert joueur.demander_choix("pick", "Pick one", [item], default=item) is item
+
+    option = provider.calls[0]["options"][0]
+    assert "PV +0" not in option["description"]
+    assert option["colorCode"] == 1
+    assert option["colorName"] == "rouge"
+
+
+def test_dungeon_state_hides_deck_order_but_orders_discard():
+    events = []
+    donjon = DonjonDeck()
+    donjon.ordre = list(range(4))
+    donjon.index = 0
+
+    class Jeu:
+        pass
+
+    Jeu.donjon = donjon
+    Jeu.defausse = [
+        CarteMonstre("Bottom", 1),
+        CarteEvent("Top", "top card"),
+    ]
+
+    _emit_dungeon_state(events.append, Jeu)
+
+    payload = events[-1]["payload"]
+    assert set(payload) == {
+        "remainingCount",
+        "remainingSummary",
+        "discardCount",
+        "discard",
+        "discardOrder",
+    }
+    assert payload["remainingCount"] == 4
+    assert payload["remainingSummary"][0]["count"] >= 1
+    assert payload["discardOrder"] == "top-first"
+    assert [card["title"] for card in payload["discard"]] == ["Top", "Bottom"]

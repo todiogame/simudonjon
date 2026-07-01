@@ -63,10 +63,41 @@
         </section>
       </section>
 
+      <section class="panel piles-panel">
+        <div class="panel-title">
+          <span>Dungeon / Discard</span>
+          <span id="pilesMeta" class="muted">hidden order</span>
+        </div>
+        <div class="pile-columns">
+          <details class="pile-box" id="dungeonDetails">
+            <summary class="pile-head">
+              <span>Dungeon</span>
+              <span id="dungeonCount" class="badge">0 left</span>
+            </summary>
+            <div id="dungeonRemaining" class="card-pile-grid">
+              <div class="empty">Start a game to see remaining cards.</div>
+            </div>
+          </details>
+          <details class="pile-box discard-box" id="discardDetails">
+            <summary class="pile-head">
+              <span>Discard</span>
+              <span id="discardCount" class="badge">0 cards</span>
+            </summary>
+            <div id="discardCards" class="card-pile-grid discard-grid">
+              <div class="empty">No discarded cards yet.</div>
+            </div>
+          </details>
+        </div>
+      </section>
+
       <section class="panel draft-panel" id="draftPanel" hidden>
         <div class="panel-title">
           <span>Draft Hand</span>
           <span id="draftMeta" class="muted"></span>
+        </div>
+        <div class="draft-picked" id="draftPickedWrap" hidden>
+          <div class="draft-subtitle">Your picks</div>
+          <div id="draftPicked" class="item-grid picked-grid"></div>
         </div>
         <div id="draftHand" class="item-grid"></div>
       </section>
