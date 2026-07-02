@@ -69,7 +69,7 @@ function cardChips(card) {
   const stats = [];
   if (card.event) stats.push(chip("event"));
   if (card.power !== null && card.power !== undefined) stats.push(chip(`power ${card.power}`));
-  if (card.damage !== null && card.damage !== undefined) stats.push(chip(`damage ${card.damage}`));
+  if (Number(card.damage || 0) > 0) stats.push(chip(`damage ${card.damage}`));
   for (const type of card.types || []) stats.push(chip(type));
   return stats.join("");
 }
