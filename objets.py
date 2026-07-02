@@ -159,7 +159,7 @@ class Objet:
         dommages = getattr(carte, "dommages", 0) or 0
         pv_avant = getattr(carte, "pv_cible_avant_dommages", None)
         if pv_avant is None:
-            return dommages > 0 and joueur.pv_total <= 0
+            return dommages > 0 and dommages >= joueur.pv_total
         return dommages >= pv_avant
 
     def en_score(self, joueur, log_details):

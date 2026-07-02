@@ -6,7 +6,7 @@ from objets import SANS_HOOK_OBJET
 from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
 from heros import *
-from heros import persos_disponibles, SANS_HOOK_PERSO
+from heros import Perso, persos_disponibles, SANS_HOOK_PERSO
 from ui_assets import asset_url
 
 TRAQUENARD_STRATEGIES = ('baseline', 'degats_purs', 'net_gain', 'net_gain_prudent')
@@ -436,20 +436,34 @@ def _decision_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, 
     return decision
 
 
-def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE=(), attempted_ids=()):
+def _survival_source_possible(source, joueur, carte, Jeu, O_SURVIE):
+    if type(source) in O_SURVIE:
+        return False
+    try:
+        return source.survie_possible(joueur, carte, Jeu)
+    except Exception:
+        return False
+
+
+def _perso_has_late_combat_source(perso):
+    return type(perso).combat_effet_late is not Perso.combat_effet_late
+
+
+def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE=(), O_SURVIE=(), attempted_ids=()):
     attempted_ids = set(attempted_ids)
     candidates = []
     for objet in joueur.objets:
         if type(objet) in O_COMBAT or id(objet) in attempted_ids:
-            continue
-        try:
-            legal = objet.can_use_in_combat(joueur, carte, Jeu, [])
-        except Exception:
             legal = False
-        if legal:
+        else:
+            try:
+                legal = objet.can_use_in_combat(joueur, carte, Jeu, [])
+            except Exception:
+                legal = False
+        if legal or _survival_source_possible(objet, joueur, carte, Jeu, O_SURVIE):
             candidates.append(objet)
     perso = joueur.perso_obj
-    if type(perso) not in P_COMBAT_LATE and id(perso) not in attempted_ids:
+    if _perso_has_late_combat_source(perso) and type(perso) not in P_COMBAT_LATE and id(perso) not in attempted_ids:
         try:
             legal = perso.can_use_in_combat_late(joueur, carte, Jeu, [])
         except Exception:
@@ -459,24 +473,30 @@ def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE=(), at
     return tuple(candidates)
 
 
-def _apply_combat_source(choice, joueur, carte, Jeu, log_details):
+def _apply_combat_source(choice, joueur, carte, Jeu, log_details, O_COMBAT=(), O_SURVIE=()):
+    if type(choice) in O_COMBAT and _survival_source_possible(choice, joueur, carte, Jeu, O_SURVIE):
+        carte.pv_cible_avant_dommages = joueur.pv_total
+        choice.survie_effet(joueur, carte, Jeu, log_details)
+        if carte in joueur.pile_monstres_vaincus:
+            carte.resolved_by_survival = True
+        return
     if hasattr(choice, "apply_in_combat_late") and not hasattr(choice, "intact"):
         choice.apply_in_combat_late(joueur, carte, Jeu, log_details)
     else:
         choice.apply_in_combat(joueur, carte, Jeu, log_details)
 
 
-def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT, P_COMBAT_LATE=()):
+def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT, P_COMBAT_LATE=(), O_SURVIE=()):
     attempted_ids = set()
     while True:
-        if carte.executed or joueur.fuite_reussie or not joueur.vivant or joueur.pv_total <= 0:
+        if carte.executed or getattr(carte, "resolved_by_survival", False) or joueur.fuite_reussie or not joueur.vivant or joueur.pv_total <= 0:
             return carte, False, False
         if getattr(Jeu, 'carte_ignoree', False):
             return carte, True, False
         if getattr(Jeu, 'carte_forcee', None) is not None:
             return Jeu.carte_forcee, False, True
 
-        options = _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE, attempted_ids)
+        options = _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE, O_SURVIE, attempted_ids)
         if not options and not joueur.is_human():
             return carte, False, False
 
@@ -485,7 +505,7 @@ def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT, P_COMBAT
             return carte, False, False
 
         attempted_ids.add(id(choice))
-        _apply_combat_source(choice, joueur, carte, Jeu, log_details)
+        _apply_combat_source(choice, joueur, carte, Jeu, log_details, O_COMBAT, O_SURVIE)
 
         if getattr(Jeu, 'carte_ignoree', False):
             return carte, True, False
@@ -882,6 +902,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
             # Ce flag ne doit jamais fuiter vers le monstre suivant.
             Jeu.carte_ignoree = False
             carte.executed = False
+            carte.resolved_by_survival = False
             # reset l'etat de la carte partagee (Potion de Glace, MIROIR, SHAPESHIFTER...)
             carte.puissance = carte.puissance_initiale
             carte.types = list(carte.types_initiaux)
@@ -1343,6 +1364,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                                 log_details,
                                 O_COMBAT,
                                 P_COMBAT_LATE,
+                                O_SURVIE,
                             )
                             carte = carte_courante
                             if combat_ignoree:
@@ -1353,7 +1375,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                                 _emit_current_card(event_sink, carte, joueur.nom)
                         if not remplacement or carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
                             break
-                    if carte.executed or carte_ignoree or joueur.fuite_reussie:
+                    if carte.executed or getattr(carte, "resolved_by_survival", False) or carte_ignoree or joueur.fuite_reussie:
                         _reset_temporary_card_modifiers(carte)
                     if not joueur.vivant or joueur.pv_total <= 0:
                         _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT)
@@ -1382,7 +1404,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                         Jeu.traquenard_actif = False
                         Jeu.traquenard_paye = False
                 
-            if not carte_ignoree and not carte.executed:
+            if not carte_ignoree and not carte.executed and not getattr(carte, "resolved_by_survival", False):
                 Jeu.traquenard_actif = False
                 carte.pv_cible_avant_dommages = joueur.pv_total
                 joueur.pv_total -= carte.dommages
@@ -1444,7 +1466,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 #use perso et items survie
                 if type(joueur.perso_obj) not in P_SURVIE:
                     joueur.perso_obj.en_survie(joueur, carte, Jeu, log_details)
-                if joueur.pv_total <= 0:
+                if joueur.pv_total <= 0 and not joueur.is_human():
                     for objet in joueur.objets:
                         if type(objet) in O_SURVIE:
                             continue
