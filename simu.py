@@ -7,6 +7,7 @@ from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
 from heros import *
 from heros import persos_disponibles, SANS_HOOK_PERSO
+from ui_assets import asset_url
 
 TRAQUENARD_STRATEGIES = ('baseline', 'degats_purs', 'net_gain', 'net_gain_prudent')
 
@@ -17,6 +18,10 @@ _BASIC_LOG_MARKERS = (
     "DECIDE",
     "decide",
     "choisit",
+    "voit",
+    "regarde",
+    "annonce",
+    "réordonne",
     "pick",
     "Fuite",
     "Mort",
@@ -55,6 +60,7 @@ def _card_payload(carte):
         "power": getattr(carte, "puissance", None),
         "damage": getattr(carte, "dommages", None),
         "types": list(getattr(carte, "types", []) or []),
+        "image": asset_url("events" if getattr(carte, "event", False) else "monsters", getattr(carte, "titre", "")),
     }
 
 
@@ -93,6 +99,19 @@ def _emit_dungeon_state(event_sink, Jeu):
         return
     remaining = _remaining_cards(getattr(Jeu, "donjon", None))
     discard = list(getattr(Jeu, "defausse", []))
+    known_cards = []
+    for player in getattr(Jeu, "joueurs", []):
+        if getattr(player, "control", "ai") != "human":
+            continue
+        known = getattr(player, "cartes_connues", set())
+        cards = []
+        for position, carte in enumerate(remaining, start=1):
+            if carte in known:
+                payload = _card_payload(carte)
+                payload["position"] = position
+                cards.append(payload)
+        if cards:
+            known_cards.append({"player": player.nom, "cards": cards})
     _emit_event(
         event_sink,
         "dungeon_state",
@@ -100,6 +119,7 @@ def _emit_dungeon_state(event_sink, Jeu):
         payload={
             "remainingCount": len(remaining),
             "remainingSummary": _card_summary(remaining),
+            "knownCards": known_cards,
             "discardCount": len(discard),
             "discard": [_card_payload(carte) for carte in reversed(discard)],
             "discardOrder": "top-first",
@@ -446,6 +466,15 @@ def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT):
         if getattr(Jeu, 'carte_forcee', None) is not None:
             return Jeu.carte_forcee, False, True
 
+def _preparer_debut_iteration_tour(joueurs, joueur):
+    rejoue_precedent = joueur.rejoue
+    for j in joueurs:
+        j.rejoue = False
+        j.doit_passer = False
+    if not rejoue_precedent:
+        joueur.reset_monstres_ajoutes()
+    return rejoue_precedent
+
 
 def _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC):
     effet_carte = carte.effet
@@ -687,11 +716,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
         
         # trigger de debut de tour
         # reset AVANT les triggers, pour qu'un effet de debut de tour puisse poser rejoue (ex: Bonne vieille guinze)
-        rejoue_precedent = joueur.rejoue
-        for j in joueurs:
-            j.rejoue = False
-            j.doit_passer = False
-            j.reset_monstres_ajoutes()  # Réinitialise le compteur de monstres ajoutés pour chaque joueur
+        rejoue_precedent = _preparer_debut_iteration_tour(joueurs, joueur)
         if not rejoue_precedent:
             if hasattr(joueur, 'perso_obj') and type(joueur.perso_obj) not in P_DEBUT:
                 joueur.perso_obj.debut_tour(joueur, Jeu, log_details)

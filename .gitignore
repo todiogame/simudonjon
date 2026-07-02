@@ -6,3 +6,8 @@ __pycache__/
 *.avant-synchro-juin2026.json
 backupfile_*.json
 priorites_objets_backup.json
+
+# Local UI asset configuration
+.env.local
+ui_asset_overrides.local.json
+uvicorn-ui*.log

@@ -25,6 +25,7 @@ from party import (
     score_pick_soiree,
 )
 from simu import ordonnanceur
+from ui_assets import asset_url
 
 
 BOT_NAMES = ["Bot 1", "Bot 2", "Bot 3"]
@@ -86,6 +87,7 @@ def serialize_card(card):
         "power": getattr(card, "puissance", None),
         "damage": getattr(card, "dommages", None),
         "types": list(getattr(card, "types", []) or []),
+        "image": asset_url("events" if getattr(card, "event", False) else "monsters", getattr(card, "titre", "")),
     }
 
 
@@ -110,6 +112,7 @@ def serialize_object(obj):
         "color": ITEM_COLOR_HEX.get(color_code, "#cfd8d2"),
         "types": list(getattr(obj, "types_tags", []) or []),
         "powers": list(getattr(obj, "puissance_tags", []) or []),
+        "image": asset_url("items", getattr(obj, "nom", "")),
     }
 
 
@@ -122,6 +125,7 @@ def serialize_hero(hero):
         "flee": getattr(hero, "modificateur_de", 0),
         "effect": (getattr(hero, "effet", "") or ""),
         "level": getattr(hero, "level", None),
+        "image": asset_url("characters", getattr(hero, "nom", "")),
     }
 
 

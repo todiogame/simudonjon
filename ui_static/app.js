@@ -74,6 +74,13 @@ function cardChips(card) {
   return stats.join("");
 }
 
+function assetImage(entity, className, altText) {
+  const src = String(entity?.image || "").trim();
+  if (!src) return "";
+  const alt = altText || entity?.title || entity?.name || "card";
+  return `<img class="${className}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="lazy">`;
+}
+
 function renderCard(card) {
   if (!card) {
     $("currentCard").innerHTML = `<div class="empty">No current card.</div>`;
@@ -81,9 +88,12 @@ function renderCard(card) {
   }
   $("currentCard").innerHTML = `
     <div class="card-detail">
-      <div class="card-name">${escapeHtml(card.title || "Card")}</div>
-      <div class="stats">${cardChips(card)}</div>
-      <div class="muted">${escapeHtml(cleanText(card.description || card.effect || ""))}</div>
+      ${assetImage(card, "card-art", card.title)}
+      <div class="card-copy">
+        <div class="card-name">${escapeHtml(card.title || "Card")}</div>
+        <div class="stats">${cardChips(card)}</div>
+        <div class="muted">${escapeHtml(cleanText(card.description || card.effect || ""))}</div>
+      </div>
     </div>
   `;
 }
@@ -96,6 +106,7 @@ function renderPileCard(card, index = null) {
   const indexLabel = index === null ? "" : `<span class="pile-index">${index}</span>`;
   return `
     <article class="pile-card ${card.event ? "event-card" : "monster-card"}"${tooltip}>
+      ${assetImage(card, "pile-art", card.title)}
       <div class="pile-card-head">
         ${indexLabel}
         <span class="pile-card-name">${escapeHtml(card.title || "Card")}</span>
@@ -110,6 +121,10 @@ function renderDungeon(dungeon) {
   const state = dungeon || {};
   const remaining = state.remainingSummary || [];
   const discard = state.discard || [];
+  const knownGroups = state.knownCards || [];
+  const knownCards = knownGroups.flatMap((group) =>
+    (group.cards || []).map((card) => ({ ...card, player: group.player }))
+  );
   $("pilesMeta").textContent = "dungeon grouped | discard top first";
   $("dungeonCount").textContent = `${state.remainingCount || 0} left`;
   $("discardCount").textContent = `${state.discardCount || 0} cards`;
@@ -119,6 +134,10 @@ function renderDungeon(dungeon) {
   $("discardCards").innerHTML = discard.length
     ? discard.map((card, index) => renderPileCard(card, index + 1)).join("")
     : `<div class="empty">No discarded cards yet.</div>`;
+  $("knownCardsPanel").hidden = knownCards.length === 0;
+  $("knownCards").innerHTML = knownCards.length
+    ? knownCards.map((card) => renderPileCard(card, card.position)).join("")
+    : "";
 }
 
 function renderDecision(decision) {
@@ -197,6 +216,7 @@ function renderItem(item) {
   return `
     <div class="item-card ${status}"${tooltip}>
       <div class="item-name">
+        ${assetImage(item, "item-art", item.name)}
         ${itemColorSwatch(item)}
         <span>${escapeHtml(item.name)}</span>
       </div>
@@ -223,7 +243,10 @@ function renderPlayers(players) {
           <div class="${statusClass}">${status}</div>
         </div>
         <div class="player-body">
-          <div class="hero-line">${escapeHtml(player.hero ? player.hero.name : "No hero")}</div>
+          <div class="hero-line">
+            ${assetImage(player.hero, "hero-art", player.hero?.name)}
+            <span>${escapeHtml(player.hero ? player.hero.name : "No hero")}</span>
+          </div>
           <div class="stats">
             ${chip(`PV ${player.pv}`)}
             ${chip(`score ${player.currentScore}`)}

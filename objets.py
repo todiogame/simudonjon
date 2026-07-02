@@ -184,7 +184,7 @@ class Objet:
         if getattr(carte, 'non_executable', False):
             raise ExecutionImpossible(carte.titre)  # Troll
         carte.executed = True
-        joueur.monstres_ajoutes_ce_tour += 1
+        joueur.compter_monstre_vaincu_ce_tour()
         Jeu.defausse.append(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter et défausser {carte.titre}")
 
@@ -1178,11 +1178,11 @@ class CraneDuRoiLiche(Objet):
             if joueur_proprietaire != joueur:
                 if carte in joueur.pile_monstres_vaincus:
                     joueur.pile_monstres_vaincus.remove(carte)
-                    joueur_proprietaire.ajouter_monstre_vaincu(carte)
+                    joueur_proprietaire.ajouter_monstre_vaincu(carte, compte_tour=False)
                     log_details.append(f"{joueur_proprietaire.nom} récupère {carte.titre} de {joueur.nom} grâce à {self.nom}")
                 elif carte in Jeu.defausse:
                     Jeu.defausse.remove(carte)
-                    joueur_proprietaire.ajouter_monstre_vaincu(carte)
+                    joueur_proprietaire.ajouter_monstre_vaincu(carte, compte_tour=False)
                     log_details.append(f"{joueur_proprietaire.nom} récupère {carte.titre} de la defausse grâce à {self.nom}")
                 else:
                     log_details.append(f"{joueur_proprietaire.nom} essaie de récupèrer {carte.titre} mais la carte a disparu !!")
@@ -1251,7 +1251,7 @@ class CorneDAbordage(Objet):
             if autre_joueur.pile_monstres_vaincus:
                 monstre_volee = random.choice(autre_joueur.pile_monstres_vaincus)
                 autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
-                joueur.ajouter_monstre_vaincu(monstre_volee)
+                joueur.ajouter_monstre_vaincu(monstre_volee, compte_tour=False)
                 log_details.append(f"{joueur.nom} utilise {self.nom} pour voler {monstre_volee.titre} de {autre_joueur.nom}{' en ' + contexte if contexte else ''}")
         self.perdPV(2, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -1953,7 +1953,7 @@ class PelleDuFossoyeur(Objet):
         Jeu.defausse = [c for c in Jeu.defausse if id(c) not in ids_choisis]
 
         for monstre in monstres_choisis:
-            joueur.ajouter_monstre_vaincu(monstre)
+            joueur.ajouter_monstre_vaincu(monstre, compte_tour=False)
         self.destroy(joueur, Jeu, log_details)
 
     # Trigger 1: Fin de tour
@@ -2170,7 +2170,7 @@ class CocktailMolotov(Objet):
                 card = Jeu.donjon.prochaine_carte()
                 remaining = Jeu.donjon.nb_cartes - Jeu.donjon.index
                 if hasattr(card, 'types') and not getattr(card, 'event', False):
-                    joueur.ajouter_monstre_vaincu(card)
+                    joueur.ajouter_monstre_vaincu(card, compte_tour=False)
                     log_details.append(f"{card.titre} ajouté à la pile des monstres vaincus. Cartes restantes dans le donjon: {remaining}")
                 else:
                     Jeu.defausse.append(card)
@@ -2217,7 +2217,7 @@ class AraigneeDomestique(Objet):
         for _ in range(2):
             if target.pile_monstres_vaincus:
                 monstre = target.pile_monstres_vaincus.pop(0)
-                owner.ajouter_monstre_vaincu(monstre)
+                owner.ajouter_monstre_vaincu(monstre, compte_tour=False)
                 stolen += 1
                 log_details.append(f"{owner.nom} vole {monstre.titre} dans la pile de {target.nom}.")
             else:
@@ -2346,7 +2346,7 @@ class SacDeConstantinople(Objet):
             if dragons:
                 monstre_volee = random.choice(dragons)
                 autre_joueur.pile_monstres_vaincus.remove(monstre_volee)
-                joueur.ajouter_monstre_vaincu(monstre_volee)
+                joueur.ajouter_monstre_vaincu(monstre_volee, compte_tour=False)
                 log_details.append(f"{joueur.nom} vole {monstre_volee.titre} (Dragon) de {autre_joueur.nom}{' en ' + contexte if contexte else ''}")
         
         # Récupérer tous les dragons de la défausse
@@ -2354,7 +2354,7 @@ class SacDeConstantinople(Objet):
         dragons_defausse = [monstre for monstre in monstres_defausse if "Dragon" in getattr(monstre, 'types', [])]
         for dragon in dragons_defausse:
             Jeu.defausse.remove(dragon)
-            joueur.ajouter_monstre_vaincu(dragon)
+            joueur.ajouter_monstre_vaincu(dragon, compte_tour=False)
             log_details.append(f"{joueur.nom} récupère {dragon.titre} (Dragon) de la défausse")
 
         # "gagnez autant de PV que vous avez de Dragons dans votre pile"
@@ -2459,6 +2459,29 @@ def _peek_prochaine_carte(Jeu):
     if donjon.vide:
         return None
     return donjon.cartes[donjon.ordre[donjon.index]]
+
+
+def _notifier_info_donjon(Jeu):
+    donjon = getattr(Jeu, "donjon", None)
+    notify = getattr(donjon, "_notify_change", None)
+    if notify is not None:
+        notify()
+
+
+def _memoriser_carte_connue(joueur, Jeu, carte):
+    if carte is None:
+        return
+    joueur.cartes_connues.add(carte)
+    _notifier_info_donjon(Jeu)
+
+
+def _card_decision_context(carte):
+    return {
+        "card": getattr(carte, "titre", str(carte)),
+        "event": bool(getattr(carte, "event", False)),
+        "power": getattr(carte, "puissance", None),
+        "types": list(getattr(carte, "types", []) or []),
+    }
 
 def _defausse_monstre_de_pile(joueur, Jeu, log_details, plus_puissant=False):
     # defausse un monstre de la pile du joueur (jamais le Golem d'or)
@@ -2658,8 +2681,6 @@ def _couverture_sans_objet(joueur, objet_exclu):
 
 
 def _choisir_puissance_epee_vengeresse(joueur, Jeu, objet_exclu):
-    # Heuristique IA, pas regle: choisit une ligne "rentable" non deja couverte
-    # par le reste de la main, au lieu d'un vrai choix intelligent de long terme.
     _, puissances_couvertes = _couverture_sans_objet(joueur, objet_exclu)
     scores = {}
     comptes = {}
@@ -2671,12 +2692,21 @@ def _choisir_puissance_epee_vengeresse(joueur, Jeu, objet_exclu):
         comptes[p] = comptes.get(p, 0) + 1
     if not scores:
         return 5
+    if joueur.is_human():
+        puissances = sorted(scores)
+        return joueur.demander_choix(
+            "vengeful_sword_power",
+            f"Choose a power for {objet_exclu.nom}.",
+            puissances,
+            default=puissances[0],
+            label_func=lambda p: f"Power {p}",
+            context={"powers": puissances},
+        )
     candidates = [p for p in scores if p not in puissances_couvertes] or list(scores)
     return max(candidates, key=lambda p: (scores[p], p, comptes[p]))
 
 
 def _choisir_type_dague_vengeresse(joueur, Jeu, objet_exclu):
-    # Heuristique IA, pas regle: meme idee que l'Epee vengeresse mais par type.
     types_couverts, _ = _couverture_sans_objet(joueur, objet_exclu)
     scores = {}
     comptes = {}
@@ -2689,6 +2719,15 @@ def _choisir_type_dague_vengeresse(joueur, Jeu, objet_exclu):
             comptes[t] = comptes.get(t, 0) + 1
     if not scores:
         return "Golem"
+    if joueur.is_human():
+        monster_types = sorted(scores)
+        return joueur.demander_choix(
+            "vengeful_dagger_type",
+            f"Choose a monster type for {objet_exclu.nom}.",
+            monster_types,
+            default=monster_types[0],
+            context={"types": monster_types},
+        )
     candidates = [t for t in scores if t not in types_couverts] or list(scores)
     return max(candidates, key=lambda t: (scores[t], comptes[t], t == "Golem", t))
 
@@ -2856,7 +2895,7 @@ class PommeDAdam(Objet):
         self.gagnePV(3, joueur, log_details)
         donjon = Jeu.donjon
         for i in range(donjon.index, min(donjon.index + 3, donjon.nb_cartes)):
-            joueur.cartes_connues.add(donjon.cartes[donjon.ordre[i]])
+            _memoriser_carte_connue(joueur, Jeu, donjon.cartes[donjon.ordre[i]])
         log_details.append(f"{joueur.nom} consulte secrètement les 3 prochaines cartes ({self.nom}).")
         self.destroy(joueur, Jeu, log_details)
 
@@ -2939,10 +2978,6 @@ class BouleDeCristal(Objet):
     def debut_partie(self, joueur, Jeu, log_details):
         self.annonce = None
     def debut_tour(self, joueur, Jeu, log_details):
-        # Heuristique IA, pas regle: annonce la puissance au plus gros "poids de
-        # danger" parmi les cartes restantes (frequence * puissance), avec
-        # tie-break sur la puissance brute, en evitant si possible une ligne
-        # deja couverte par le reste de la main.
         if not self.intact:
             return
         comptes = {}
@@ -2951,9 +2986,23 @@ class BouleDeCristal(Objet):
             c = donjon.cartes[idx]
             if isinstance(c, CarteMonstre) and not c.is_X:
                 comptes[c.puissance_initiale] = comptes.get(c.puissance_initiale, 0) + 1
-        _, puissances_couvertes = _couverture_sans_objet(joueur, self)
-        candidates = [p for p in comptes if p not in puissances_couvertes] or list(comptes)
-        self.annonce = max(candidates, key=lambda p: (comptes[p] * p, p, comptes[p])) if comptes else None
+        if not comptes:
+            self.annonce = None
+            return
+        if joueur.is_human():
+            puissances = sorted(comptes)
+            self.annonce = joueur.demander_choix(
+                "crystal_ball_power",
+                f"Announce a power for {self.nom}.",
+                puissances,
+                default=puissances[0],
+                label_func=lambda p: f"Power {p}",
+                context={"powers": puissances},
+            )
+        else:
+            _, puissances_couvertes = _couverture_sans_objet(joueur, self)
+            candidates = [p for p in comptes if p not in puissances_couvertes] or list(comptes)
+            self.annonce = max(candidates, key=lambda p: (comptes[p] * p, p, comptes[p]))
         if self.annonce is not None:
             log_details.append(f"{joueur.nom} annonce la puissance {self.annonce} avec {self.nom}.")
     def rules(self, joueur, carte, Jeu, log_details):
@@ -3412,7 +3461,7 @@ class CompasDuCapitaine(Objet):
         self.execute(joueur, carte, log_details)
         prochaine = _peek_prochaine_carte(Jeu)
         if prochaine is not None:
-            joueur.cartes_connues.add(prochaine)
+            _memoriser_carte_connue(joueur, Jeu, prochaine)
             log_details.append(f"{joueur.nom} regarde secrètement la carte du dessus ({self.nom}).")
         self.destroy(joueur, Jeu, log_details)
 
@@ -3580,7 +3629,7 @@ class MiroirDeYata(Objet):
         donjon = Jeu.donjon
         for i in range(donjon.index, min(donjon.index + 3, donjon.nb_cartes)):
             for j in Jeu.joueurs:
-                j.cartes_connues.add(donjon.cartes[donjon.ordre[i]])
+                _memoriser_carte_connue(j, Jeu, donjon.cartes[donjon.ordre[i]])
         log_details.append(f"{joueur.nom} montre les 3 prochaines cartes à tous ({self.nom}).")
         joueur.doit_passer = True
         self.destroy(joueur, Jeu, log_details)
@@ -3627,7 +3676,7 @@ class CleDeSalomon(Objet):
         if self.intact and joueur_proprietaire == joueur and carte.puissance >= 6:
             prochaine = _peek_prochaine_carte(Jeu)
             if prochaine is not None:
-                joueur.cartes_connues.add(prochaine)
+                _memoriser_carte_connue(joueur, Jeu, prochaine)
 
 class DagueDeBrutus(Objet):
     def __init__(self):
@@ -3642,7 +3691,8 @@ class DagueDeBrutus(Objet):
         adversaires = [j for j in Jeu.joueurs if j is not joueur and j.dans_le_dj]
         if adversaires:
             beneficiaire = min(adversaires, key=lambda j: len(j.pile_monstres_vaincus))
-            beneficiaire.ajouter_monstre_vaincu(carte)
+            joueur.compter_monstre_vaincu_ce_tour()
+            beneficiaire.ajouter_monstre_vaincu(carte, compte_tour=False)
             log_details.append(f"{joueur.nom} exécute {carte.titre} avec {self.nom} et l'offre à {beneficiaire.nom}.")
         else:
             joueur.ajouter_monstre_vaincu(carte)
@@ -3945,7 +3995,7 @@ class JournalDuFutur(Objet):
         # regarde secretement la 3eme carte du Donjon (memorisee jusqu'a ce qu'elle surface)
         donjon = Jeu.donjon
         if self.intact and donjon.index + 2 < donjon.nb_cartes:
-            joueur.cartes_connues.add(donjon.cartes[donjon.ordre[donjon.index + 2]])
+            _memoriser_carte_connue(joueur, Jeu, donjon.cartes[donjon.ordre[donjon.index + 2]])
 
 class BinoclesDeLInventeur(Objet):
     def __init__(self):
@@ -3954,7 +4004,7 @@ class BinoclesDeLInventeur(Objet):
         if self.intact and joueur_proprietaire == joueur and carte.dommages > 0:
             prochaine = _peek_prochaine_carte(Jeu)
             if prochaine is not None:
-                joueur.cartes_connues.add(prochaine)
+                _memoriser_carte_connue(joueur, Jeu, prochaine)
                 log_details.append(f"{joueur.nom} regarde la prochaine carte ({self.nom}).")
 
 class OeilDHorus(Objet):
@@ -3972,13 +4022,24 @@ class OeilDHorus(Objet):
             prochaine = _peek_prochaine_carte(Jeu)
             if prochaine is None:
                 return
-            if (isinstance(prochaine, CarteMonstre) and not prochaine.is_X
-                    and prochaine.puissance_initiale >= max(4, joueur.pv_total)):
+            envoyer_sous_donjon = (
+                isinstance(prochaine, CarteMonstre) and not prochaine.is_X
+                and prochaine.puissance_initiale >= max(4, joueur.pv_total)
+            )
+            if joueur.is_human():
+                envoyer_sous_donjon = joueur.demander_oui_non(
+                    "eye_of_horus_bottom",
+                    f"Send {prochaine.titre} under the Dungeon with {self.nom}?",
+                    default=False,
+                    context=_card_decision_context(prochaine),
+                )
+            if envoyer_sous_donjon:
                 Jeu.donjon.prochaine_carte()
                 Jeu.donjon.rajoute_en_bas_de_la_pile(prochaine)
                 log_details.append(f"{joueur.nom} remet {prochaine.titre} sous le Donjon ({self.nom}).")
             else:
-                joueur.cartes_connues.add(prochaine)
+                _memoriser_carte_connue(joueur, Jeu, prochaine)
+                log_details.append(f"{joueur.nom} voit {prochaine.titre} et le laisse sur le Donjon ({self.nom}).")
 
 class OiseauDeMauvaisAugure(Objet):
     def __init__(self):
@@ -3999,13 +4060,12 @@ class OiseauDeMauvaisAugure(Objet):
                 "event": bool(getattr(prochaine, 'event', False)),
                 "power": getattr(prochaine, 'puissance', None),
                 "types": list(getattr(prochaine, 'types', []) or []),
-                "recommended": "bottom" if bonne_carte else "leave",
             }
             if joueur.is_human():
                 envoyer_sous_donjon = joueur.demander_oui_non(
                     "bad_omen_bird_bottom",
                     f"Send {prochaine.titre} under the Dungeon with {self.nom}?",
-                    default=bonne_carte,
+                    default=False,
                     context=decision_context,
                 )
             else:
@@ -4021,7 +4081,7 @@ class OiseauDeMauvaisAugure(Objet):
                 Jeu.donjon.rajoute_en_bas_de_la_pile(prochaine)
                 log_details.append(f"{joueur.nom} envoie {prochaine.titre} sous le Donjon ({self.nom}).")
             else:
-                joueur.cartes_connues.add(prochaine)
+                _memoriser_carte_connue(joueur, Jeu, prochaine)
                 log_details.append(f"{joueur.nom} voit {prochaine.titre} et le laisse sur le Donjon ({self.nom}).")
 
 class FilDuDestin(Objet):
@@ -4034,20 +4094,52 @@ class FilDuDestin(Objet):
         if not self.intact or joueur.tour < 2 or donjon.nb_cartes - donjon.index < 4:
             return
         positions = list(range(donjon.index, donjon.index + 4))
-        cartes = [donjon.cartes[donjon.ordre[p]] for p in positions]
-        def danger(c):
-            if getattr(c, 'event', False):
-                return -1
-            if joueur.peut_executer_facilement(c):
-                return 0
-            return 4 if c.is_X else c.puissance_initiale
-        tri = sorted(range(4), key=lambda i: danger(cartes[i]))
-        nouvel_ordre = [tri[0]] + sorted(tri[1:], key=lambda i: -danger(cartes[i]))
-        anciens = [donjon.ordre[p] for p in positions]
-        for p, i in zip(positions, nouvel_ordre):
-            donjon.ordre[p] = anciens[i]
+        entries = [(donjon.ordre[p], donjon.cartes[donjon.ordre[p]]) for p in positions]
+        cartes = [card for _, card in entries]
+        if joueur.is_human():
+            utilise = joueur.demander_oui_non(
+                "thread_of_fate_use",
+                f"Use {self.nom} to reorder the next 4 Dungeon cards?",
+                default=False,
+                context={"cards": [c.titre for c in cartes]},
+            )
+            if not utilise:
+                for c in cartes:
+                    _memoriser_carte_connue(joueur, Jeu, c)
+                log_details.append(f"{joueur.nom} regarde les 4 prochaines cartes et garde l'ordre actuel ({self.nom}).")
+                return
+            ordered_cards = []
+            remaining = list(cartes)
+            for position in range(1, 5):
+                choix = joueur.demander_choix(
+                    "thread_of_fate_order",
+                    f"Choose card #{position} for {self.nom}.",
+                    remaining,
+                    default=remaining[0],
+                    context={
+                        "position": position,
+                        "remaining": [c.titre for c in remaining],
+                        "chosen": [c.titre for c in ordered_cards],
+                    },
+                )
+                ordered_cards.append(choix)
+                remaining.remove(choix)
+        else:
+            def danger(c):
+                if getattr(c, 'event', False):
+                    return -1
+                if joueur.peut_executer_facilement(c):
+                    return 0
+                return 4 if c.is_X else c.puissance_initiale
+            tri = sorted(range(4), key=lambda i: danger(cartes[i]))
+            ordered_cards = [cartes[i] for i in ([tri[0]] + sorted(tri[1:], key=lambda i: -danger(cartes[i])))]
+        remaining_entries = list(entries)
+        for p, card in zip(positions, ordered_cards):
+            entry_index = next(i for i, (_, entry_card) in enumerate(remaining_entries) if entry_card is card)
+            card_index, _ = remaining_entries.pop(entry_index)
+            donjon.ordre[p] = card_index
         for c in cartes:
-            joueur.cartes_connues.add(c)
+            _memoriser_carte_connue(joueur, Jeu, c)
         log_details.append(f"{joueur.nom} réordonne les 4 prochaines cartes du Donjon ({self.nom}).")
         self.destroy(joueur, Jeu, log_details)
 

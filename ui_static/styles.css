@@ -255,11 +255,31 @@ button:focus-visible {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
+.known-cards {
+  border-top: 2px groove #7f6f3e;
+}
+
+.known-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
 .pile-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 5px;
   min-width: 0;
   border: 2px groove #8f8053;
   background: #efe2ac;
   padding: 0.32rem 0.4rem;
+}
+
+.pile-art {
+  grid-row: span 2;
+  width: 30px;
+  height: 42px;
+  border: 1px solid #4c3714;
+  background: #1a1207;
+  object-fit: cover;
 }
 
 .pile-card.event-card {
@@ -313,6 +333,25 @@ button:focus-visible {
 .card-detail,
 .decision-content {
   padding: 0.65rem;
+}
+
+.card-detail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+}
+
+.card-art {
+  width: 74px;
+  height: 104px;
+  border: 2px groove #8f8053;
+  background: #1a1207;
+  object-fit: cover;
+}
+
+.card-copy {
+  min-width: 0;
 }
 
 .card-name {
@@ -449,6 +488,15 @@ button.default .button-desc {
   overflow-wrap: anywhere;
 }
 
+.item-art {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 38px;
+  border: 1px solid #4c3714;
+  background: #1a1207;
+  object-fit: cover;
+}
+
 .item-color {
   flex: 0 0 10px;
   width: 10px;
@@ -536,10 +584,22 @@ button.default .button-desc {
 }
 
 .hero-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--cool);
   font-weight: 900;
   margin-bottom: 0.32rem;
   overflow-wrap: anywhere;
+}
+
+.hero-art {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 46px;
+  border: 1px solid #4c3714;
+  background: #1a1207;
+  object-fit: cover;
 }
 
 .mini-list {
@@ -558,6 +618,11 @@ button.default .button-desc {
   font-size: 0.75rem;
   line-height: 1.15;
   gap: 4px;
+}
+
+.mini-list .item-art {
+  width: 22px;
+  height: 30px;
 }
 
 .mini-list .item-color {

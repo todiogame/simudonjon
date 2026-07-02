@@ -120,7 +120,7 @@ class Perso:
 
     def executeEtDefausse(self, joueur, carte, Jeu, log_details):
         carte.executed = True
-        joueur.monstres_ajoutes_ce_tour += 1
+        joueur.compter_monstre_vaincu_ce_tour()
         Jeu.defausse.append(carte)
         log_details.append(f"{joueur.nom} utilise {self.nom} pour exécuter et défausser {carte.titre}")
 
@@ -264,7 +264,7 @@ class Tricheur(Perso):
                     break
                 c = Jeu.donjon.prochaine_carte()
                 if hasattr(c, 'types') and not getattr(c, 'event', False):
-                    joueur.ajouter_monstre_vaincu(c)
+                    joueur.ajouter_monstre_vaincu(c, compte_tour=False)
                     log_details.append(f"{joueur.nom} ({self.nom}) triche et ajoute {c.titre} à sa pile !")
                 else:
                     a_reposer.append(c)

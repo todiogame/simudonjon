@@ -646,10 +646,15 @@ class Joueur:
     def reset_monstres_ajoutes(self):
         self.monstres_ajoutes_ce_tour = 0
 
-    # Dans les parties où tu modifies le joueur.pile_monstres_vaincus, incrémente monstre_ajoutes_ce_tour
-    def ajouter_monstre_vaincu(self, carte):
-        self.pile_monstres_vaincus.append(carte)
+    def compter_monstre_vaincu_ce_tour(self):
         self.monstres_ajoutes_ce_tour += 1
+
+    # Dans les parties où tu modifies le joueur.pile_monstres_vaincus avec un monstre
+    # vraiment vaincu par ce joueur ce tour-ci, laisse compte_tour=True.
+    def ajouter_monstre_vaincu(self, carte, compte_tour=True):
+        self.pile_monstres_vaincus.append(carte)
+        if compte_tour:
+            self.compter_monstre_vaincu_ce_tour()
         
 
 

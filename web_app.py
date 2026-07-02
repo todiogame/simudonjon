@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from ui_assets import assets_enabled, configured_asset_root
 from ui_runtime import GameSession, HEURISTIC_STRATEGY_NAME, TEACHER_STRATEGY_NAME
 
 
@@ -13,6 +14,9 @@ STATIC_DIR = BASE_DIR / "ui_static"
 
 app = FastAPI(title="SimuDonjon UI")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+ASSET_ROOT = configured_asset_root()
+if ASSET_ROOT is not None:
+    app.mount("/assets", StaticFiles(directory=ASSET_ROOT), name="assets")
 
 sessions = {}
 
@@ -58,6 +62,7 @@ def metadata():
                 "description": "Uses the baseline heuristic bot.",
             },
         ],
+        "assets": {"enabled": assets_enabled()},
     }
 
 

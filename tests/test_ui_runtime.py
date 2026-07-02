@@ -5,7 +5,7 @@ import pytest
 from heros import Avatar, ChevalierDragon, Perso
 from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
-from objets import Objet, OiseauDeMauvaisAugure
+from objets import BouleDeCristal, FilDuDestin, Objet, OeilDHorus, OiseauDeMauvaisAugure
 from simu import _basic_log, _emit_dungeon_state
 from ui_runtime import (
     GameSession,
@@ -131,6 +131,24 @@ class _Provider:
             "context": context or {},
         })
         return self.answer
+
+
+class _SequenceProvider:
+    def __init__(self, answers):
+        self.answers = list(answers)
+        self.calls = []
+
+    def choose(self, joueur, kind, prompt, options, default_id, context=None):
+        self.calls.append({
+            "kind": kind,
+            "prompt": prompt,
+            "options": options,
+            "default_id": default_id,
+            "context": context or {},
+        })
+        if self.answers:
+            return self.answers.pop(0)
+        return default_id
 
 
 class _CombatItem(Objet):
@@ -268,14 +286,43 @@ def test_dungeon_state_hides_deck_order_but_orders_discard():
     assert set(payload) == {
         "remainingCount",
         "remainingSummary",
+        "knownCards",
         "discardCount",
         "discard",
         "discardOrder",
     }
     assert payload["remainingCount"] == 4
     assert payload["remainingSummary"][0]["count"] >= 1
+    assert payload["knownCards"] == []
     assert payload["discardOrder"] == "top-first"
     assert [card["title"] for card in payload["discard"]] == ["Top", "Bottom"]
+
+
+def test_dungeon_state_exposes_human_known_cards_in_order():
+    events = []
+    donjon = DonjonDeck()
+    dragon_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Dragon")
+    orc_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Orc")
+    donjon.ordre = [dragon_idx, orc_idx]
+    donjon.nb_cartes = 2
+    donjon.index = 0
+    human = Joueur("Human", Perso("Hero", 10), [], control="human")
+    bot = Joueur("Bot", Perso("Bot Hero", 10), [], control="teacher ai")
+    human.cartes_connues.add(donjon.cartes[orc_idx])
+    bot.cartes_connues.add(donjon.cartes[dragon_idx])
+
+    class Jeu:
+        defausse = []
+        joueurs = [human, bot]
+
+    Jeu.donjon = donjon
+
+    _emit_dungeon_state(events.append, Jeu)
+
+    known = events[-1]["payload"]["knownCards"]
+    assert len(known) == 1
+    assert known[0]["player"] == "Human"
+    assert [(card["title"], card["position"]) for card in known[0]["cards"]] == [("Orc", 2)]
 
 
 def test_bad_omen_bird_asks_human_before_moving_card_under_dungeon():
@@ -306,7 +353,6 @@ def test_bad_omen_bird_asks_human_before_moving_card_under_dungeon():
 
     assert provider.calls[0]["kind"] == "bad_omen_bird_bottom"
     assert provider.calls[0]["context"]["card"] == "Dragon"
-    assert provider.calls[0]["context"]["recommended"] == "leave"
     assert any("envoie Dragon sous le Donjon" in row for row in log)
     assert donjon.index == 1
     assert int(donjon.ordre[-1]) == dragon_idx
@@ -343,3 +389,109 @@ def test_bad_omen_bird_human_can_leave_card_on_top():
     assert any(_basic_log(row) for row in log)
     assert donjon.index == 0
     assert donjon.cartes[dragon_idx] in owner.cartes_connues
+
+
+def test_crystal_ball_human_chooses_announced_power():
+    crystal = BouleDeCristal()
+    provider = _Provider("1")
+    owner = Joueur(
+        "Owner",
+        Perso("Hero", 10),
+        [crystal],
+        control="human",
+        decision_provider=provider,
+    )
+    donjon = DonjonDeck()
+    orc_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Orc")
+    dragon_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Dragon")
+    donjon.ordre = [orc_idx, dragon_idx]
+    donjon.nb_cartes = 2
+    donjon.index = 0
+
+    class Jeu:
+        pass
+
+    Jeu.donjon = donjon
+
+    crystal.debut_tour(owner, Jeu, [])
+
+    assert provider.calls[0]["kind"] == "crystal_ball_power"
+    assert [option["label"] for option in provider.calls[0]["options"]] == ["Power 3", "Power 9"]
+    assert crystal.annonce == 9
+
+
+def test_eye_of_horus_human_decides_whether_to_bottom_card():
+    eye = OeilDHorus()
+    provider = _Provider("yes")
+    owner = Joueur(
+        "Owner",
+        Perso("Hero", 10),
+        [eye],
+        control="human",
+        decision_provider=provider,
+    )
+    defeated = CarteMonstre("Defeated", 1)
+    defeated.executed = True
+    donjon = DonjonDeck()
+    dragon_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Dragon")
+    donjon.ordre = [dragon_idx]
+    donjon.nb_cartes = 1
+    donjon.index = 0
+
+    class Jeu:
+        pass
+
+    Jeu.donjon = donjon
+    Jeu.joueurs = [owner]
+    log = []
+
+    eye.vaincu_effet(owner, owner, defeated, Jeu, log)
+
+    assert provider.calls[0]["kind"] == "eye_of_horus_bottom"
+    assert provider.calls[0]["context"]["card"] == "Dragon"
+    assert donjon.index == 1
+    assert int(donjon.ordre[-1]) == dragon_idx
+
+
+def test_thread_of_fate_human_orders_four_cards():
+    thread = FilDuDestin()
+    provider = _SequenceProvider(["yes", "3", "2", "1", "0"])
+    owner = Joueur(
+        "Owner",
+        Perso("Hero", 10),
+        [thread],
+        control="human",
+        decision_provider=provider,
+    )
+    owner.tour = 2
+    donjon = DonjonDeck()
+    names = ["Orc", "Dragon", "Gobelin", "Vampire"]
+    indices = [next(i for i, card in enumerate(donjon.cartes) if card.titre == name) for name in names]
+    donjon.ordre = indices[:]
+    donjon.nb_cartes = len(indices)
+    donjon.index = 0
+
+    class Jeu:
+        pass
+
+    Jeu.donjon = donjon
+    Jeu.joueurs = [owner]
+    log = []
+
+    thread.debut_tour(owner, Jeu, log)
+
+    assert [call["kind"] for call in provider.calls] == [
+        "thread_of_fate_use",
+        "thread_of_fate_order",
+        "thread_of_fate_order",
+        "thread_of_fate_order",
+        "thread_of_fate_order",
+    ]
+    assert [donjon.cartes[int(idx)].titre for idx in donjon.ordre[:4]] == [
+        "Vampire",
+        "Gobelin",
+        "Dragon",
+        "Orc",
+    ]
+    assert all(donjon.cartes[idx] in owner.cartes_connues for idx in indices)
+    assert not thread.intact
