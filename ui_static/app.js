@@ -5,8 +5,38 @@ let logLevel = "basic";
 let renderedDecisionId = null;
 let renderedLogKey = "";
 const logs = { basic: [], full: [] };
+const playerRenderKeys = new Map();
+const renderKeys = {
+  status: "",
+  card: "",
+  dungeon: "",
+  decision: "",
+  draft: "",
+  players: "",
+};
 
 const $ = (id) => document.getElementById(id);
+
+function stableRenderKey(value) {
+  return JSON.stringify(value ?? null);
+}
+
+function resetRenderKeys() {
+  for (const key of Object.keys(renderKeys)) {
+    renderKeys[key] = "";
+  }
+  playerRenderKeys.clear();
+  renderedDecisionId = null;
+}
+
+function renderIfChanged(key, value, callback) {
+  const next = stableRenderKey(value);
+  if (renderKeys[key] === next) {
+    return;
+  }
+  renderKeys[key] = next;
+  callback(value);
+}
 
 function cleanText(value) {
   return String(value ?? "")
@@ -247,39 +277,70 @@ function renderMonsterStack(monsters) {
   `;
 }
 
+function renderPlayer(player, index) {
+  const [status, statusClass] = statusFor(player);
+  const itemList = (player.items || []).map(renderItem).join("");
+  const monsterStack = renderMonsterStack(player.monsters || []);
+  const strategyText = player.strategy ? ` | ${player.strategy}` : "";
+  return `
+    <article class="player ${player.control === "human" ? "human" : ""} ${player.alive ? "" : "dead"}" data-player-index="${index}">
+      <div class="player-head">
+        <div>
+          <div class="player-name">${escapeHtml(player.name)}</div>
+          <div class="muted">${escapeHtml(`${player.control}${strategyText}`)}</div>
+        </div>
+        <div class="${statusClass}">${status}</div>
+      </div>
+      <div class="player-body">
+        <div class="hero-line">
+          ${assetImage(player.hero, "hero-art", player.hero?.name)}
+          <span>${escapeHtml(player.hero ? player.hero.name : "No hero")}</span>
+        </div>
+        <div class="stats">
+          ${chip(`PV ${player.pv}`)}
+          ${chip(`score ${player.currentScore}`)}
+          ${chip(`final ${player.score}`)}
+          ${chip(`medals ${player.medals}`)}
+          ${chip(`turn ${player.turn}`)}
+        </div>
+        <div class="monster-row">${monsterStack}</div>
+        <div class="mini-list">${itemList}</div>
+      </div>
+    </article>
+  `;
+}
+
 function renderPlayers(players) {
-  $("players").innerHTML = (players || []).map((player) => {
-    const [status, statusClass] = statusFor(player);
-    const itemList = (player.items || []).map(renderItem).join("");
-    const monsterStack = renderMonsterStack(player.monsters || []);
-    const strategyText = player.strategy ? ` | ${player.strategy}` : "";
-    return `
-      <article class="player ${player.control === "human" ? "human" : ""} ${player.alive ? "" : "dead"}">
-        <div class="player-head">
-          <div>
-            <div class="player-name">${escapeHtml(player.name)}</div>
-            <div class="muted">${escapeHtml(`${player.control}${strategyText}`)}</div>
-          </div>
-          <div class="${statusClass}">${status}</div>
-        </div>
-        <div class="player-body">
-          <div class="hero-line">
-            ${assetImage(player.hero, "hero-art", player.hero?.name)}
-            <span>${escapeHtml(player.hero ? player.hero.name : "No hero")}</span>
-          </div>
-          <div class="stats">
-            ${chip(`PV ${player.pv}`)}
-            ${chip(`score ${player.currentScore}`)}
-            ${chip(`final ${player.score}`)}
-            ${chip(`medals ${player.medals}`)}
-            ${chip(`turn ${player.turn}`)}
-          </div>
-          <div class="monster-row">${monsterStack}</div>
-          <div class="mini-list">${itemList}</div>
-        </div>
-      </article>
-    `;
-  }).join("");
+  const container = $("players");
+  const nextPlayers = players || [];
+  const seen = new Set();
+
+  nextPlayers.forEach((player, index) => {
+    const cacheKey = String(index);
+    const renderKey = stableRenderKey(player);
+    const current = container.querySelector(`[data-player-index="${index}"]`);
+    seen.add(cacheKey);
+
+    if (current && playerRenderKeys.get(cacheKey) === renderKey) {
+      return;
+    }
+
+    const html = renderPlayer(player, index);
+    if (current) {
+      current.outerHTML = html;
+    } else {
+      container.insertAdjacentHTML("beforeend", html);
+    }
+    playerRenderKeys.set(cacheKey, renderKey);
+  });
+
+  container.querySelectorAll("[data-player-index]").forEach((playerNode) => {
+    const cacheKey = playerNode.dataset.playerIndex;
+    if (!seen.has(cacheKey)) {
+      playerNode.remove();
+      playerRenderKeys.delete(cacheKey);
+    }
+  });
 }
 
 function renderLogs(force = false) {
@@ -304,14 +365,24 @@ function renderLogs(force = false) {
 
 function render() {
   if (!snapshot) return;
-  $("statusLine").textContent = `${snapshot.status} | ${snapshot.mode} | ${snapshot.phase}`;
-  $("phaseBadge").textContent = snapshot.phase || "setup";
-  $("roundLabel").textContent = snapshot.round || "";
-  renderCard(snapshot.currentCard);
-  renderDungeon(snapshot.dungeon);
-  renderDecision(snapshot.pendingDecision);
-  renderDraft(snapshot.draft);
-  renderPlayers(snapshot.players);
+  renderIfChanged("status", {
+    status: snapshot.status,
+    mode: snapshot.mode,
+    phase: snapshot.phase,
+    round: snapshot.round,
+  }, () => {
+    $("statusLine").textContent = `${snapshot.status} | ${snapshot.mode} | ${snapshot.phase}`;
+    $("phaseBadge").textContent = snapshot.phase || "setup";
+    $("roundLabel").textContent = snapshot.round || "";
+  });
+  renderIfChanged("card", snapshot.currentCard, renderCard);
+  renderIfChanged("dungeon", snapshot.dungeon, renderDungeon);
+  renderIfChanged("decision", snapshot.pendingDecision, (decision) => {
+    renderedDecisionId = null;
+    renderDecision(decision);
+  });
+  renderIfChanged("draft", snapshot.draft, renderDraft);
+  renderIfChanged("players", snapshot.players, renderPlayers);
 }
 
 function collapsePiles() {
@@ -339,7 +410,7 @@ function updateBotStrategyControls() {
 async function createGame(event) {
   event.preventDefault();
   lastEventId = 0;
-  renderedDecisionId = null;
+  resetRenderKeys();
   renderedLogKey = "";
   collapsePiles();
   logs.basic = [];
