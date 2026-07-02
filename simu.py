@@ -628,6 +628,27 @@ def _choisir_monstre_tempete_des_ames(joueur, Jeu):
     )
 
 
+def _resolve_heal_event(joueur, joueurs, carte, log_details):
+    utilise = True
+    if joueur.is_human():
+        utilise = joueur.demander_oui_non(
+            "event_heal",
+            f"Use {carte.titre}?",
+            default=True,
+            context={"pv": joueur.pv_total},
+        )
+    if not utilise:
+        log_details.append(f"{joueur.nom} n'utilise pas {carte.titre}.")
+        return
+
+    joueur.pv_total += 3
+    log_details.append(f"{joueur.nom} gagne 3 PV grâce à {carte.titre}. PV restant: {joueur.pv_total}")
+    for autre_joueur in joueurs:
+        if autre_joueur != joueur and autre_joueur.dans_le_dj:
+            autre_joueur.pv_total += 2
+            log_details.append(f"{autre_joueur.nom} gagne 2 PV grâce à {carte.titre}. PV restant: {autre_joueur.pv_total}")
+
+
 def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT):
     joueur.mort(log_details)
     log_details.append(f"OUPS!! Mort de {joueur.nom}, a court de PV.\n")
@@ -853,14 +874,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 else:
                     log_details.append(f"Pas de carte événement dans la défausse.") 
             if effet_carte == "HEAL":
-                joueur.pv_total += 3
-                log_details.append(f"{joueur.nom} gagne 3 PV grâce à {carte.titre}. PV restant: {joueur.pv_total}")
-                # Ajouter 2 PV aux autres joueurs
-                for autre_joueur in joueurs:
-                    if autre_joueur != joueur and autre_joueur.dans_le_dj:
-                        autre_joueur.pv_total += 2
-                        log_details.append(f"{autre_joueur.nom} gagne 2 PV grâce à {carte.titre}. PV restant: {autre_joueur.pv_total}")
-
+                _resolve_heal_event(joueur, joueurs, carte, log_details)
             if effet_carte == "REPAIR":
                 # Bricoleur: defausser un monstre pour reparer un objet brise
                 objets_brisés = [objet for objet in joueur.objets if not objet.intact]

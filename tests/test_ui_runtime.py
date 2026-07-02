@@ -22,7 +22,13 @@ from objets import (
     OsseletsDeResurrection,
     PotionDeGlace,
 )
-from simu import _basic_log, _emit_current_card, _emit_dungeon_state, _reset_temporary_card_modifiers
+from simu import (
+    _basic_log,
+    _emit_current_card,
+    _emit_dungeon_state,
+    _reset_temporary_card_modifiers,
+    _resolve_heal_event,
+)
 from ui_runtime import (
     GameSession,
     HEURISTIC_STRATEGY_NAME,
@@ -229,6 +235,48 @@ def test_current_card_update_can_refresh_resolved_x_power_without_log_event():
     assert snap["currentCard"]["power"] == 9
     assert snap["currentCard"]["damage"] == 9
     assert session.events_after() == []
+
+
+def test_heavenly_descent_is_optional_for_human_drawer():
+    provider = _Provider("no")
+    drawer = Joueur(
+        "Drawer",
+        Perso("Drawer Hero", 10),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+    other = Joueur("Other", Perso("Other Hero", 10), [])
+    event = CarteEvent("Descente angélique", "Gagnez 3pv.", "HEAL")
+    log = []
+
+    _resolve_heal_event(drawer, [drawer, other], event, log)
+
+    assert drawer.pv_total == 10
+    assert other.pv_total == 10
+    assert provider.calls[0]["kind"] == "event_heal"
+    assert any("n'utilise pas" in row for row in log)
+
+
+def test_heavenly_descent_heals_everyone_only_when_used():
+    provider = _Provider("yes")
+    drawer = Joueur(
+        "Drawer",
+        Perso("Drawer Hero", 10),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+    other = Joueur("Other", Perso("Other Hero", 10), [])
+    out = Joueur("Out", Perso("Out Hero", 10), [])
+    out.dans_le_dj = False
+    event = CarteEvent("Descente angélique", "Gagnez 3pv.", "HEAL")
+
+    _resolve_heal_event(drawer, [drawer, other, out], event, [])
+
+    assert drawer.pv_total == 13
+    assert other.pv_total == 12
+    assert out.pv_total == 10
 
 
 class _Provider:
