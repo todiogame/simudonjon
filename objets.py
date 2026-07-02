@@ -571,6 +571,7 @@ class PotionDeGlace(Objet):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
         log_details.append(f"{joueur.nom} utilise {self.nom} pour réduire à 0 {carte.titre} !")
+        carte.puissance_modifiee_temporairement = True
         carte.dommages = carte.dommages - carte.puissance 
         if carte.dommages < 0:
             carte.dommages = 0

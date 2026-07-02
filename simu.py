@@ -462,7 +462,7 @@ def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT):
             return Jeu.carte_forcee, False, True
 
         options = _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, attempted_ids)
-        if not options:
+        if not options and not joueur.is_human():
             return carte, False, False
 
         choice = joueur.choisir_source_combat(options, carte, Jeu, log_details)
@@ -476,6 +476,14 @@ def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT):
             return carte, True, False
         if getattr(Jeu, 'carte_forcee', None) is not None:
             return Jeu.carte_forcee, False, True
+
+def _reset_temporary_card_modifiers(carte):
+    if not getattr(carte, 'puissance_modifiee_temporairement', False):
+        return
+    carte.puissance = carte.puissance_initiale
+    carte.dommages = 0
+    carte.dommages_reference = 0
+    carte.puissance_modifiee_temporairement = False
 
 def _preparer_debut_iteration_tour(joueurs, joueur):
     rejoue_precedent = joueur.rejoue
@@ -630,6 +638,7 @@ def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, do
     if (isinstance(carte, CarteMonstre) and not carte.executed and not carte_ignoree
             and effet_carte != "MAUDIT" and carte not in joueur.pile_monstres_vaincus
             and carte not in Jeu.defausse and carte.index not in Jeu.donjon.ordre[Jeu.donjon.index:]):
+        _reset_temporary_card_modifiers(carte)
         donjon.rajoute_en_haut_de_la_pile(carte)
         Jeu.carte_passee = carte
 
@@ -1157,6 +1166,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                     # Fuite réussie
                     log_details.append(f"Fuite réussie avec un jet de {joueur.jet_fuite} contre {carte.titre} puissance {carte.puissance}\n")
                     joueur.fuite()
+                    _reset_temporary_card_modifiers(carte)
                     donjon.rajoute_en_haut_de_la_pile(carte)
                     Jeu.carte_passee = carte
                     joueur.jet_fuite_lance = False
@@ -1289,6 +1299,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                                 _emit_current_card(event_sink, carte, joueur.nom)
                         if not remplacement or carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
                             break
+                    if carte.executed or carte_ignoree or joueur.fuite_reussie:
+                        _reset_temporary_card_modifiers(carte)
                     if not joueur.vivant or joueur.pv_total <= 0:
                         _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT)
                         index_joueur += 1
@@ -1299,6 +1311,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                         # fuite en plein combat : la carte ne retourne sur le Donjon
                         # que si elle n'a pas deja ete executee (sinon elle est deja dans une pile/defausse)
                         if not carte.executed:
+                            _reset_temporary_card_modifiers(carte)
                             donjon.rajoute_en_haut_de_la_pile(carte)
                             Jeu.carte_passee = carte
                         continue
@@ -1324,12 +1337,15 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 #item survie ici
                 # Ne pas ajouter le Gobelin Fantôme à la pile des monstres vaincus
                 if effet_carte == "MAUDIT":
+                    _reset_temporary_card_modifiers(carte)
                     Jeu.defausse.append(carte)
                     log_details.append(f"Le {carte.titre} disparait.")
                 else:
                     # ne garder le monstre que si on survit aux dommages
                     # (si un objet de survie sauve le joueur, survit() ajoute la carte lui-meme)
-                    if joueur.vivant and joueur.pv_total > 0: joueur.ajouter_monstre_vaincu(carte)
+                    if joueur.vivant and joueur.pv_total > 0:
+                        joueur.ajouter_monstre_vaincu(carte)
+                        _reset_temporary_card_modifiers(carte)
                 if effet_carte == "LIMON":
                     objet_avale = joueur.decideBriseObjet(Jeu, log_details)
                     if objet_avale:
@@ -1407,6 +1423,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 #  ex: LIMON vaincu a 0 dommages puis mort en perdant les PV de l'objet brise,
                 #  carte_ignoree -> Kraken deja remis sous le donjon / Ange Gardien deja defausse)
                 if not carte.executed and not carte_ignoree and effet_carte != "MAUDIT" and carte not in joueur.pile_monstres_vaincus:
+                    _reset_temporary_card_modifiers(carte)
                     donjon.rajoute_en_haut_de_la_pile(carte)
                     Jeu.carte_passee = carte
                 index_joueur += 1

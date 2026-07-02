@@ -695,7 +695,7 @@ button.default .button-desc {
 }
 
 .player.opponent .mini-list {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .player.opponent .mini-list .item-card {

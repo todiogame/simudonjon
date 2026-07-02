@@ -601,7 +601,7 @@ class Joueur:
 
     def choisir_source_combat(self, candidats, carte, Jeu, log_details):
         candidats = list(candidats)
-        if not candidats:
+        if not candidats and not self.is_human():
             return None
 
         card_name = self._decision_option_label(carte)

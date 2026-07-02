@@ -20,8 +20,9 @@ from objets import (
     OeilDHorus,
     OiseauDeMauvaisAugure,
     OsseletsDeResurrection,
+    PotionDeGlace,
 )
-from simu import _basic_log, _emit_current_card, _emit_dungeon_state
+from simu import _basic_log, _emit_current_card, _emit_dungeon_state, _reset_temporary_card_modifiers
 from ui_runtime import (
     GameSession,
     HEURISTIC_STRATEGY_NAME,
@@ -304,6 +305,41 @@ def test_human_can_choose_any_legal_combat_item_directly():
     ]
     assert provider.calls[0]["options"][0]["itemId"] == str(id(first))
     assert provider.calls[0]["options"][1]["itemId"] == str(id(second))
+
+
+def test_human_resolves_combat_manually_without_legal_item():
+    provider = _Provider("resolve")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+
+    assert joueur.choisir_source_combat([], _Card(), object(), []) is None
+    assert provider.calls[0]["kind"] == "choose_combat_source"
+    assert [option["id"] for option in provider.calls[0]["options"]] == ["resolve"]
+
+
+def test_ice_potion_power_change_is_temporary():
+    potion = PotionDeGlace()
+    joueur = Joueur("Tester", Perso("Tester Hero", 10), [potion], control="human")
+    dragon = CarteMonstre("Dragon", 9, ["Dragon"])
+    dragon.dommages = 9
+
+    potion.combat_effet(joueur, dragon, _Jeu(), [])
+
+    assert dragon.puissance == 0
+    assert dragon.dommages == 0
+    assert dragon.puissance_modifiee_temporairement is True
+
+    _reset_temporary_card_modifiers(dragon)
+
+    assert dragon.puissance == 9
+    assert dragon.dommages == 0
+    assert dragon.puissance_modifiee_temporairement is False
 
 
 class _Jeu:
