@@ -21,7 +21,7 @@ from objets import (
     OiseauDeMauvaisAugure,
     OsseletsDeResurrection,
 )
-from simu import _basic_log, _emit_dungeon_state
+from simu import _basic_log, _emit_current_card, _emit_dungeon_state
 from ui_runtime import (
     GameSession,
     HEURISTIC_STRATEGY_NAME,
@@ -130,6 +130,69 @@ def test_decision_validation_rejects_illegal_option():
 
     session.submit_decision("decision-1", "a")
     assert session._decision_answer == "a"
+
+
+def test_human_flee_choice_does_not_expose_unknown_next_card():
+    provider = _Provider("no")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+    joueur.tour = 2
+
+    class Jeu:
+        joueurs = [joueur]
+        carte_courante = None
+
+    assert joueur.deciderDeFuir(Jeu, []) is False
+
+    call = provider.calls[0]
+    assert call["kind"] == "flee"
+    assert call["prompt"] == "Try to flee before drawing?"
+    assert "card" not in call["context"]
+    assert "power" not in call["context"]
+
+
+def test_human_flee_choice_exposes_passed_monster():
+    provider = _Provider("no")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+    joueur.tour = 2
+    dragon = CarteMonstre("Dragon", 9, ["Dragon"])
+
+    class Jeu:
+        joueurs = [joueur]
+        carte_courante = dragon
+
+    assert joueur.deciderDeFuir(Jeu, []) is False
+
+    call = provider.calls[0]
+    assert call["prompt"] == "Try to flee before resolving this card?"
+    assert call["context"]["card"] == "Dragon"
+    assert call["context"]["power"] == 9
+
+
+def test_current_card_update_can_refresh_resolved_x_power_without_log_event():
+    session = GameSession({"mode": "random"})
+    dragon = CarteMonstre("Dragon endormi", 0, ["Dragon"], effet="SLEEPING", is_X=True)
+    dragon.puissance = 9
+    dragon.dommages = 9
+
+    _emit_current_card(session.emit, dragon, "Human")
+
+    snap = session.snapshot()
+    assert snap["currentCard"]["title"] == "Dragon endormi"
+    assert snap["currentCard"]["power"] == 9
+    assert snap["currentCard"]["damage"] == 9
+    assert session.events_after() == []
 
 
 class _Provider:

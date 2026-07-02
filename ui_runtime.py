@@ -224,6 +224,10 @@ class GameSession:
             kind = event.get("kind", "log")
             if kind == "card_drawn":
                 self.current_card = payload.get("card")
+            if kind == "current_card":
+                self.current_card = payload.get("card")
+                self.condition.notify_all()
+                return
             if kind == "dungeon_state":
                 self.dungeon_state = payload
                 self.condition.notify_all()

@@ -127,6 +127,17 @@ def _emit_dungeon_state(event_sink, Jeu):
     )
 
 
+def _emit_current_card(event_sink, carte, player=None):
+    if event_sink is None:
+        return
+    _emit_event(
+        event_sink,
+        "current_card",
+        "Current card updated.",
+        payload={"player": player, "card": _card_payload(carte)},
+    )
+
+
 class _TrackedDiscard(list):
     def __init__(self, on_change):
         super().__init__()
@@ -620,6 +631,7 @@ def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, do
             and effet_carte != "MAUDIT" and carte not in joueur.pile_monstres_vaincus
             and carte not in Jeu.defausse and carte.index not in Jeu.donjon.ordre[Jeu.donjon.index:]):
         donjon.rajoute_en_haut_de_la_pile(carte)
+        Jeu.carte_passee = carte
 
 def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                  event_sink=None, decision_provider=None, bot_delay_ms=0):
@@ -653,6 +665,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
         traquenard_actif = False
         traquenard_paye = False
         carte_ignoree = False
+        carte_courante = None
+        carte_passee = None
         kraken_vu = False
         donjon
     Jeu.joueurs = joueurs
@@ -739,12 +753,31 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 index_joueur = 0
             continue
 
-        # Le joueur pioche une carte
+        joueur.jet_fuite_lance = False
+        Jeu.carte_courante = getattr(Jeu, 'carte_passee', None)
+        _emit_current_card(event_sink, Jeu.carte_courante, joueur.nom)
+
+        if joueur.deciderDeFuir(Jeu, log_details):
+            # Tentative de fuite
+            joueur.jet_fuite = joueur.rollDice(Jeu, log_details) + joueur.calculer_modificateurs()
+            if details_enabled:
+                log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
+            joueur.jet_fuite_lance = True
+            #use perso et items en_fuite
+            if type(joueur.perso_obj) not in P_FUITE:
+                joueur.perso_obj.en_fuite(joueur, Jeu, log_details)
+            for objet in joueur.objets:
+                if type(objet) not in O_FUITE:
+                    objet.en_fuite(joueur, Jeu, log_details)
+
+        # Le joueur pioche une carte apres avoir choisi s'il tente de fuir.
         carte = donjon.prochaine_carte()
         if carte is None:
             log_details.append("Le Donjon est vide. Fin de la partie.")
             break
         Jeu.carte_courante = carte
+        if getattr(Jeu, 'carte_passee', None) is carte:
+            Jeu.carte_passee = None
         _emit_event(
             event_sink,
             "card_drawn",
@@ -764,22 +797,6 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
             carte.dommages_reference = 0
             carte.dommages_minimum = 0
             carte.reduction_dommages_bloquee = False
-
-        joueur.jet_fuite_lance = False
-
-        if joueur.deciderDeFuir(Jeu, log_details):
-            # Tentative de fuite
-            joueur.jet_fuite = joueur.rollDice(Jeu, log_details) + joueur.calculer_modificateurs()
-            if details_enabled:
-                log_details.append(f"Tentative de fuite, {joueur.jet_fuite} (avec modif {joueur.calculer_modificateurs()}) ")
-            joueur.jet_fuite_lance = True
-            #use perso et items en_fuite
-            if type(joueur.perso_obj) not in P_FUITE:
-                joueur.perso_obj.en_fuite(joueur, Jeu, log_details)
-            for objet in joueur.objets:
-                if type(objet) not in O_FUITE:
-                    objet.en_fuite(joueur, Jeu, log_details)
-            
 
 
 
@@ -1103,6 +1120,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                     if type(objet) not in O_RENC:
                         objet.en_rencontre(joueur_proprietaire, joueur, carte, Jeu, log_details)
             carte.dommages_reference = carte.dommages
+            _emit_current_card(event_sink, carte, joueur.nom)
 
             if not joueur.vivant or joueur.pv_total <= 0:
                 _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT)
@@ -1117,6 +1135,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                     log_details.append(f"Fuite réussie avec un jet de {joueur.jet_fuite} contre {carte.titre} puissance {carte.puissance}\n")
                     joueur.fuite()
                     donjon.rajoute_en_haut_de_la_pile(carte)
+                    Jeu.carte_passee = carte
                     joueur.jet_fuite_lance = False
                     for joueur_proprietaire in Jeu.joueurs:
                         for objet in joueur_proprietaire.objets:
@@ -1228,6 +1247,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                             carte = Jeu.carte_forcee
                             del Jeu.carte_forcee
                             effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
+                            _emit_current_card(event_sink, carte, joueur.nom)
                             remplacement = True
                         else:
                             carte_courante, combat_ignoree, remplacement = _run_combat_object_phase(
@@ -1243,6 +1263,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                             if remplacement:
                                 del Jeu.carte_forcee
                                 effet_carte = _preparer_monstre_pour_combat(joueur, carte, Jeu, log_details, P_RENC, O_RENC)
+                                _emit_current_card(event_sink, carte, joueur.nom)
                         if not remplacement or carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
                             break
                     if not joueur.vivant or joueur.pv_total <= 0:
@@ -1256,6 +1277,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                         # que si elle n'a pas deja ete executee (sinon elle est deja dans une pile/defausse)
                         if not carte.executed:
                             donjon.rajoute_en_haut_de_la_pile(carte)
+                            Jeu.carte_passee = carte
                         continue
                     if not carte_ignoree:
                         if type(joueur.perso_obj) not in P_COMBAT_LATE:
@@ -1363,6 +1385,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 #  carte_ignoree -> Kraken deja remis sous le donjon / Ange Gardien deja defausse)
                 if not carte.executed and not carte_ignoree and effet_carte != "MAUDIT" and carte not in joueur.pile_monstres_vaincus:
                     donjon.rajoute_en_haut_de_la_pile(carte)
+                    Jeu.carte_passee = carte
                 index_joueur += 1
                 if index_joueur >= nb_joueurs:
                     index_joueur = 0

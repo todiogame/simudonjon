@@ -1414,17 +1414,21 @@ class Joueur:
 
         if self.is_human():
             carte = getattr(Jeu, 'carte_courante', None)
+            context = {
+                "pv": self.pv_total,
+                "score": self._score_rapide(),
+                "modifier": self.calculer_modificateurs(),
+            }
+            if carte is not None:
+                context.update({
+                    "card": self._decision_option_label(carte),
+                    "power": getattr(carte, "puissance", None),
+                })
             return self.demander_oui_non(
                 "flee",
-                "Try to flee before resolving this card?",
+                "Try to flee before resolving this card?" if carte is not None else "Try to flee before drawing?",
                 default=False,
-                context={
-                    "pv": self.pv_total,
-                    "score": self._score_rapide(),
-                    "card": self._decision_option_label(carte) if carte is not None else None,
-                    "power": getattr(carte, "puissance", None),
-                    "modifier": self.calculer_modificateurs(),
-                },
+                context=context,
             )
 
         strategy = self.ia_strategy()
