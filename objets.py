@@ -146,8 +146,21 @@ class Objet:
             self.vaincu_effet(joueur_proprietaire, joueur, carte, Jeu, log_details) 
     
     def en_survie(self, joueur, carte, Jeu, log_details):
-        if self.intact:
-            self.survie_effet(joueur, carte, Jeu, log_details)
+        if not self.survie_possible(joueur, carte, Jeu):
+            return
+        decide = getattr(joueur, "decide_utiliser_survie", None)
+        if decide is not None and not decide(self, carte, Jeu, log_details):
+            return
+        self.survie_effet(joueur, carte, Jeu, log_details)
+
+    def survie_possible(self, joueur, carte, Jeu):
+        if not self.intact:
+            return False
+        dommages = getattr(carte, "dommages", 0) or 0
+        pv_avant = getattr(carte, "pv_cible_avant_dommages", None)
+        if pv_avant is None:
+            return dommages > 0 and joueur.pv_total <= 0
+        return dommages >= pv_avant
 
     def en_score(self, joueur, log_details):
         if self.intact:
@@ -2750,6 +2763,10 @@ class CeintureDuPonceur(Objet):
 class LinceulDeResurrection(Objet):
     def __init__(self):
         super().__init__("Linceul de Résurrection", True)
+    def survie_possible(self, joueur, carte, Jeu):
+        if not super().survie_possible(joueur, carte, Jeu):
+            return False
+        return any(not (m.effet and "GOLD" in m.effet) for m in joueur.pile_monstres_vaincus)
     def survie_effet(self, joueur, carte, Jeu, log_details):
         if _defausse_monstre_de_pile(joueur, Jeu, log_details):
             self.survit(joueur.pv_base, joueur, carte, log_details)

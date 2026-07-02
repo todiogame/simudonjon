@@ -468,6 +468,34 @@ class Joueur:
     def decide_utiliser_objet(self, objet, carte, Jeu, log_details, baseline_worth):
         return self.decide_utiliser_source(objet, carte, Jeu, log_details, baseline_worth)
 
+    def decide_utiliser_survie(self, objet, carte, Jeu, log_details):
+        source_name = self._decision_option_label(objet)
+        card_name = self._decision_option_label(carte)
+        context = {
+            "source": source_name,
+            "card": card_name,
+            "pvBeforeDamage": getattr(carte, "pv_cible_avant_dommages", None),
+            "pvAfterDamage": self.pv_total,
+            "damage": getattr(carte, "dommages", None),
+            "power": getattr(carte, "puissance", None),
+        }
+        prompt = f"Use {source_name} to survive {card_name}?"
+        if self.is_human():
+            return self.demander_oui_non(
+                "survival_item",
+                prompt,
+                default=True,
+                context=context,
+            )
+        self.enregistrer_decision_bot(
+            "survival_item",
+            prompt,
+            True,
+            label="use",
+            context=context,
+        )
+        return True
+
     def _combat_source_score(self, source, carte, Jeu, baseline_worth):
         dommages = getattr(carte, "dommages", 0) or 0
         score = 100.0 if baseline_worth else 0.0

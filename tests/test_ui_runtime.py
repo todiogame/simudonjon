@@ -5,7 +5,15 @@ import pytest
 from heros import Avatar, ChevalierDragon, Perso
 from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
-from objets import BouleDeCristal, FilDuDestin, Objet, OeilDHorus, OiseauDeMauvaisAugure
+from objets import (
+    BouleDeCristal,
+    Egide,
+    FilDuDestin,
+    LinceulDeResurrection,
+    Objet,
+    OeilDHorus,
+    OiseauDeMauvaisAugure,
+)
 from simu import _basic_log, _emit_dungeon_state
 from ui_runtime import (
     GameSession,
@@ -194,6 +202,9 @@ def test_human_can_choose_any_legal_combat_item_directly():
 class _Jeu:
     traquenard_actif = False
 
+    def __init__(self, joueurs=None):
+        self.joueurs = joueurs or []
+
 
 def test_human_combat_perso_does_not_prompt_when_rules_cannot_work():
     provider = _Provider("yes")
@@ -232,6 +243,95 @@ def test_human_combat_perso_does_not_prompt_when_rules_cannot_work():
 
     assert provider.calls == []
     assert not card.executed
+
+
+def _survival_card(damage=5, pv_before=3):
+    card = CarteMonstre("Orc", 3, ["Orc"])
+    card.dommages = damage
+    card.pv_cible_avant_dommages = pv_before
+    return card
+
+
+def test_human_can_decline_survival_item():
+    egide = Egide()
+    provider = _Provider("no")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 3),
+        [egide],
+        control="human",
+        decision_provider=provider,
+    )
+    jeu = _Jeu([joueur])
+    joueur.pv_total = -2
+
+    egide.en_survie(joueur, _survival_card(), jeu, [])
+
+    assert joueur.pv_total == -2
+    assert egide.intact
+    assert provider.calls[0]["kind"] == "survival_item"
+    assert provider.calls[0]["context"]["pvBeforeDamage"] == 3
+
+
+def test_human_can_accept_survival_item():
+    egide = Egide()
+    provider = _Provider("yes")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 3),
+        [egide],
+        control="human",
+        decision_provider=provider,
+    )
+    jeu = _Jeu([joueur])
+    card = _survival_card()
+    joueur.pv_total = -2
+
+    egide.en_survie(joueur, card, jeu, [])
+
+    assert joueur.pv_total == 3
+    assert not egide.intact
+    assert card in joueur.pile_monstres_vaincus
+
+
+def test_survival_item_requires_monster_damage_to_be_lethal():
+    egide = Egide()
+    provider = _Provider("yes")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 3),
+        [egide],
+        control="human",
+        decision_provider=provider,
+    )
+    jeu = _Jeu([joueur])
+    joueur.pv_total = -1
+
+    egide.en_survie(joueur, _survival_card(damage=2, pv_before=3), jeu, [])
+
+    assert provider.calls == []
+    assert joueur.pv_total == -1
+    assert egide.intact
+
+
+def test_linceul_survival_requires_discardable_monster():
+    linceul = LinceulDeResurrection()
+    provider = _Provider("yes")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 3),
+        [linceul],
+        control="human",
+        decision_provider=provider,
+    )
+    jeu = _Jeu([joueur])
+    joueur.pv_total = -2
+
+    linceul.en_survie(joueur, _survival_card(), jeu, [])
+
+    assert provider.calls == []
+    assert joueur.pv_total == -2
+    assert linceul.intact
 
 
 def test_serialized_items_expose_color_and_description_for_ui():

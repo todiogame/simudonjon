@@ -1272,6 +1272,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 
             if not carte_ignoree and not carte.executed:
                 Jeu.traquenard_actif = False
+                carte.pv_cible_avant_dommages = joueur.pv_total
                 joueur.pv_total -= carte.dommages
                 
 
