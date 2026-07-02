@@ -24,6 +24,7 @@ from objets import (
     PotionDeGlace,
 )
 from simu import (
+    _acknowledge_event_discard,
     _basic_log,
     _emit_current_card,
     _emit_dungeon_state,
@@ -278,6 +279,30 @@ def test_heavenly_descent_heals_everyone_only_when_used():
     assert drawer.pv_total == 13
     assert other.pv_total == 12
     assert out.pv_total == 10
+
+
+def test_human_event_waits_for_discard_acknowledgement():
+    provider = _Provider("discard")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+    event = CarteEvent("Injection argileuse", "No effect.", "INJECTION")
+
+    _acknowledge_event_discard(joueur, event)
+
+    call = provider.calls[0]
+    assert call["kind"] == "event_discard"
+    assert call["default_id"] == "discard"
+    assert call["options"] == [{
+        "id": "discard",
+        "label": "Discard",
+        "description": "Mettre l'événement dans la défausse et continuer.",
+    }]
+    assert call["context"]["card"] == "Injection argileuse"
 
 
 class _Provider:

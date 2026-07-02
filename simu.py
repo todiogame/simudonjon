@@ -649,6 +649,29 @@ def _resolve_heal_event(joueur, joueurs, carte, log_details):
             log_details.append(f"{autre_joueur.nom} gagne 2 PV grâce à {carte.titre}. PV restant: {autre_joueur.pv_total}")
 
 
+def _acknowledge_event_discard(joueur, carte):
+    if not joueur.is_human():
+        return
+    provider = getattr(joueur, "decision_provider", None)
+    if provider is None:
+        return
+    provider.choose(
+        joueur,
+        kind="event_discard",
+        prompt=f"Défausser {carte.titre} pour continuer.",
+        options=[{
+            "id": "discard",
+            "label": "Discard",
+            "description": "Mettre l'événement dans la défausse et continuer.",
+        }],
+        default_id="discard",
+        context={
+            "card": getattr(carte, "titre", ""),
+            "effect": getattr(carte, "effet", None),
+        },
+    )
+
+
 def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT):
     joueur.mort(log_details)
     log_details.append(f"OUPS!! Mort de {joueur.nom}, a court de PV.\n")
@@ -1060,6 +1083,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                         log_details.append(f"{joueur.nom} a {len(objets_intacts)} objets intacts, il n'en pioche pas.")
 
             # Le joueur rejoue
+            _acknowledge_event_discard(joueur, carte)
             Jeu.defausse.append(carte)
             joueur.rejoue = True
             
