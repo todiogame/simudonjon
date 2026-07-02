@@ -436,7 +436,7 @@ def _decision_traquenard(joueur, carte, Jeu, O_COMBAT, P_COMBAT, P_COMBAT_LATE, 
     return decision
 
 
-def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, attempted_ids=()):
+def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE=(), attempted_ids=()):
     attempted_ids = set(attempted_ids)
     candidates = []
     for objet in joueur.objets:
@@ -448,10 +448,25 @@ def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, attempted_ids=()):
             legal = False
         if legal:
             candidates.append(objet)
+    perso = joueur.perso_obj
+    if type(perso) not in P_COMBAT_LATE and id(perso) not in attempted_ids:
+        try:
+            legal = perso.can_use_in_combat_late(joueur, carte, Jeu, [])
+        except Exception:
+            legal = False
+        if legal:
+            candidates.append(perso)
     return tuple(candidates)
 
 
-def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT):
+def _apply_combat_source(choice, joueur, carte, Jeu, log_details):
+    if hasattr(choice, "apply_in_combat_late") and not hasattr(choice, "intact"):
+        choice.apply_in_combat_late(joueur, carte, Jeu, log_details)
+    else:
+        choice.apply_in_combat(joueur, carte, Jeu, log_details)
+
+
+def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT, P_COMBAT_LATE=()):
     attempted_ids = set()
     while True:
         if carte.executed or joueur.fuite_reussie or not joueur.vivant or joueur.pv_total <= 0:
@@ -461,7 +476,7 @@ def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT):
         if getattr(Jeu, 'carte_forcee', None) is not None:
             return Jeu.carte_forcee, False, True
 
-        options = _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, attempted_ids)
+        options = _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE, attempted_ids)
         if not options and not joueur.is_human():
             return carte, False, False
 
@@ -470,7 +485,7 @@ def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT):
             return carte, False, False
 
         attempted_ids.add(id(choice))
-        choice.apply_in_combat(joueur, carte, Jeu, log_details)
+        _apply_combat_source(choice, joueur, carte, Jeu, log_details)
 
         if getattr(Jeu, 'carte_ignoree', False):
             return carte, True, False
@@ -1327,6 +1342,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                                 Jeu,
                                 log_details,
                                 O_COMBAT,
+                                P_COMBAT_LATE,
                             )
                             carte = carte_courante
                             if combat_ignoree:
@@ -1354,7 +1370,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                             Jeu.carte_passee = carte
                         continue
                     if not carte_ignoree:
-                        if type(joueur.perso_obj) not in P_COMBAT_LATE:
+                        if not joueur.is_human() and type(joueur.perso_obj) not in P_COMBAT_LATE:
                             joueur.perso_obj.en_combat_late(joueur, carte, Jeu, log_details)
                         if Jeu.traquenard_paye:
                             if carte.executed:

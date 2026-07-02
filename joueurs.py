@@ -105,6 +105,9 @@ class Joueur:
         metadata = {}
         if hasattr(value, "intact") and hasattr(value, "nom"):
             metadata["itemId"] = str(id(value))
+        elif hasattr(value, "level") and hasattr(value, "nom"):
+            metadata["heroId"] = str(id(value))
+            metadata["hero"] = True
         color_code = getattr(value, "couleur", None)
         if color_code:
             try:
@@ -568,7 +571,8 @@ class Joueur:
         elif dommages >= max(3, int(max(1, self.pv_total) * 0.45)):
             score += 35.0
 
-        code = getattr(type(source).combat_effet, "__code__", None)
+        method = type(source).combat_effet_late if hasattr(source, "combat_effet_late") and not hasattr(source, "intact") else type(source).combat_effet
+        code = getattr(method, "__code__", None)
         names = set(code.co_names if code else ())
         if names & {"execute", "executeEtDefausse", "absorbe", "remetDansDonjon"}:
             score += 45.0
@@ -636,7 +640,7 @@ class Joueur:
             selected = provider.choose(
                 self,
                 kind="choose_combat_source",
-                prompt=f"Choose an item to use against {card_name}.",
+                prompt=f"Choose a source to use against {card_name}.",
                 options=options,
                 default_id=default_id,
                 context=context,
@@ -651,7 +655,7 @@ class Joueur:
         choice = self._best_combat_source(candidats, carte, Jeu, log_details, require_use=True)
         self.enregistrer_decision_bot(
             "choose_combat_source",
-            f"Choose an item against {card_name}.",
+            f"Choose a source against {card_name}.",
             choice is not None,
             label=self._decision_option_label(choice) if choice is not None else "resolve",
             context=context,

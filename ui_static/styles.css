@@ -627,6 +627,27 @@ button.default .button-desc {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.7rem;
   min-width: 0;
+  border: 2px solid transparent;
+  padding: 0.12rem;
+}
+
+.human-hero.actionable {
+  cursor: pointer;
+  border-color: #ffd24a;
+  background: #3a2a0d;
+  box-shadow: 0 0 0 2px #6b0000 inset;
+}
+
+.human-hero.actionable:hover,
+.human-hero.actionable:focus-visible {
+  background: #4a3510;
+  outline: 2px solid #ffd24a;
+  outline-offset: 2px;
+}
+
+.human-hero.teacher-choice {
+  border-color: #51b36b;
+  box-shadow: 0 0 0 2px #145d25 inset;
 }
 
 .human-hero-art {

@@ -113,6 +113,13 @@ function optionForItem(decision, item) {
   return (decision.options || []).find((option) => option.itemId === item.itemId) || null;
 }
 
+function optionForHero(decision, hero) {
+  if (!decision || !hero?.heroId) {
+    return null;
+  }
+  return (decision.options || []).find((option) => option.heroId === hero.heroId) || null;
+}
+
 function isTeacherOption(decision, option) {
   return Boolean(decision && option && option.id === decision.defaultId);
 }
@@ -201,7 +208,7 @@ function renderDecision(decision) {
     .map(([key, value]) => chip(`${key}: ${Array.isArray(value) ? value.join(", ") : value}`))
     .join("");
   const actionOptions = decision.kind === "choose_combat_source"
-    ? decision.options.filter((option) => !option.itemId)
+    ? decision.options.filter((option) => !option.itemId && !option.heroId)
     : decision.options;
   const buttons = actionOptions
     .map((option) => {
@@ -214,7 +221,7 @@ function renderDecision(decision) {
     })
     .join("");
   const itemHint = decision.kind === "choose_combat_source"
-    ? `<div class="combat-hint">Cliquez un objet sur votre panneau pour l'utiliser.</div>`
+    ? `<div class="combat-hint">Cliquez votre personnage ou un objet sur votre panneau pour l'utiliser.</div>`
     : decision.kind === "unstable_anvil"
       ? `<div class="combat-hint">Cliquez un objet brisé adverse pour le voler et le réparer.</div>`
       : "";
@@ -354,17 +361,26 @@ function renderHumanPlayer(player, decision) {
   }
   const [status, statusClass] = statusFor(player);
   const monsterStack = renderMonsterStack(player.monsters || []);
+  const heroOption = optionForHero(decision, player.hero);
+  const heroTeacher = isTeacherOption(decision, heroOption);
+  const heroStatus = [
+    heroOption ? "actionable hero-choice" : "",
+    heroTeacher ? "teacher-choice" : "",
+  ].filter(Boolean).join(" ");
+  const heroAttrs = heroOption
+    ? ` role="button" tabindex="0" data-decision="${escapeAttr(decision.id)}" data-option="${escapeAttr(heroOption.id)}"`
+    : "";
   const itemList = (player.items || []).map((item) => renderItem(item, {
     decision,
     large: true,
   })).join("");
   $("humanPanel").innerHTML = `
     <div class="human-head">
-      <div class="human-hero">
+      <div class="human-hero ${heroStatus}"${heroAttrs}>
         ${assetImage(player.hero, "human-hero-art", player.hero?.name)}
         <div>
           <div class="player-name">${escapeHtml(player.name)}</div>
-          <div class="hero-title">${escapeHtml(player.hero ? player.hero.name : "No hero")}</div>
+          <div class="hero-title">${heroTeacher ? `<span class="teacher-mark">${TEACHER_MARK}</span>` : ""}${escapeHtml(player.hero ? player.hero.name : "No hero")}</div>
           <div class="muted">${escapeHtml(player.hero?.effect || "")}</div>
         </div>
       </div>

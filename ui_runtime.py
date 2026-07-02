@@ -121,6 +121,7 @@ def serialize_hero(hero):
     if hero is None:
         return None
     return {
+        "heroId": str(id(hero)),
         "name": getattr(hero, "nom", str(hero)),
         "pv": getattr(hero, "pv_bonus", 0),
         "flee": getattr(hero, "modificateur_de", 0),

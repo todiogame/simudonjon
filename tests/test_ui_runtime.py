@@ -26,8 +26,10 @@ from objets import (
 from simu import (
     _acknowledge_event_discard,
     _basic_log,
+    _combat_object_candidates,
     _emit_current_card,
     _emit_dungeon_state,
+    _run_combat_object_phase,
     _reset_temporary_card_modifiers,
     _resolve_heal_event,
 )
@@ -447,6 +449,56 @@ def test_human_resolves_combat_manually_without_legal_item():
     assert joueur.choisir_source_combat([], _Card(), object(), []) is None
     assert provider.calls[0]["kind"] == "choose_combat_source"
     assert [option["id"] for option in provider.calls[0]["options"]] == ["resolve"]
+
+
+def test_avatar_is_offered_as_clickable_combat_source_without_damage_threshold():
+    provider = _Provider("0")
+    avatar = Avatar()
+    joueur = Joueur(
+        "Tester",
+        avatar,
+        [],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+    card = CarteMonstre("Gobelin", 1, ["Gobelin"])
+    card.dommages = 1
+    jeu = _Jeu([joueur])
+
+    candidates = _combat_object_candidates(joueur, card, jeu, (), ())
+    assert candidates == (avatar,)
+
+    choice = joueur.choisir_source_combat(candidates, card, jeu, [])
+
+    assert choice is avatar
+    option = provider.calls[0]["options"][0]
+    assert option["label"] == "Avatar"
+    assert option["heroId"] == str(id(avatar))
+    assert option["hero"] is True
+
+
+def test_human_avatar_choice_executes_and_discards_level_one_monster():
+    provider = _Provider("0")
+    avatar = Avatar()
+    joueur = Joueur(
+        "Tester",
+        avatar,
+        [],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+    card = CarteMonstre("Gobelin", 1, ["Gobelin"])
+    card.dommages = 1
+    jeu = _Jeu([joueur])
+
+    _run_combat_object_phase(joueur, card, jeu, [], (), ())
+
+    assert card.executed
+    assert card in jeu.defausse
+    assert card not in joueur.pile_monstres_vaincus
+    assert avatar.capacite_utilisee
 
 
 def test_ice_potion_power_change_is_temporary():
