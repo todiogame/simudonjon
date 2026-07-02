@@ -12,6 +12,7 @@ from objets import (
     BouleDeCristal,
     CoeurDeGolem,
     Egide,
+    EnclumeInstable,
     FilDuDestin,
     FruitDuDestin,
     LameDraconique,
@@ -327,6 +328,58 @@ class _Card:
     dommages = 6
     puissance = 6
     types = ["Golem"]
+
+
+def test_human_unstable_anvil_can_be_skipped():
+    anvil = EnclumeInstable()
+    broken = Objet("Broken target", pv_bonus=2, intact=False)
+    provider = _Provider("skip")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [anvil],
+        control="human",
+        decision_provider=provider,
+    )
+    other = Joueur("Other", Perso("Other Hero", 10), [broken])
+
+    Jeu = type("Jeu", (), {"joueurs": [joueur, other]})
+
+    anvil.debut_tour(joueur, Jeu, [])
+
+    assert broken in other.objets
+    assert broken not in joueur.objets
+    assert anvil.intact
+    assert provider.calls[0]["kind"] == "unstable_anvil"
+    assert provider.calls[0]["default_id"] == "0"
+
+
+def test_human_unstable_anvil_steals_explicit_broken_item():
+    anvil = EnclumeInstable()
+    broken = Objet("Broken target", pv_bonus=2, intact=False)
+    provider = _Provider("0")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [anvil],
+        control="human",
+        decision_provider=provider,
+    )
+    other = Joueur("Other", Perso("Other Hero", 10), [broken])
+
+    Jeu = type("Jeu", (), {"joueurs": [joueur, other]})
+
+    log = []
+    anvil.debut_tour(joueur, Jeu, log)
+
+    assert broken in joueur.objets
+    assert broken not in other.objets
+    assert broken.intact
+    assert not anvil.intact
+    assert "Broken target de Other" in provider.calls[0]["options"][1]["label"]
+    assert provider.calls[0]["options"][1]["itemId"] == str(id(broken))
+    assert provider.calls[0]["options"][1]["owner"] == "Other"
+    assert any("Broken target" in row for row in log)
 
 
 def test_human_can_choose_any_legal_combat_item_directly():

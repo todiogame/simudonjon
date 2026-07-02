@@ -107,7 +107,7 @@ function cardChips(card) {
 }
 
 function optionForItem(decision, item) {
-  if (!decision || decision.kind !== "choose_combat_source" || !item?.itemId) {
+  if (!decision || !item?.itemId) {
     return null;
   }
   return (decision.options || []).find((option) => option.itemId === item.itemId) || null;
@@ -215,7 +215,9 @@ function renderDecision(decision) {
     .join("");
   const itemHint = decision.kind === "choose_combat_source"
     ? `<div class="combat-hint">Cliquez un objet sur votre panneau pour l'utiliser.</div>`
-    : "";
+    : decision.kind === "unstable_anvil"
+      ? `<div class="combat-hint">Cliquez un objet brisé adverse pour le voler et le réparer.</div>`
+      : "";
   $("decisionBox").innerHTML = `
     <div class="decision-content">
       <div class="muted">${escapeHtml(decision.player)}</div>
@@ -247,13 +249,14 @@ function renderDraft(draft) {
 
 function renderItem(item, options = {}) {
   const decision = options.decision || null;
-  const combatOption = optionForItem(decision, item);
+  const itemOption = optionForItem(decision, item);
   const isCombatDecision = decision?.kind === "choose_combat_source";
-  const actionable = Boolean(combatOption);
-  const teacher = isTeacherOption(decision, combatOption);
+  const isItemDecision = Boolean(decision && (decision.options || []).some((option) => option.itemId));
+  const actionable = Boolean(itemOption);
+  const teacher = isTeacherOption(decision, itemOption);
   const status = [
     item.intact === false ? "broken" : "",
-    isCombatDecision ? "combat-visible" : "",
+    isItemDecision ? "combat-visible" : "",
     isCombatDecision && !actionable ? "not-legal" : "",
     actionable ? "actionable" : "",
     teacher ? "teacher-choice" : "",
@@ -262,7 +265,7 @@ function renderItem(item, options = {}) {
   const description = cleanText(item.description || item.effect || "");
   const tooltip = description ? ` title="${escapeAttr(description)}"` : "";
   const actionAttrs = actionable
-    ? ` role="button" tabindex="0" data-decision="${escapeAttr(decision.id)}" data-option="${escapeAttr(combatOption.id)}"`
+    ? ` role="button" tabindex="0" data-decision="${escapeAttr(decision.id)}" data-option="${escapeAttr(itemOption.id)}"`
     : "";
   const pv = Number(item.pv || 0);
   const flee = Number(item.flee || 0);
@@ -317,9 +320,9 @@ function playerStats(player) {
   `;
 }
 
-function renderOpponent(player, index) {
+function renderOpponent(player, index, decision) {
   const [status, statusClass] = statusFor(player);
-  const itemList = (player.items || []).map((item) => renderItem(item)).join("");
+  const itemList = (player.items || []).map((item) => renderItem(item, { decision })).join("");
   const monsterStack = renderMonsterStack(player.monsters || []);
   const strategyText = player.strategy ? ` | ${player.strategy}` : "";
   return `
@@ -406,7 +409,8 @@ function renderPlayers(players, decision) {
   nextPlayers.forEach((player, index) => {
     if (player.control === "human") return;
     const cacheKey = String(index);
-    const renderKey = stableRenderKey(player);
+    const opponentDecision = decision?.kind === "unstable_anvil" ? decision : null;
+    const renderKey = stableRenderKey({ player, decision: opponentDecision });
     const current = container.querySelector(`[data-player-index="${index}"]`);
     seen.add(cacheKey);
 
@@ -414,7 +418,7 @@ function renderPlayers(players, decision) {
       return;
     }
 
-    const html = renderOpponent(player, index);
+    const html = renderOpponent(player, index, opponentDecision);
     if (current) {
       current.outerHTML = html;
     } else {

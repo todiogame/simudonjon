@@ -1027,13 +1027,59 @@ class BourseGarnie(Objet):
 class EnclumeInstable(Objet):
     def __init__(self):
         super().__init__("Enclume instable", True)
-    
+
+    def _objets_brises_volables(self, joueur, Jeu):
+        return [
+            (autre_joueur, objet)
+            for autre_joueur in Jeu.joueurs
+            if autre_joueur != joueur and autre_joueur.dans_le_dj
+            for objet in autre_joueur.objets
+            if not objet.intact
+        ]
+
+    def _choisir_objet_brise(self, joueur, Jeu, candidats):
+        if not candidats:
+            return None
+        if not joueur.is_human():
+            return random.choice(candidats)
+
+        default_idx = candidats.index(random.choice(candidats))
+        options = [{
+            "id": "skip",
+            "label": "Ne pas utiliser",
+            "description": "Gardez Enclume instable pour plus tard.",
+        }]
+        for idx, (proprietaire, objet) in enumerate(candidats):
+            options.append({
+                "id": str(idx),
+                "label": f"Voler et réparer {objet.nom} de {proprietaire.nom}",
+                "description": joueur._decision_option_description(objet),
+                "owner": proprietaire.nom,
+                **joueur._decision_option_metadata(objet),
+            })
+        provider = getattr(joueur, "decision_provider", None)
+        if provider is None:
+            return None
+        selected = provider.choose(
+            joueur,
+            kind="unstable_anvil",
+            prompt="Utiliser Enclume instable pour voler et réparer un objet brisé ?",
+            options=options,
+            default_id=str(default_idx),
+            context={"item": self.nom},
+        )
+        if selected == "skip":
+            return None
+        try:
+            return candidats[int(selected)]
+        except (TypeError, ValueError, IndexError):
+            return None
+
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
-            objets_brisés_autres_joueurs = [obj for j in Jeu.joueurs if (j != joueur and j.dans_le_dj) for obj in j.objets if not obj.intact]
-            if objets_brisés_autres_joueurs:
-                objet_vole = random.choice(objets_brisés_autres_joueurs)
-                ancien_proprietaire = next(j for j in Jeu.joueurs if objet_vole in j.objets)
+            choix = self._choisir_objet_brise(joueur, Jeu, self._objets_brises_volables(joueur, Jeu))
+            if choix is not None:
+                ancien_proprietaire, objet_vole = choix
                 ancien_proprietaire.objets.remove(objet_vole)
                 joueur.ajouter_objet(objet_vole)
                 objet_vole.repare()
