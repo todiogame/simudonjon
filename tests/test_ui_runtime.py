@@ -430,8 +430,9 @@ def test_human_can_choose_any_legal_combat_item_directly():
     assert [option["label"] for option in provider.calls[0]["options"]] == [
         "First legal item",
         "Second legal item",
-        "Resolve now",
+        "Combattre",
     ]
+    assert provider.calls[0]["options"][2]["description"] == "PV 10 -> 4."
     assert provider.calls[0]["options"][0]["itemId"] == str(id(first))
     assert provider.calls[0]["options"][1]["itemId"] == str(id(second))
 
@@ -450,6 +451,26 @@ def test_human_resolves_combat_manually_without_legal_item():
     assert joueur.choisir_source_combat([], _Card(), object(), []) is None
     assert provider.calls[0]["kind"] == "choose_combat_source"
     assert [option["id"] for option in provider.calls[0]["options"]] == ["resolve"]
+    assert provider.calls[0]["options"][0]["label"] == "Combattre"
+    assert provider.calls[0]["options"][0]["description"] == "PV 10 -> 4."
+
+
+def test_resolve_combat_option_warns_when_damage_would_kill():
+    provider = _Provider("resolve")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 5),
+        [],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+
+    assert joueur.choisir_source_combat([], _Card(), object(), []) is None
+
+    option = provider.calls[0]["options"][0]
+    assert option["label"] == "Combattre"
+    assert option["description"] == "Mort certaine: PV 5 -> -1."
 
 
 def test_avatar_is_offered_as_clickable_combat_source_without_damage_threshold():

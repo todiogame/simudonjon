@@ -609,10 +609,15 @@ class Joueur:
             return None
 
         card_name = self._decision_option_label(carte)
+        damage = getattr(carte, "dommages", None)
+        try:
+            pv_after_combat = self.pv_total - (damage or 0)
+        except TypeError:
+            pv_after_combat = self.pv_total
         context = {
             "card": card_name,
             "pv": self.pv_total,
-            "damage": getattr(carte, "dommages", None),
+            "damage": damage,
             "power": getattr(carte, "puissance", None),
             "options": [self._decision_option_label(c) for c in candidats],
         }
@@ -630,8 +635,12 @@ class Joueur:
             ]
             options.append({
                 "id": "resolve",
-                "label": "Resolve now",
-                "description": "Take the card as-is without using another item.",
+                "label": "Combattre",
+                "description": (
+                    f"Mort certaine: PV {self.pv_total} -> {pv_after_combat}."
+                    if pv_after_combat <= 0
+                    else f"PV {self.pv_total} -> {pv_after_combat}."
+                ),
             })
             default_id = str(candidats.index(default_source)) if default_source in candidats else "resolve"
             provider = getattr(self, "decision_provider", None)
