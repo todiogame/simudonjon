@@ -99,6 +99,7 @@ def serialize_object(obj):
     except (TypeError, ValueError):
         color_code = None
     return {
+        "itemId": str(id(obj)),
         "name": getattr(obj, "nom", str(obj)),
         "pv": getattr(obj, "pv_bonus", 0),
         "flee": getattr(obj, "modificateur_de", 0),

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SimuDonjon</title>
-    <link rel="stylesheet" href="/static/styles.css?v=ui-20260702" />
+    <link rel="stylesheet" href="/static/styles.css?v=ui-rework-20260702" />
   </head>
   <body>
     <main class="app-shell">
@@ -66,77 +66,85 @@
         </form>
       </header>
 
-      <section class="board">
-        <section class="panel card-panel">
-          <div class="panel-title">
-            <span>Current Card</span>
-            <span id="phaseBadge" class="badge">setup</span>
-          </div>
-          <div id="currentCard" class="empty">Start a game to draw cards.</div>
+      <section class="game-layout">
+        <section class="main-stage">
+          <section class="board">
+            <section class="panel card-panel">
+              <div class="panel-title">
+                <span>Current Card</span>
+                <span id="phaseBadge" class="badge">setup</span>
+              </div>
+              <div id="currentCard" class="empty">Start a game to draw cards.</div>
+            </section>
+
+            <section class="panel decision-panel">
+              <div class="panel-title">
+                <span>Decision</span>
+                <span id="roundLabel" class="muted"></span>
+              </div>
+              <div id="decisionBox" class="empty">Waiting for the next human decision.</div>
+            </section>
+          </section>
+
+          <section class="panel piles-panel">
+            <div class="panel-title">
+              <span>Dungeon / Discard</span>
+              <span id="pilesMeta" class="muted">hidden order</span>
+            </div>
+            <div class="pile-columns">
+              <details class="pile-box" id="dungeonDetails">
+                <summary class="pile-head">
+                  <span>Dungeon</span>
+                  <span id="dungeonCount" class="badge">0 left</span>
+                </summary>
+                <div id="dungeonRemaining" class="card-pile-grid">
+                  <div class="empty">Start a game to see remaining cards.</div>
+                </div>
+              </details>
+              <details class="pile-box discard-box" id="discardDetails">
+                <summary class="pile-head">
+                  <span>Discard</span>
+                  <span id="discardCount" class="badge">0 cards</span>
+                </summary>
+                <div id="discardCards" class="card-pile-grid discard-grid">
+                  <div class="empty">No discarded cards yet.</div>
+                </div>
+              </details>
+            </div>
+            <div class="known-cards" id="knownCardsPanel" hidden>
+              <div class="draft-subtitle">Known cards</div>
+              <div id="knownCards" class="card-pile-grid known-card-grid"></div>
+            </div>
+          </section>
+
+          <section class="panel draft-panel" id="draftPanel" hidden>
+            <div class="panel-title">
+              <span>Draft Hand</span>
+              <span id="draftMeta" class="muted"></span>
+            </div>
+            <div class="draft-picked" id="draftPickedWrap" hidden>
+              <div class="draft-subtitle">Your picks</div>
+              <div id="draftPicked" class="item-grid picked-grid"></div>
+            </div>
+            <div id="draftHand" class="item-grid"></div>
+          </section>
+
+          <section class="panel logs">
+            <div class="tabs">
+              <button id="basicTab" class="active" type="button">Basic log</button>
+              <button id="fullTab" type="button">Full log</button>
+            </div>
+            <ol id="logList"></ol>
+          </section>
         </section>
 
-        <section class="panel decision-panel">
-          <div class="panel-title">
-            <span>Decision</span>
-            <span id="roundLabel" class="muted"></span>
-          </div>
-          <div id="decisionBox" class="empty">Waiting for the next human decision.</div>
-        </section>
+        <aside class="opponents" id="opponents"></aside>
       </section>
 
-      <section class="panel piles-panel">
-        <div class="panel-title">
-          <span>Dungeon / Discard</span>
-          <span id="pilesMeta" class="muted">hidden order</span>
-        </div>
-        <div class="pile-columns">
-          <details class="pile-box" id="dungeonDetails">
-            <summary class="pile-head">
-              <span>Dungeon</span>
-              <span id="dungeonCount" class="badge">0 left</span>
-            </summary>
-            <div id="dungeonRemaining" class="card-pile-grid">
-              <div class="empty">Start a game to see remaining cards.</div>
-            </div>
-          </details>
-          <details class="pile-box discard-box" id="discardDetails">
-            <summary class="pile-head">
-              <span>Discard</span>
-              <span id="discardCount" class="badge">0 cards</span>
-            </summary>
-            <div id="discardCards" class="card-pile-grid discard-grid">
-              <div class="empty">No discarded cards yet.</div>
-            </div>
-          </details>
-        </div>
-        <div class="known-cards" id="knownCardsPanel" hidden>
-          <div class="draft-subtitle">Known cards</div>
-          <div id="knownCards" class="card-pile-grid known-card-grid"></div>
-        </div>
-      </section>
-
-      <section class="panel draft-panel" id="draftPanel" hidden>
-        <div class="panel-title">
-          <span>Draft Hand</span>
-          <span id="draftMeta" class="muted"></span>
-        </div>
-        <div class="draft-picked" id="draftPickedWrap" hidden>
-          <div class="draft-subtitle">Your picks</div>
-          <div id="draftPicked" class="item-grid picked-grid"></div>
-        </div>
-        <div id="draftHand" class="item-grid"></div>
-      </section>
-
-      <section class="players" id="players"></section>
-
-      <section class="panel logs">
-        <div class="tabs">
-          <button id="basicTab" class="active" type="button">Basic log</button>
-          <button id="fullTab" type="button">Full log</button>
-        </div>
-        <ol id="logList"></ol>
+      <section class="panel human-panel" id="humanPanel">
+        <div class="empty">Start a game to see your hero and items.</div>
       </section>
     </main>
-    <script src="/static/app.js?v=ui-20260702"></script>
+    <script src="/static/app.js?v=ui-rework-20260702"></script>
   </body>
 </html>

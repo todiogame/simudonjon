@@ -132,8 +132,8 @@ def test_decision_validation_rejects_illegal_option():
     assert session._decision_answer == "a"
 
 
-def test_human_flee_choice_does_not_expose_unknown_next_card():
-    provider = _Provider("no")
+def test_human_next_action_does_not_expose_unknown_next_card():
+    provider = _Provider("draw")
     joueur = Joueur(
         "Tester",
         Perso("Tester Hero", 10),
@@ -146,18 +146,24 @@ def test_human_flee_choice_does_not_expose_unknown_next_card():
     class Jeu:
         joueurs = [joueur]
         carte_courante = None
+        donjon = DonjonDeck()
 
-    assert joueur.deciderDeFuir(Jeu, []) is False
+    Jeu.donjon.ordre = [0]
+    Jeu.donjon.nb_cartes = 1
+    Jeu.donjon.index = 0
+
+    assert joueur.choisir_action_suivante(Jeu, []) == "draw"
 
     call = provider.calls[0]
-    assert call["kind"] == "flee"
-    assert call["prompt"] == "Try to flee before drawing?"
+    assert call["kind"] == "next_action"
+    assert call["prompt"] == "Choisissez votre prochaine action."
+    assert [option["id"] for option in call["options"]] == ["flee", "draw"]
     assert "card" not in call["context"]
     assert "power" not in call["context"]
 
 
-def test_human_flee_choice_exposes_passed_monster():
-    provider = _Provider("no")
+def test_human_next_action_exposes_passed_monster():
+    provider = _Provider("draw")
     joueur = Joueur(
         "Tester",
         Perso("Tester Hero", 10),
@@ -171,13 +177,42 @@ def test_human_flee_choice_exposes_passed_monster():
     class Jeu:
         joueurs = [joueur]
         carte_courante = dragon
+        donjon = DonjonDeck()
 
-    assert joueur.deciderDeFuir(Jeu, []) is False
+    Jeu.donjon.ordre = [0]
+    Jeu.donjon.nb_cartes = 1
+    Jeu.donjon.index = 0
+
+    assert joueur.choisir_action_suivante(Jeu, []) == "draw"
 
     call = provider.calls[0]
-    assert call["prompt"] == "Try to flee before resolving this card?"
+    assert call["prompt"] == "Choisissez votre prochaine action."
     assert call["context"]["card"] == "Dragon"
     assert call["context"]["power"] == 9
+
+
+def test_human_next_action_can_offer_pass_after_a_resolved_card():
+    provider = _Provider("pass")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+    joueur.tour = 2
+
+    class Jeu:
+        joueurs = [joueur]
+        carte_courante = None
+        donjon = DonjonDeck()
+
+    Jeu.donjon.ordre = [0]
+    Jeu.donjon.nb_cartes = 1
+    Jeu.donjon.index = 0
+
+    assert joueur.choisir_action_suivante(Jeu, [], can_pass=True) == "pass"
+    assert [option["id"] for option in provider.calls[0]["options"]] == ["flee", "draw", "pass"]
 
 
 def test_current_card_update_can_refresh_resolved_x_power_without_log_event():
@@ -267,6 +302,8 @@ def test_human_can_choose_any_legal_combat_item_directly():
         "Second legal item",
         "Resolve now",
     ]
+    assert provider.calls[0]["options"][0]["itemId"] == str(id(first))
+    assert provider.calls[0]["options"][1]["itemId"] == str(id(second))
 
 
 class _Jeu:
@@ -450,6 +487,7 @@ def test_serialized_items_expose_color_and_description_for_ui():
     assert payload["colorName"]
     assert payload["color"].startswith("#")
     assert payload["description"]
+    assert payload["itemId"] == str(id(item))
 
 
 def test_human_item_choice_options_hide_zero_pv_and_expose_color():

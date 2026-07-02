@@ -195,6 +195,25 @@ button:focus-visible {
   gap: 8px;
 }
 
+.game-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  gap: 8px;
+  align-items: start;
+}
+
+.main-stage {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.opponents {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .pile-columns {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
@@ -474,6 +493,46 @@ button.default .button-desc {
   border-style: ridge;
 }
 
+.item-card.combat-visible {
+  opacity: 0.48;
+  filter: saturate(0.65);
+}
+
+.item-card.actionable {
+  opacity: 1;
+  filter: none;
+  cursor: pointer;
+  border-color: #ffd24a;
+  background: #fff2b8;
+  box-shadow: 0 0 0 2px #6b0000 inset, 3px 3px 0 #000;
+}
+
+.item-card.actionable:hover,
+.item-card.actionable:focus-visible {
+  background: #fff8d0;
+  outline: 2px solid #ffd24a;
+  outline-offset: 2px;
+}
+
+.item-card.teacher-choice {
+  border-color: #51b36b;
+  box-shadow: 0 0 0 2px #145d25 inset, 3px 3px 0 #000;
+}
+
+.teacher-mark {
+  display: inline-block;
+  margin-right: 0.18rem;
+}
+
+.combat-hint {
+  margin-top: 0.48rem;
+  padding: 0.42rem 0.5rem;
+  border: 2px inset #8f8053;
+  background: #efe2ac;
+  color: #4b390f;
+  font-weight: 900;
+}
+
 .item-card.broken {
   border-color: #9e3b32;
   background: #d9b1a0;
@@ -548,11 +607,104 @@ button.default .button-desc {
   gap: 8px;
 }
 
+.human-panel {
+  min-height: 178px;
+}
+
+.human-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: stretch;
+  padding: 0.6rem;
+  border-bottom: 2px solid #3c2e12;
+  background: #21180b;
+  color: #fff0a2;
+}
+
+.human-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.human-hero-art {
+  width: 58px;
+  height: 78px;
+  border: 2px groove #8f8053;
+  background: #1a1207;
+  object-fit: cover;
+}
+
+.hero-title {
+  color: #ffd24a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.08rem;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.human-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.46fr) minmax(0, 1.54fr);
+  gap: 8px;
+  padding: 0.65rem;
+}
+
+.human-summary {
+  min-width: 0;
+  border: 2px inset #8f8053;
+  background: #c4b78b;
+  padding: 0.5rem;
+}
+
+.human-items {
+  padding: 0;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.item-large {
+  min-height: 128px;
+}
+
+.item-large .item-art {
+  width: 44px;
+  height: 60px;
+}
+
+.item-large .item-name {
+  font-size: 0.9rem;
+}
+
+.item-large .item-effect {
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
 .player {
   border: 3px ridge #b89d4b;
   background: #d6d0bd;
   min-width: 0;
   box-shadow: 3px 3px 0 #000;
+}
+
+.player.opponent .player-body {
+  padding: 0.42rem;
+}
+
+.player.opponent .mini-list {
+  grid-template-columns: 1fr;
+}
+
+.player.opponent .mini-list .item-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.player.opponent .mini-list .item-effect {
+  display: none;
 }
 
 .player.human {
@@ -747,6 +899,8 @@ button.default .button-desc {
 @media (max-width: 920px) {
   .topbar,
   .board,
+  .game-layout,
+  .human-body,
   .pile-columns {
     grid-template-columns: 1fr;
   }
@@ -774,6 +928,7 @@ button.default .button-desc {
 
   .controls,
   .players,
+  .opponents,
   .item-grid {
     grid-template-columns: 1fr;
   }

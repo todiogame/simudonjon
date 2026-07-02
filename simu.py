@@ -667,6 +667,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
         carte_ignoree = False
         carte_courante = None
         carte_passee = None
+        action_pass_allowed = set()
         kraken_vu = False
         donjon
     Jeu.joueurs = joueurs
@@ -757,7 +758,29 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
         Jeu.carte_courante = getattr(Jeu, 'carte_passee', None)
         _emit_current_card(event_sink, Jeu.carte_courante, joueur.nom)
 
-        if joueur.deciderDeFuir(Jeu, log_details):
+        can_pass_action = joueur in Jeu.action_pass_allowed
+        if joueur.is_human():
+            action_suivante = joueur.choisir_action_suivante(Jeu, log_details, can_pass=can_pass_action)
+            Jeu.action_pass_allowed.discard(joueur)
+            if action_suivante == "pass":
+                if type(joueur.perso_obj) not in P_FIN:
+                    joueur.perso_obj.fin_tour(joueur, Jeu, log_details)
+                for objet in joueur.objets:
+                    if type(objet) not in O_FIN:
+                        objet.fin_tour(joueur, Jeu, log_details)
+                joueur.tour += 1
+                if len([j for j in joueurs if j.dans_le_dj]) > 1:
+                    if details_enabled:
+                        log_details.append(f"{joueur.nom} passe son tour.\n")
+                    index_joueur += 1
+                    if index_joueur >= nb_joueurs:
+                        index_joueur = 0
+                continue
+            tente_fuite = action_suivante == "flee"
+        else:
+            tente_fuite = joueur.deciderDeFuir(Jeu, log_details)
+
+        if tente_fuite:
             # Tentative de fuite
             joueur.jet_fuite = joueur.rollDice(Jeu, log_details) + joueur.calculer_modificateurs()
             if details_enabled:
@@ -1406,8 +1429,12 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
             # repioche volontaire (IA): poncer quand on est en forme, chasser un combo multi-kill,
             # ou exploiter la connaissance de la prochaine carte (objets de divination)
             if (joueur.dans_le_dj and not joueur.rejoue and not Jeu.execute_next_monster
-                    and not joueur.doit_passer and joueur.deciderDeRejouer(Jeu, log_details)):
-                joueur.rejoue = True
+                    and not joueur.doit_passer):
+                if joueur.is_human():
+                    Jeu.action_pass_allowed.add(joueur)
+                    joueur.rejoue = True
+                elif joueur.deciderDeRejouer(Jeu, log_details):
+                    joueur.rejoue = True
 
             # si le joueur est toujours la, et que soit il doit passer, soit il ne doit pas rejouer et il ne peut pas executer le prochain monstre
             #TODO: forcer la passe avec joueur.doit_passer, actuellement tlm passe sans se poser de question

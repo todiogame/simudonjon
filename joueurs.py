@@ -103,6 +103,8 @@ class Joueur:
 
     def _decision_option_metadata(self, value):
         metadata = {}
+        if hasattr(value, "intact") and hasattr(value, "nom"):
+            metadata["itemId"] = str(id(value))
         color_code = getattr(value, "couleur", None)
         if color_code:
             try:
@@ -119,6 +121,68 @@ class Joueur:
         if hasattr(value, "actif"):
             metadata["active"] = bool(getattr(value, "actif", False))
         return metadata
+
+    def peut_tenter_fuite(self):
+        if self.tour == 1:
+            return False
+        return not (
+            self.pv_total < 6
+            and any(getattr(objet, 'bloque_fuite_pv_bas', False) and objet.intact for objet in self.objets)
+        )
+
+    def choisir_action_suivante(self, Jeu, log_details, can_pass=False):
+        if not self.is_human():
+            return "flee" if self.deciderDeFuir(Jeu, log_details) else "draw"
+
+        carte = getattr(Jeu, 'carte_courante', None)
+        carte_connue = self.connait_prochaine_carte(Jeu)
+        context = {
+            "pv": self.pv_total,
+            "score": self._score_rapide(),
+            "modifier": self.calculer_modificateurs(),
+            "remaining_cards": max(0, Jeu.donjon.nb_cartes - Jeu.donjon.index),
+            "known_next": self._decision_option_label(carte_connue) if carte_connue is not None else None,
+            "known_next_power": getattr(carte_connue, "puissance", None),
+        }
+        if carte is not None:
+            context.update({
+                "card": self._decision_option_label(carte),
+                "power": getattr(carte, "puissance", None),
+            })
+
+        options = []
+        if self.peut_tenter_fuite():
+            options.append({
+                "id": "flee",
+                "label": "Fuir",
+                "description": "Tenter de fuir avant de résoudre la prochaine carte.",
+            })
+        options.append({
+            "id": "draw",
+            "label": "Repiocher" if can_pass else "Piocher",
+            "description": "Piocher la carte du dessus du Donjon.",
+        })
+        if can_pass:
+            options.append({
+                "id": "pass",
+                "label": "Passer",
+                "description": "Terminer votre tour et laisser jouer le joueur suivant.",
+            })
+
+        provider = getattr(self, "decision_provider", None)
+        default_id = "pass" if can_pass else "draw"
+        if provider is None:
+            return default_id
+        selected = provider.choose(
+            self,
+            kind="next_action",
+            prompt="Choisissez votre prochaine action.",
+            options=options,
+            default_id=default_id,
+            context=context,
+        )
+        legal = {option["id"] for option in options}
+        return selected if selected in legal else default_id
 
     def demander_choix(self, kind, prompt, candidats, default=None, label_func=None,
                        context=None):
@@ -556,6 +620,7 @@ class Joueur:
                     "id": str(idx),
                     "label": self._decision_option_label(source),
                     "description": self._decision_option_description(source),
+                    **self._decision_option_metadata(source),
                 }
                 for idx, source in enumerate(candidats)
             ]
