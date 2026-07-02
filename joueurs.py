@@ -582,6 +582,8 @@ class Joueur:
             score += 30.0
         if any(t in getattr(carte, "types", ()) for t in getattr(source, "types_tags", ())):
             score += 30.0
+        if getattr(source, "execution_gratuite", False):
+            score += 1000.0
 
         # Spending a high-value active object is a cost; passive lines are cheap.
         if getattr(source, "actif", False):

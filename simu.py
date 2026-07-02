@@ -2,7 +2,7 @@ import random
 import numpy as np
 
 from objets import *
-from objets import SANS_HOOK_OBJET
+from objets import SANS_HOOK_OBJET, ajouter_execution_gratuite, retirer_executions_gratuites
 from joueurs import Joueur
 from monstres import CarteMonstre, DonjonDeck, CarteEvent
 from heros import *
@@ -445,6 +445,19 @@ def _survival_source_possible(source, joueur, carte, Jeu, O_SURVIE):
         return False
 
 
+def _clear_free_executions_for_player(Jeu, joueur, source_ids=None):
+    retirer_executions_gratuites(Jeu, joueur, source_ids)
+    if getattr(Jeu, "execute_next_monster", False):
+        Jeu.execute_next_monster = False
+
+
+def _has_free_execution_for_player(Jeu, joueur):
+    return (
+        getattr(Jeu, "execute_next_monster", False)
+        or any(source.proprietaire is joueur for source in getattr(Jeu, "executions_gratuites", ()))
+    )
+
+
 def _perso_has_late_combat_source(perso):
     return type(perso).combat_effet_late is not Perso.combat_effet_late
 
@@ -452,6 +465,15 @@ def _perso_has_late_combat_source(perso):
 def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE=(), O_SURVIE=(), attempted_ids=()):
     attempted_ids = set(attempted_ids)
     candidates = []
+    for source in list(getattr(Jeu, "executions_gratuites", [])):
+        if id(source) in attempted_ids:
+            continue
+        try:
+            legal = source.rules(joueur, carte, Jeu, [])
+        except Exception:
+            legal = False
+        if legal:
+            candidates.append(source)
     for objet in joueur.objets:
         if type(objet) in O_COMBAT or id(objet) in attempted_ids:
             legal = False
@@ -761,6 +783,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
     Jeu.joueurs = joueurs
     Jeu.donjon = donjon
     Jeu.defausse = _TrackedDiscard(lambda: _emit_dungeon_state(event_sink, Jeu))
+    Jeu.executions_gratuites = []
     Jeu.objets_dispo = objets_dispo
     Jeu.nb_joueurs = nb_joueurs
     Jeu.event_sink = event_sink
@@ -917,6 +940,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
         effet_carte = carte.effet
         carte_ignoree = False
         if isinstance(carte, CarteEvent):
+            _clear_free_executions_for_player(Jeu, joueur)
             Jeu.execute_next_monster = False
             Jeu.traquenard_actif = False
             for joueur_proprietaire in Jeu.joueurs:
@@ -967,7 +991,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 else: log_details.append(f"{carte.titre} n'a rien a reparer (ou pas de monstre a defausser).")
 
             if effet_carte == "ALLY":
-                Jeu.execute_next_monster = True
+                ajouter_execution_gratuite(Jeu, joueur, carte.titre)
                 log_details.append(f"L'effet {carte.titre} est actif. La prochaine carte monstre peut être exécutée.")
 
             if effet_carte == "TRAP":
@@ -1124,6 +1148,10 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
             joueur.rejoue = True
             
         if isinstance(carte, CarteMonstre):
+            pending_execution_ids = {
+                id(source) for source in getattr(Jeu, "executions_gratuites", ())
+                if source.proprietaire is joueur
+            }
             if effet_carte:
                 if effet_carte == "MIROIR":
                     log_details.append(f"Le {carte.titre} est pioche.")
@@ -1254,11 +1282,21 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                     log_details.append(f"Fuite échouée avec un jet de {joueur.jet_fuite} contre {carte.puissance}.")
                     joueur.jet_fuite_lance = False
 
-            if Jeu.execute_next_monster and not Jeu.traquenard_actif:
-                carte.executed = True
-                joueur.ajouter_monstre_vaincu(carte)
-                Jeu.execute_next_monster = False
-                log_details.append(f"L'effet Exécute le prochain monstre est utilisé sur {carte.titre}.")
+            if (pending_execution_ids and effet_carte in {"KRAKEN", "GUARDIAN_ANGEL"}
+                    and not Jeu.traquenard_actif and not carte.executed and not carte_ignoree):
+                free_options = tuple(
+                    source for source in getattr(Jeu, "executions_gratuites", ())
+                    if id(source) in pending_execution_ids
+                    and source.rules(joueur, carte, Jeu, [])
+                )
+                if free_options:
+                    choice = joueur.choisir_source_combat(free_options, carte, Jeu, log_details)
+                    if choice is not None:
+                        _apply_combat_source(choice, joueur, carte, Jeu, log_details, O_COMBAT, O_SURVIE)
+                    _clear_free_executions_for_player(Jeu, joueur, pending_execution_ids)
+
+            if carte.executed:
+                pass
             else:
                 if effet_carte == "KRAKEN":
                     if not Jeu.kraken_vu:
@@ -1375,6 +1413,8 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                                 _emit_current_card(event_sink, carte, joueur.nom)
                         if not remplacement or carte.executed or carte_ignoree or joueur.fuite_reussie or not joueur.vivant:
                             break
+                    if pending_execution_ids:
+                        _clear_free_executions_for_player(Jeu, joueur, pending_execution_ids)
                     if carte.executed or getattr(carte, "resolved_by_survival", False) or carte_ignoree or joueur.fuite_reussie:
                         _reset_temporary_card_modifiers(carte)
                     if not joueur.vivant or joueur.pv_total <= 0:
@@ -1521,7 +1561,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
 
             # repioche volontaire (IA): poncer quand on est en forme, chasser un combo multi-kill,
             # ou exploiter la connaissance de la prochaine carte (objets de divination)
-            if (joueur.dans_le_dj and not joueur.rejoue and not Jeu.execute_next_monster
+            if (joueur.dans_le_dj and not joueur.rejoue and not _has_free_execution_for_player(Jeu, joueur)
                     and not joueur.doit_passer):
                 if joueur.is_human():
                     Jeu.action_pass_allowed.add(joueur)
@@ -1532,7 +1572,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
             # si le joueur est toujours la, et que soit il doit passer, soit il ne doit pas rejouer et il ne peut pas executer le prochain monstre
             #TODO: forcer la passe avec joueur.doit_passer, actuellement tlm passe sans se poser de question
             #probleme avec le scaphandre qui spam passe
-            if joueur.dans_le_dj and (not joueur.rejoue and not Jeu.execute_next_monster):
+            if joueur.dans_le_dj and (not joueur.rejoue and not _has_free_execution_for_player(Jeu, joueur)):
                 # il passe : sequence perso et objets fin du tour
                 if type(joueur.perso_obj) not in P_FIN:
                     joueur.perso_obj.fin_tour(joueur, Jeu, log_details)

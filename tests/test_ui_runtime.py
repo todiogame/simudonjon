@@ -21,6 +21,7 @@ from objets import (
     OeilDHorus,
     OiseauDeMauvaisAugure,
     OsseletsDeResurrection,
+    PistoletLaser,
     PotionDeGlace,
     SANS_HOOK_OBJET,
 )
@@ -453,6 +454,48 @@ def test_human_resolves_combat_manually_without_legal_item():
     assert [option["id"] for option in provider.calls[0]["options"]] == ["resolve"]
     assert provider.calls[0]["options"][0]["label"] == "Combattre"
     assert provider.calls[0]["options"][0]["description"] == "PV 10 -> 4."
+
+
+def test_deferred_execution_is_manual_when_next_monster_is_drawn():
+    pistolet = PistoletLaser()
+    provider = _Provider("0")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [pistolet],
+        strategy="baseline",
+        control="human",
+        decision_provider=provider,
+    )
+    golem = CarteMonstre("Golem", 5, ["Golem"])
+    golem.dommages = 5
+    rat = CarteMonstre("Rat charognard", 0, ["Rat"], effet="SCAVENGER", is_X=True)
+    rat.index = 0
+    jeu = _Jeu([joueur])
+    jeu.donjon = DonjonDeck()
+    jeu.donjon.cartes = [rat]
+    jeu.donjon.ordre = [0]
+    jeu.donjon.nb_cartes = 1
+    jeu.donjon.index = 0
+
+    pistolet.combat_effet(joueur, golem, jeu, [])
+
+    assert golem.executed
+    assert rat not in joueur.pile_monstres_vaincus
+    assert jeu.donjon.index == 0
+    assert len(jeu.executions_gratuites) == 1
+
+    candidates = _combat_object_candidates(joueur, rat, jeu, (), ())
+    assert [candidate.nom for candidate in candidates] == ["Exécuter"]
+
+    _run_combat_object_phase(joueur, rat, jeu, [], (), ())
+
+    assert rat.executed
+    assert rat in joueur.pile_monstres_vaincus
+    assert jeu.executions_gratuites == []
+    assert provider.calls[0]["kind"] == "choose_combat_source"
+    assert provider.calls[0]["options"][0]["label"] == "Exécuter"
+    assert provider.calls[0]["options"][0]["description"] == "Gratuit via Pistolet Laser."
 
 
 def test_resolve_combat_option_warns_when_damage_would_kill():

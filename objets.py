@@ -29,6 +29,59 @@ class ExecutionImpossible(Exception):
     Attrapee dans Objet.en_combat : l'objet n'est pas consomme, le combat continue."""
 
 
+class ExecutionGratuite:
+    def __init__(self, proprietaire, source_nom, condition=None, apres_execution=None):
+        self.nom = "Exécuter"
+        self.effet = f"Gratuit via {source_nom}."
+        self.execution_gratuite = True
+        self.proprietaire = proprietaire
+        self.source_nom = source_nom
+        self.condition = condition or (lambda carte: True)
+        self.apres_execution = apres_execution
+
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (
+            joueur is self.proprietaire
+            and not Jeu.traquenard_actif
+            and not getattr(carte, "executed", False)
+            and not getattr(carte, "non_executable", False)
+            and self.condition(carte)
+        )
+
+    def worthit(self, joueur, carte, Jeu, log_details):
+        return True
+
+    def apply_in_combat(self, joueur, carte, Jeu, log_details):
+        carte.executed = True
+        joueur.ajouter_monstre_vaincu(carte)
+        log_details.append(f"{joueur.nom} utilise {self.source_nom} pour exécuter {carte.titre}.")
+        if self.apres_execution is not None:
+            self.apres_execution(joueur, carte, Jeu, log_details)
+        if self in getattr(Jeu, "executions_gratuites", []):
+            Jeu.executions_gratuites.remove(self)
+
+    def combat_effet(self, joueur, carte, Jeu, log_details):
+        self.apply_in_combat(joueur, carte, Jeu, log_details)
+
+
+def ajouter_execution_gratuite(Jeu, joueur, source_nom, condition=None, apres_execution=None):
+    if not hasattr(Jeu, "executions_gratuites"):
+        Jeu.executions_gratuites = []
+    source = ExecutionGratuite(joueur, source_nom, condition, apres_execution)
+    Jeu.executions_gratuites.append(source)
+    return source
+
+
+def retirer_executions_gratuites(Jeu, joueur, source_ids=None):
+    if hasattr(Jeu, "executions_gratuites"):
+        source_ids = set(source_ids) if source_ids is not None else None
+        Jeu.executions_gratuites = [
+            source for source in Jeu.executions_gratuites
+            if source.proprietaire is not joueur
+            or (source_ids is not None and id(source) not in source_ids)
+        ]
+
+
 class Objet:
     def __init__(self, nom, actif=False, pv_bonus=0, modificateur_de=0, effet=None, intact=True, types_tags=None, puissance_tags=None):
         self.nom = nom
@@ -609,7 +662,7 @@ class ChapeauDuNovice(Objet):
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.execute(joueur, carte, log_details)
         if joueur.medailles == 0:
-            Jeu.execute_next_monster = True
+            ajouter_execution_gratuite(Jeu, joueur, self.nom)
             log_details.append(f"Pas de medaille, la prochaine carte monstre peut être exécutée.")
 
 class MasqueDeLaPeste(Objet):
@@ -815,7 +868,7 @@ class PlanPresqueParfait(Objet):
     
     def rencontre_event_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
         if joueur_proprietaire == joueur:
-            Jeu.execute_next_monster = True
+            ajouter_execution_gratuite(Jeu, joueur, self.nom)
             log_details.append(f"Effet {self.nom} actif: la prochaine carte monstre peut être exécutée. Sauf si...")
 
 class GraalEnMousse(Objet):
@@ -1554,7 +1607,7 @@ class BoomerangMystique(Objet):
         return not Jeu.traquenard_actif
     def combat_effet(self, joueur, carte, Jeu, log_details):
         self.executeEtDefausse(joueur, carte, Jeu, log_details)
-        Jeu.execute_next_monster = True
+        ajouter_execution_gratuite(Jeu, joueur, self.nom)
         log_details.append(f"La prochaine carte monstre peut être exécutée.")
         self.destroy(joueur, Jeu, log_details)
 
@@ -2655,17 +2708,15 @@ def _pioche_deux_objets_garde_le_meilleur(joueur, Jeu, log_details, source):
         joueur.ajouter_objet(nouvel_objet)
         log_details.append(f"{joueur.nom} utilise {source} pour piocher un nouvel objet: {nouvel_objet.nom}.")
 
-def _execute_carte_suivante(objet, joueur, suivante, Jeu, log_details):
-    # consomme la carte regardee sur le Donjon et l'ajoute executee a la pile
-    if getattr(suivante, 'non_executable', False):
-        log_details.append(f"{suivante.titre} ne peut pas être exécuté : {objet.nom} le laisse sur le Donjon.")
-        return
-    Jeu.donjon.prochaine_carte()
-    suivante.executed = True
-    suivante.puissance = suivante.puissance_initiale
-    suivante.types = list(suivante.types_initiaux)
-    joueur.ajouter_monstre_vaincu(suivante)
-    log_details.append(f"{joueur.nom} utilise {objet.nom} pour exécuter aussi {suivante.titre}.")
+def _execute_carte_suivante(objet, joueur, suivante, Jeu, log_details, apres_execution=None):
+    ajouter_execution_gratuite(
+        Jeu,
+        joueur,
+        objet.nom,
+        condition=lambda carte, cible=suivante: carte is cible,
+        apres_execution=apres_execution,
+    )
+    log_details.append(f"{objet.nom} pourra exécuter la prochaine carte monstre si elle est rencontrée.")
 
 def _repare_un_objet(joueur, exclus, log_details, source):
     brises = [o for o in joueur.objets if not o.intact and o not in exclus]
@@ -3237,9 +3288,10 @@ class GriffesEclair(Objet):
             suivante = _peek_prochaine_carte(Jeu)
             if (isinstance(suivante, CarteMonstre) and suivante.puissance_initiale <= 5
                     and not suivante.non_executable):
-                _execute_carte_suivante(self, joueur, suivante, Jeu, log_details)
-                joueur.doit_passer = True
-                log_details.append(f"{joueur.nom} doit passer son tour ({self.nom}).")
+                def apres_execution_griffes(owner, executed_card, game, log):
+                    owner.doit_passer = True
+                    log.append(f"{owner.nom} doit passer son tour ({self.nom}).")
+                _execute_carte_suivante(self, joueur, suivante, Jeu, log_details, apres_execution_griffes)
 
 class PerleRare(Objet):
     def __init__(self):
@@ -3661,7 +3713,7 @@ class PierreDePressentiment(Objet):
             log_details.append(f"{joueur.nom} utilise {self.nom} avant de piocher.")
             self.gagnePV(3, joueur, log_details)
             self.en_attente = True
-            Jeu.execute_next_monster = True
+            ajouter_execution_gratuite(Jeu, joueur, self.nom)
             self.destroy(joueur, Jeu, log_details)
     def rencontre_event_effet(self, joueur_proprietaire, joueur_actif, carte, Jeu, log_details):
         if self.en_attente and joueur_proprietaire == joueur_actif:
