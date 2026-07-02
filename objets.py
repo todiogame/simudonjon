@@ -381,6 +381,8 @@ class MarteauDeGuerre(Objet):
 class EpauletteDuPonceur(Objet):
     def __init__(self):
         super().__init__("Epaulette du Ponceur", False, 3, -2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > 0
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > 0
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -530,6 +532,8 @@ class KebabRevigorant(Objet):
 class ArcEnflamme(Objet):
     def __init__(self):
         super().__init__("Arc enflammé", False, 7)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance % 2 == 1
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and (carte.puissance %2 ==1):
             self.add_damage(1, joueur, carte, log_details)
@@ -561,6 +565,8 @@ class PotionFeerique(Objet):
 class PotionDeGlace(Objet):
     def __init__(self):
         super().__init__("Potion de Glace", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.puissance > 0
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > (joueur.pv_total / 2)
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -690,6 +696,8 @@ class PierreDAme(Objet):
 class CoeurDeGolem(Objet):
     def __init__(self):
         super().__init__("Cœur de Golem", False, 3)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > 0 and any("Golem" in monstre.types for monstre in joueur.pile_monstres_vaincus)
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > 0 and any("Golem" in monstre.types for monstre in joueur.pile_monstres_vaincus)
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -699,6 +707,8 @@ class CoeurDeGolem(Objet):
 class CouronneDEpines(Objet):
     def __init__(self):
         super().__init__("Couronne d'épines", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > 2
     def worthit(self, joueur, carte, Jeu, log_details):
         if carte.dommages <= 2:
             return False
@@ -1148,6 +1158,11 @@ class PatteDuRatLiche(Objet):
 class LameDraconique(Objet):
     def __init__(self):
         super().__init__("Lame Draconique", False, types_tags=["Dragon"])
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (
+            ("Dragon" in carte.types and not Jeu.traquenard_actif)
+            or (carte.dommages > 0 and any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus))
+        )
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > 0 and ("Dragon" in carte.types
                 or any("Dragon" in monstre.types for monstre in joueur.pile_monstres_vaincus))
@@ -1356,6 +1371,8 @@ class SabreMecanique(Objet):
 class CouronneEnMousse(Objet):
     def __init__(self):
         super().__init__("Couronne en Mousse", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return carte.dommages > 0
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > 0
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -1623,6 +1640,9 @@ class ShotDAdrenaline(Objet):
         if joueur.pv_total == 1:
             self.shotDAdrenaline(joueur, Jeu, log_details)
 
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (joueur.pv_total <= carte.dommages and joueur.pv_total + 2 > carte.dommages) or joueur.pv_total == 1
+
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if (joueur.pv_total <= carte.dommages and joueur.pv_total+2 > carte.dommages)  or joueur.pv_total == 1:
             self.shotDAdrenaline(joueur, Jeu, log_details)
@@ -1770,6 +1790,12 @@ class FromagePuant(Objet):
             dernier_monstre = joueur.pile_monstres_vaincus[-1]
             if dernier_monstre.puissance >= 6:
                 self.utiliser(dernier_monstre, joueur, Jeu, log_details)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (
+            joueur.pv_total <= carte.dommages
+            and bool(joueur.pile_monstres_vaincus)
+            and joueur.pile_monstres_vaincus[-1].puissance > 0
+        )
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if self.intact and joueur.pv_total <= carte.dommages and joueur.pile_monstres_vaincus:
             dernier_monstre = joueur.pile_monstres_vaincus[-1]
@@ -1787,6 +1813,8 @@ class MailletDArgile(Objet):
 class AllianceSanguine(Objet):
     def __init__(self):
         super().__init__("Alliance Sanguine", False, 2)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return joueur.pv_total <= 4 and carte.dommages > 0
     def worthit(self, joueur, carte, Jeu, log_details):
         return carte.dommages > 0
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -1889,7 +1917,7 @@ class OsseletsDeResurrection(Objet):
     def __init__(self):
         super().__init__("Osselets de Résurrection", False, 0)
     def rules(self, joueur, carte, Jeu, log_details):
-        return carte.dommages >= joueur.pv_total and not getattr(carte, 'non_executable', False)
+        return joueur.pv_total >= 3 and carte.dommages >= joueur.pv_total and not getattr(carte, 'non_executable', False)
     # def survie_effet(self, joueur, carte, Jeu, log_details):
     #     if joueur.pv_total >= 3:
     #         self.survit(1, joueur, carte, log_details)
@@ -2001,6 +2029,11 @@ class PateDAnge(Objet):
 class AnneauDesSquelettes(Objet):
     def __init__(self):
         super().__init__("Anneau des Squelettes", False)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return (
+            ("Squelette" in carte.types and not Jeu.traquenard_actif)
+            or ("Démon" in carte.types and carte.dommages > 0)
+        )
     def combat_effet(self, joueur, carte, Jeu, log_details):
         if ("Squelette" in carte.types and not Jeu.traquenard_actif):
             self.execute(joueur, carte, log_details)
@@ -2143,6 +2176,10 @@ class GrelotDuBouffon(Objet):
 class FruitDuDestin(Objet):
     def __init__(self):
         super().__init__("Fruit du Destin", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        monsters = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
+        events = [c for c in Jeu.defausse if getattr(c, 'event', False)]
+        return bool(monsters or events)
     def worthit(self, joueur, carte, Jeu, log_details):
         monsters = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
         events = [c for c in Jeu.defausse if getattr(c, 'event', False)]
@@ -3133,6 +3170,8 @@ class MasqueMaudit(Objet):
 class ParfumRegenerant(Objet):
     def __init__(self):
         super().__init__("Parfum régénérant", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return any(j.dans_le_dj and j.pv_total < 8 for j in Jeu.joueurs)
     def worthit(self, joueur, carte, Jeu, log_details):
         return joueur.pv_total <= 4
     def combat_effet(self, joueur, carte, Jeu, log_details):
@@ -3219,6 +3258,8 @@ class TaserManuel(Objet):
 class BarbecueDuPonceur(Objet):
     def __init__(self):
         super().__init__("Barbecue du Ponceur", True)
+    def rules(self, joueur, carte, Jeu, log_details):
+        return any(not (m.effet and "GOLD" in m.effet) for m in joueur.pile_monstres_vaincus)
     def worthit(self, joueur, carte, Jeu, log_details):
         return joueur.pv_total <= 3 and any(
             not m.is_X and m.puissance >= 4 and not (m.effet and "GOLD" in m.effet)

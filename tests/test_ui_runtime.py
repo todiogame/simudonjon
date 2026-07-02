@@ -6,13 +6,20 @@ from heros import Avatar, ChevalierDragon, Perso
 from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
 from objets import (
+    AllianceSanguine,
+    AnneauDesSquelettes,
+    BarbecueDuPonceur,
     BouleDeCristal,
+    CoeurDeGolem,
     Egide,
     FilDuDestin,
+    FruitDuDestin,
+    LameDraconique,
     LinceulDeResurrection,
     Objet,
     OeilDHorus,
     OiseauDeMauvaisAugure,
+    OsseletsDeResurrection,
 )
 from simu import _basic_log, _emit_dungeon_state
 from ui_runtime import (
@@ -204,6 +211,7 @@ class _Jeu:
 
     def __init__(self, joueurs=None):
         self.joueurs = joueurs or []
+        self.defausse = []
 
 
 def test_human_combat_perso_does_not_prompt_when_rules_cannot_work():
@@ -332,6 +340,43 @@ def test_linceul_survival_requires_discardable_monster():
     assert provider.calls == []
     assert joueur.pv_total == -2
     assert linceul.intact
+
+
+def test_conditional_combat_items_do_not_pass_rules_when_effect_cannot_apply():
+    joueur = Joueur("Tester", Perso("Tester Hero", 3), [], control="human")
+    jeu = _Jeu([joueur])
+    orc = CarteMonstre("Orc", 3, ["Orc"])
+    orc.dommages = 3
+
+    joueur.pv_total = 2
+    assert not OsseletsDeResurrection().rules(joueur, orc, jeu, [])
+    assert not CoeurDeGolem().rules(joueur, orc, jeu, [])
+    assert not LameDraconique().rules(joueur, orc, jeu, [])
+    joueur.pv_total = 5
+    assert not AllianceSanguine().rules(joueur, orc, jeu, [])
+    assert not AnneauDesSquelettes().rules(joueur, orc, jeu, [])
+    assert not BarbecueDuPonceur().rules(joueur, orc, jeu, [])
+    assert not FruitDuDestin().rules(joueur, orc, jeu, [])
+
+    joueur.pv_total = 3
+    assert OsseletsDeResurrection().rules(joueur, orc, jeu, [])
+    joueur.pv_total = 4
+    assert AllianceSanguine().rules(joueur, orc, jeu, [])
+
+    joueur.pile_monstres_vaincus.append(CarteMonstre("Golem", 5, ["Golem"]))
+    assert CoeurDeGolem().rules(joueur, orc, jeu, [])
+    assert BarbecueDuPonceur().rules(joueur, orc, jeu, [])
+
+    dragon = CarteMonstre("Dragon", 9, ["Dragon"])
+    dragon.dommages = 9
+    assert LameDraconique().rules(joueur, dragon, jeu, [])
+
+    squelette = CarteMonstre("Squelette", 2, ["Squelette"])
+    squelette.dommages = 2
+    assert AnneauDesSquelettes().rules(joueur, squelette, jeu, [])
+
+    jeu.defausse.append(CarteMonstre("Gobelin", 1, ["Gobelin"]))
+    assert FruitDuDestin().rules(joueur, orc, jeu, [])
 
 
 def test_serialized_items_expose_color_and_description_for_ui():

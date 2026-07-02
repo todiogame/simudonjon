@@ -602,6 +602,57 @@ button.default .button-desc {
   object-fit: cover;
 }
 
+.monster-row {
+  margin: 0.38rem 0 0.48rem;
+}
+
+.monster-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 3px;
+  min-height: 34px;
+}
+
+.empty-stack {
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.monster-token {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 34px;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.monster-art,
+.monster-fallback {
+  width: 24px;
+  height: 34px;
+  border: 1px solid #4c3714;
+  background: #1a1207;
+}
+
+.monster-art {
+  object-fit: cover;
+}
+
+.monster-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff0a2;
+  font-size: 0.46rem;
+  font-weight: 900;
+  line-height: 1;
+  overflow: hidden;
+  text-align: center;
+}
+
 .mini-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

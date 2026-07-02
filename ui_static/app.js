@@ -74,11 +74,13 @@ function cardChips(card) {
   return stats.join("");
 }
 
-function assetImage(entity, className, altText) {
+function assetImage(entity, className, altText, titleText = "") {
   const src = String(entity?.image || "").trim();
   if (!src) return "";
   const alt = altText || entity?.title || entity?.name || "card";
-  return `<img class="${className}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="lazy">`;
+  const title = cleanText(titleText || "");
+  const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+  return `<img class="${className}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}"${titleAttr} loading="lazy">`;
 }
 
 function renderCard(card) {
@@ -207,7 +209,7 @@ function renderItem(item) {
   const meta = [
     pv !== 0 ? `PV ${pv > 0 ? "+" : ""}${pv}` : "",
     flee ? `flee ${flee > 0 ? "+" : ""}${flee}` : "",
-    item.active ? "active" : "passive",
+    item.active ? "⚡" : "",
   ].filter(Boolean).join(" | ");
   const tags = [
     ...(item.types || []),
@@ -216,13 +218,31 @@ function renderItem(item) {
   return `
     <div class="item-card ${status}"${tooltip}>
       <div class="item-name">
-        ${assetImage(item, "item-art", item.name)}
+        ${assetImage(item, "item-art", item.name, description)}
         ${itemColorSwatch(item)}
         <span>${escapeHtml(item.name)}</span>
       </div>
-      <div class="item-meta">${escapeHtml(meta)}</div>
+      ${meta ? `<div class="item-meta">${escapeHtml(meta)}</div>` : ""}
       ${tags ? `<div class="item-meta">${escapeHtml(tags)}</div>` : ""}
       ${item.effect ? `<div class="item-effect">${escapeHtml(cleanText(item.effect))}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderMonsterStack(monsters) {
+  const cards = monsters || [];
+  if (!cards.length) {
+    return `<div class="monster-stack empty-stack">none</div>`;
+  }
+  return `
+    <div class="monster-stack">
+      ${cards.map((monster, index) => {
+        const title = monster.title || "Monster";
+        const detail = cleanText(monster.description || monster.effect || title);
+        const image = assetImage(monster, "monster-art", title, detail);
+        const fallback = `<span class="monster-fallback" title="${escapeAttr(detail)}">${escapeHtml(title)}</span>`;
+        return `<span class="monster-token" aria-label="${escapeAttr(`${index + 1}. ${title}`)}">${image || fallback}</span>`;
+      }).join("")}
     </div>
   `;
 }
@@ -231,7 +251,7 @@ function renderPlayers(players) {
   $("players").innerHTML = (players || []).map((player) => {
     const [status, statusClass] = statusFor(player);
     const itemList = (player.items || []).map(renderItem).join("");
-    const monsterText = (player.monsters || []).map((m) => m.title).slice(-8).join(", ");
+    const monsterStack = renderMonsterStack(player.monsters || []);
     const strategyText = player.strategy ? ` | ${player.strategy}` : "";
     return `
       <article class="player ${player.control === "human" ? "human" : ""} ${player.alive ? "" : "dead"}">
@@ -254,7 +274,7 @@ function renderPlayers(players) {
             ${chip(`medals ${player.medals}`)}
             ${chip(`turn ${player.turn}`)}
           </div>
-          <div class="muted">Recent monsters: ${escapeHtml(monsterText || "none")}</div>
+          <div class="monster-row">${monsterStack}</div>
           <div class="mini-list">${itemList}</div>
         </div>
       </article>
