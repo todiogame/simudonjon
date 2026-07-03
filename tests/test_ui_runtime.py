@@ -12,19 +12,25 @@ from objets import (
     AnneauDesSquelettes,
     BarbecueDuPonceur,
     BouleDeCristal,
+    ChapeletDeVitalite,
+    CoeurDeTarasque,
     CoeurDeGolem,
+    CoquillageMagique,
     Egide,
     EnclumeInstable,
     FilDuDestin,
     FruitDuDestin,
+    GrimoireInconnu,
     LameDraconique,
     LinceulDeResurrection,
+    MasqueDeLInquisiteur,
     Objet,
     OeilDHorus,
     OiseauDeMauvaisAugure,
     OsseletsDeResurrection,
     PistoletLaser,
     PotionDeGlace,
+    RouletteInfernale,
     SANS_HOOK_OBJET,
 )
 from simu import (
@@ -35,6 +41,7 @@ from simu import (
     _emit_dungeon_state,
     _apply_human_turn_action,
     _human_turn_action_options,
+    _run_debut_tour_hooks,
     _run_fin_tour_hooks,
     _run_combat_object_phase,
     _reset_temporary_card_modifiers,
@@ -358,6 +365,89 @@ def test_life_ring_no_longer_triggers_automatically_for_human_end_turn():
 
     assert human.pv_total == 10
     assert bot.pv_total == 11
+
+
+def test_simple_turn_items_are_exposed_as_clickable_human_actions():
+    items = [
+        ChapeletDeVitalite(),
+        CoquillageMagique(),
+        GrimoireInconnu(),
+        MasqueDeLInquisiteur(),
+        CoeurDeTarasque(),
+        RouletteInfernale(),
+    ]
+    joueur = Joueur("Tester", Perso("Tester Hero", 8), items, control="human")
+    joueur.pv_total = 8
+    joueur.monstres_ajoutes_ce_tour = 2
+
+    class Jeu:
+        objets_dispo = [Objet("Spare")]
+        manual_turn_actions_used = set()
+
+    options = _human_turn_action_options(joueur, Jeu, [])
+    labels = {option["label"] for option in options}
+
+    assert labels == {item.nom for item in items}
+    assert {option["itemId"] for option in options} == {str(id(item)) for item in items}
+    assert all(option["manualAction"] is True for option in options)
+
+
+def test_simple_start_turn_items_no_longer_auto_trigger_for_human():
+    human_item = ChapeletDeVitalite()
+    human = Joueur("Human", Perso("Tester Hero", 10), [human_item], control="human")
+    human.rollDice = lambda Jeu, log_details, jet_voulu=4, reversed=False, rerolled=False: 6
+    bot_item = ChapeletDeVitalite()
+    bot = Joueur("Bot", Perso("Tester Hero", 10), [bot_item], control="ai")
+    bot.rollDice = lambda Jeu, log_details, jet_voulu=4, reversed=False, rerolled=False: 6
+    human_pv = human.pv_total
+    bot_pv = bot.pv_total
+
+    class Jeu:
+        manual_turn_actions_used = set()
+
+    _run_debut_tour_hooks(human, Jeu, [], SANS_HOOK_PERSO["debut_tour"], SANS_HOOK_OBJET["debut_tour"])
+    _run_debut_tour_hooks(bot, Jeu, [], SANS_HOOK_PERSO["debut_tour"], SANS_HOOK_OBJET["debut_tour"])
+
+    assert human.pv_total == human_pv
+    assert bot.pv_total == bot_pv + 1
+
+
+def test_simple_end_turn_items_no_longer_auto_trigger_for_human():
+    human_items = [MasqueDeLInquisiteur(), CoeurDeTarasque()]
+    human = Joueur("Human", Perso("Tester Hero", 4), human_items, control="human")
+    human.pv_total = 4
+    human.monstres_ajoutes_ce_tour = 2
+    bot_items = [MasqueDeLInquisiteur(), CoeurDeTarasque()]
+    bot = Joueur("Bot", Perso("Tester Hero", 4), bot_items, control="ai")
+    bot.pv_total = 4
+    bot.monstres_ajoutes_ce_tour = 2
+    human_pv = human.pv_total
+    bot_pv = bot.pv_total
+
+    class Jeu:
+        manual_turn_actions_used = set()
+
+    _run_fin_tour_hooks(human, Jeu, [], SANS_HOOK_PERSO["fin_tour"], SANS_HOOK_OBJET["fin_tour"])
+    _run_fin_tour_hooks(bot, Jeu, [], SANS_HOOK_PERSO["fin_tour"], SANS_HOOK_OBJET["fin_tour"])
+
+    assert human.pv_total == human_pv
+    assert bot.pv_total == bot_pv + 3
+
+
+def test_manual_turn_item_application_marks_item_used_once():
+    mask = MasqueDeLInquisiteur()
+    joueur = Joueur("Tester", Perso("Tester Hero", 4), [mask], control="human")
+    joueur.pv_total = 4
+
+    class Jeu:
+        manual_turn_actions_used = set()
+
+    option = _human_turn_action_options(joueur, Jeu, [])[0]
+    assert _apply_human_turn_action(joueur, Jeu, option["id"], []) is True
+    assert joueur.pv_total == 6
+    assert _human_turn_action_options(joueur, Jeu, []) == []
+    assert _apply_human_turn_action(joueur, Jeu, option["id"], []) is False
+    assert joueur.pv_total == 6
 
 
 def test_current_card_update_can_refresh_resolved_x_power_without_log_event():

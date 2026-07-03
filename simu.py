@@ -227,6 +227,16 @@ def _run_fin_tour_hooks(joueur, Jeu, log_details, P_FIN, O_FIN):
         objet.fin_tour(joueur, Jeu, log_details)
 
 
+def _run_debut_tour_hooks(joueur, Jeu, log_details, P_DEBUT, O_DEBUT):
+    if hasattr(joueur, 'perso_obj') and type(joueur.perso_obj) not in P_DEBUT:
+        joueur.perso_obj.debut_tour(joueur, Jeu, log_details)
+    # comprehension = copie filtree: certains objets se retirent de la liste (Gants de Gaia)
+    for objet in [o for o in joueur.objets if type(o) not in O_DEBUT]:
+        if _is_manual_turn_hook_for_human(joueur, objet, "debut_tour"):
+            continue
+        objet.debut_tour(joueur, Jeu, log_details)
+
+
 def _card_summary(cards):
     groups = {}
     for carte in cards:
@@ -1054,11 +1064,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
         # reset AVANT les triggers, pour qu'un effet de debut de tour puisse poser rejoue (ex: Bonne vieille guinze)
         rejoue_precedent = _preparer_debut_iteration_tour(joueurs, joueur)
         if not rejoue_precedent:
-            if hasattr(joueur, 'perso_obj') and type(joueur.perso_obj) not in P_DEBUT:
-                joueur.perso_obj.debut_tour(joueur, Jeu, log_details)
-            # comprehension = copie filtree: certains objets se retirent de la liste (Gants de Gaïa)
-            for objet in [o for o in joueur.objets if type(o) not in O_DEBUT]:
-                objet.debut_tour(joueur, Jeu, log_details)
+            _run_debut_tour_hooks(joueur, Jeu, log_details, P_DEBUT, O_DEBUT)
 
         # des effets de debut de tour peuvent vider le Donjon (Tricheur...)
         if Jeu.donjon.vide:

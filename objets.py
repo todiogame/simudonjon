@@ -853,8 +853,16 @@ class GlaiveDArgent(Objet):
         self.execute(joueur, carte, log_details)
 
 class ChapeletDeVitalite(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Chapelet de Vitalité", False, 3)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Lancer un de: sur 6, gagner 1 PV."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
             jet_chapelet = joueur.rollDice(Jeu, log_details, 6)
@@ -914,8 +922,16 @@ class PatinsAGlace(Objet):
 
 
 class CoquillageMagique(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Coquillage Magique", True)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Piocher un objet puis briser le Coquillage."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
            self.piocheItem(joueur,Jeu,log_details)
@@ -952,8 +968,16 @@ class MarmiteGelatineuse(Objet):
         self.piocheItem(joueur,Jeu,log_details)
 
 class GrimoireInconnu(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Grimoire Inconnu", False)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Lancer un de: sur 6, piocher un objet."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
@@ -1881,8 +1905,16 @@ class ArbaleteTropGrosse(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class MasqueDeLInquisiteur(Objet):
+    manual_turn_hook = "fin_tour"
+
     def __init__(self):
         super().__init__("Masque de l'Inquisiteur", False, 2)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and joueur.pv_total in (2, 4, 8)
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 2 PV si vous etes a 2, 4 ou 8 PV."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.fin_tour(joueur, Jeu, log_details)
     def fin_tour(self, joueur, Jeu, log_details):
         if self.intact and (joueur.pv_total == 2 or joueur.pv_total == 4 or joueur.pv_total == 8):           
             self.gagnePV(2, joueur, log_details)
@@ -2900,9 +2932,17 @@ def _choisir_type_dague_vengeresse(joueur, Jeu, objet_exclu):
 # --- 1ere edition ---
 
 class CoeurDeTarasque(Objet):
+    manual_turn_hook = "fin_tour"
+
     def __init__(self):
         super().__init__("Coeur de Tarasque", False, 3)
         self.objectif_multi_kill = 2  # l'IA repioche pour atteindre 2 monstres dans le tour
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and joueur.monstres_ajoutes_ce_tour >= 2
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 1 PV apres au moins 2 monstres vaincus ce tour."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.fin_tour(joueur, Jeu, log_details)
     def fin_tour(self, joueur, Jeu, log_details):
         if self.intact and joueur.monstres_ajoutes_ce_tour >= 2:
             self.gagnePV(1, joueur, log_details)
@@ -3875,8 +3915,16 @@ class DagueDeBrutus(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class RouletteInfernale(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Roulette infernale", False, 2)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and joueur.pv_total >= 7
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Lancer un de: pair gagne les PV, impair les perd."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact and joueur.pv_total >= 7:
             jet = joueur.rollDice(Jeu, log_details)
