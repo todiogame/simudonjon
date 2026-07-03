@@ -7,6 +7,7 @@ from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
 from objets import (
     AllianceSanguine,
+    AnneauDeVie,
     AnkhDeReincarnation,
     AnneauDesSquelettes,
     BarbecueDuPonceur,
@@ -32,6 +33,9 @@ from simu import (
     _combat_object_candidates,
     _emit_current_card,
     _emit_dungeon_state,
+    _apply_human_turn_action,
+    _human_turn_action_options,
+    _run_fin_tour_hooks,
     _run_combat_object_phase,
     _reset_temporary_card_modifiers,
     _resolve_heal_event,
@@ -281,6 +285,75 @@ def test_human_next_action_can_offer_pass_after_a_resolved_card():
 
     assert joueur.choisir_action_suivante(Jeu, [], can_pass=True) == "pass"
     assert [option["id"] for option in provider.calls[0]["options"]] == ["flee", "draw", "pass"]
+
+
+def test_human_next_action_exposes_life_ring_as_clickable_item():
+    provider = _Provider("draw")
+    ring = AnneauDeVie()
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [ring],
+        control="human",
+        decision_provider=provider,
+    )
+    joueur.tour = 2
+
+    class Jeu:
+        joueurs = [joueur]
+        carte_courante = None
+        donjon = DonjonDeck()
+        manual_turn_actions_used = set()
+
+        @staticmethod
+        def human_turn_action_options(joueur, log_details=None):
+            return _human_turn_action_options(joueur, Jeu, log_details or [])
+
+    Jeu.donjon.ordre = [0]
+    Jeu.donjon.nb_cartes = 1
+    Jeu.donjon.index = 0
+
+    assert joueur.choisir_action_suivante(Jeu, [], can_pass=True) == "draw"
+
+    option = provider.calls[0]["options"][0]
+    assert option["label"] == "Anneau de Vie"
+    assert option["itemId"] == str(id(ring))
+    assert option["manualAction"] is True
+    assert [option["id"] for option in provider.calls[0]["options"][1:]] == ["flee", "draw", "pass"]
+
+
+def test_human_can_click_life_ring_once_per_turn():
+    ring = AnneauDeVie()
+    joueur = Joueur("Tester", Perso("Tester Hero", 10), [ring], control="human")
+
+    class Jeu:
+        manual_turn_actions_used = set()
+
+    options = _human_turn_action_options(joueur, Jeu, [])
+    assert len(options) == 1
+
+    log = []
+    assert _apply_human_turn_action(joueur, Jeu, options[0]["id"], log) is True
+    assert joueur.pv_total == 11
+    assert _human_turn_action_options(joueur, Jeu, []) == []
+    assert _apply_human_turn_action(joueur, Jeu, options[0]["id"], log) is False
+    assert joueur.pv_total == 11
+
+
+def test_life_ring_no_longer_triggers_automatically_for_human_end_turn():
+    human_ring = AnneauDeVie()
+    human = Joueur("Human", Perso("Tester Hero", 10), [human_ring], control="human")
+    bot_ring = AnneauDeVie()
+    bot = Joueur("Bot", Perso("Tester Hero", 10), [bot_ring], control="ai")
+
+    class Jeu:
+        manual_turn_actions_used = set()
+
+    _run_fin_tour_hooks(human, Jeu, [], SANS_HOOK_PERSO["fin_tour"], SANS_HOOK_OBJET["fin_tour"])
+    _run_fin_tour_hooks(bot, Jeu, [], SANS_HOOK_PERSO["fin_tour"], SANS_HOOK_OBJET["fin_tour"])
+
+    assert human.pv_total == 10
+    assert bot.pv_total == 11
 
 
 def test_current_card_update_can_refresh_resolved_x_power_without_log_event():

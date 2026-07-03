@@ -83,6 +83,8 @@ def retirer_executions_gratuites(Jeu, joueur, source_ids=None):
 
 
 class Objet:
+    manual_turn_hook = None
+
     def __init__(self, nom, actif=False, pv_bonus=0, modificateur_de=0, effet=None, intact=True, types_tags=None, puissance_tags=None):
         self.nom = nom
         self.pv_bonus = pv_bonus
@@ -104,6 +106,14 @@ class Objet:
         return True
     def can_use_in_combat(self, joueur, carte, Jeu, log_details):
         return self.intact and self.rules(joueur, carte, Jeu, log_details)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return False
+    def manual_turn_label(self, joueur, Jeu, log_details):
+        return self.nom
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return ""
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        pass
     def condition(self, joueur, carte, Jeu, log_details): # check if we use the item or not
         if not self.can_use_in_combat(joueur, carte, Jeu, log_details):
             return False
@@ -1156,8 +1166,16 @@ class CoffreAnime(Objet):
                 log_details.append(f" {joueur_proprietaire.nom} utilise {self.nom} pour essayer de voler et réparer {objet.nom} de {joueur.nom} MAIS cela ECHOUE!")
                             
 class AnneauDeVie(Objet):
+    manual_turn_hook = "fin_tour"
+
     def __init__(self):
         super().__init__("Anneau de Vie", False)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and joueur.pv_total >= 6
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 1 PV."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.fin_tour(joueur, Jeu, log_details)
     def fin_tour(self, joueur, Jeu, log_details):
         if(joueur.pv_total >= 6) and self.intact:
             self.gagnePV(1,joueur,log_details)

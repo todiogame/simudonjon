@@ -155,6 +155,9 @@ class Joueur:
             })
 
         options = []
+        manual_options = getattr(Jeu, "human_turn_action_options", None)
+        if callable(manual_options):
+            options.extend(manual_options(self, log_details))
         if self.peut_tenter_fuite():
             options.append({
                 "id": "flee",

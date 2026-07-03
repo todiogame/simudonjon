@@ -23,6 +23,9 @@ Ces effets sont a malus ou contraintes et doivent rester forces quand leur condi
 - Personnages avec `combat_effet` normal: `ChevalierDragon`, `DocteurDePeste`, `InventeurGenial`, `Flutiste`.
   - Avant: `ordonnanceur` appelait `joueur.perso_obj.en_combat(...)` automatiquement pour l'humain. La base `Perso.condition()` pouvait ouvrir un prompt oui/non `combat_source`.
   - Maintenant: ces personnages sont ajoutes aux sources de combat cliquables via `choose_combat_source`, comme les objets. L'IA conserve l'appel automatique.
+- `AnneauDeVie` (`fin_tour`).
+  - Avant: l'humain gagnait automatiquement 1 PV en passant son tour.
+  - Maintenant: l'objet est expose comme action cliquable pendant la decision principale du tour, avec `itemId` pour cliquer directement la carte. L'effet est utilisable une fois par tour humain et reste automatique pour l'IA.
 
 ## Hooks objets encore a migrer
 
@@ -32,7 +35,7 @@ Ces effets sont a malus ou contraintes et doivent rester forces quand leur condi
 
 ### Fin de tour
 
-`AnneauDeVie`, `MasqueDeLInquisiteur`, `PelleDuFossoyeur`, `CoeurDeTarasque`, `TaserManuel`, `PorteBoulesDuPonceur`, `TatouageDuPonceur`, `ConcoctionInstable`, `CoursierVolant`, `DisqueDeVishnu`, `SceauDeLegalisation` (obligatoire), `OiseauDeMauvaisAugure`.
+`MasqueDeLInquisiteur`, `PelleDuFossoyeur`, `CoeurDeTarasque`, `TaserManuel`, `PorteBoulesDuPonceur`, `TatouageDuPonceur`, `ConcoctionInstable`, `CoursierVolant`, `DisqueDeVishnu`, `SceauDeLegalisation` (obligatoire), `OiseauDeMauvaisAugure`.
 
 ### Apres victoire / vaincu
 
@@ -80,4 +83,3 @@ Mettre en place un registre d'actions humaines utilisables pendant le tour:
 - les exposer dans `pendingDecision` sous forme d'options cliquables;
 - appliquer l'action choisie puis recalculer les actions restantes;
 - conserver les exceptions obligatoires dans le chemin auto.
-

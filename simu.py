@@ -51,10 +51,17 @@ class GameState:
         self.bot_delay_ms = bot_delay_ms
         self.index_joueur = 0
         self.executions_gratuites = []
+        self.manual_turn_actions_used = set()
         self.policy_enabled = policy is not None
         self.policy = self._normalize_policy(policy)
         for joueur in self.joueurs:
             joueur.policy = self.policy
+
+    def human_turn_action_options(self, joueur, log_details=None):
+        return _human_turn_action_options(joueur, self, log_details or [])
+
+    def apply_human_turn_action(self, joueur, action_id, log_details=None):
+        return _apply_human_turn_action(joueur, self, action_id, log_details or [])
 
     def _normalize_policy(self, policy):
         if isinstance(policy, RoutedDungeonPolicy):
@@ -137,6 +144,87 @@ def _card_payload(carte):
         "types": list(getattr(carte, "types", []) or []),
         "image": asset_url("events" if getattr(carte, "event", False) else "monsters", getattr(carte, "titre", "")),
     }
+
+
+def _manual_turn_action_key(joueur, source):
+    return (id(joueur), id(source), getattr(joueur, "tour", 0))
+
+
+def _manual_turn_action_was_used(joueur, Jeu, source):
+    used = getattr(Jeu, "manual_turn_actions_used", None)
+    return used is not None and _manual_turn_action_key(joueur, source) in used
+
+
+def _mark_manual_turn_action_used(joueur, Jeu, source):
+    if not hasattr(Jeu, "manual_turn_actions_used"):
+        Jeu.manual_turn_actions_used = set()
+    Jeu.manual_turn_actions_used.add(_manual_turn_action_key(joueur, source))
+
+
+def _manual_turn_action_id(source):
+    return f"manual_turn:object:{id(source)}"
+
+
+def _is_manual_turn_hook_for_human(joueur, source, hook):
+    return (
+        joueur.is_human()
+        and getattr(source, "manual_turn_hook", None) == hook
+        and callable(getattr(source, "can_use_manual_turn", None))
+    )
+
+
+def _human_turn_action_options(joueur, Jeu, log_details):
+    if not joueur.is_human():
+        return []
+    options = []
+    for objet in list(joueur.objets):
+        if _manual_turn_action_was_used(joueur, Jeu, objet):
+            continue
+        can_use = getattr(objet, "can_use_manual_turn", None)
+        if not callable(can_use) or not can_use(joueur, Jeu, log_details):
+            continue
+        options.append({
+            "id": _manual_turn_action_id(objet),
+            "label": objet.manual_turn_label(joueur, Jeu, log_details),
+            "description": objet.manual_turn_description(joueur, Jeu, log_details),
+            "itemId": str(id(objet)),
+            "manualAction": True,
+        })
+    return options
+
+
+def _apply_human_turn_action(joueur, Jeu, action_id, log_details):
+    prefix = "manual_turn:object:"
+    if not joueur.is_human() or not isinstance(action_id, str) or not action_id.startswith(prefix):
+        return False
+    try:
+        source_id = int(action_id.removeprefix(prefix))
+    except ValueError:
+        return False
+    for objet in list(joueur.objets):
+        if id(objet) != source_id:
+            continue
+        if _manual_turn_action_was_used(joueur, Jeu, objet):
+            return False
+        can_use = getattr(objet, "can_use_manual_turn", None)
+        apply_action = getattr(objet, "apply_manual_turn", None)
+        if not callable(can_use) or not callable(apply_action) or not can_use(joueur, Jeu, log_details):
+            return False
+        _mark_manual_turn_action_used(joueur, Jeu, objet)
+        apply_action(joueur, Jeu, log_details)
+        return True
+    return False
+
+
+def _run_fin_tour_hooks(joueur, Jeu, log_details, P_FIN, O_FIN):
+    if type(joueur.perso_obj) not in P_FIN:
+        joueur.perso_obj.fin_tour(joueur, Jeu, log_details)
+    for objet in joueur.objets:
+        if type(objet) in O_FIN:
+            continue
+        if _is_manual_turn_hook_for_human(joueur, objet, "fin_tour"):
+            continue
+        objet.fin_tour(joueur, Jeu, log_details)
 
 
 def _card_summary(cards):
@@ -993,14 +1081,13 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
 
         can_pass_action = joueur in Jeu.action_pass_allowed
         if joueur.is_human():
-            action_suivante = joueur.choisir_action_suivante(Jeu, log_details, can_pass=can_pass_action)
+            while True:
+                action_suivante = joueur.choisir_action_suivante(Jeu, log_details, can_pass=can_pass_action)
+                if not _apply_human_turn_action(joueur, Jeu, action_suivante, log_details):
+                    break
             Jeu.action_pass_allowed.discard(joueur)
             if action_suivante == "pass":
-                if type(joueur.perso_obj) not in P_FIN:
-                    joueur.perso_obj.fin_tour(joueur, Jeu, log_details)
-                for objet in joueur.objets:
-                    if type(objet) not in O_FIN:
-                        objet.fin_tour(joueur, Jeu, log_details)
+                _run_fin_tour_hooks(joueur, Jeu, log_details, P_FIN, O_FIN)
                 joueur.tour += 1
                 if len([j for j in joueurs if j.dans_le_dj]) > 1:
                     if details_enabled:
@@ -1719,11 +1806,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
             #probleme avec le scaphandre qui spam passe
             if joueur.dans_le_dj and (not joueur.rejoue and not _has_free_execution_for_player(Jeu, joueur)):
                 # il passe : sequence perso et objets fin du tour
-                if type(joueur.perso_obj) not in P_FIN:
-                    joueur.perso_obj.fin_tour(joueur, Jeu, log_details)
-                for objet in joueur.objets:
-                    if type(objet) not in O_FIN:
-                        objet.fin_tour(joueur, Jeu, log_details)
+                _run_fin_tour_hooks(joueur, Jeu, log_details, P_FIN, O_FIN)
                 # Passer son tour, au joueur suivant
                 joueur.tour += 1
                 if len([joueur for joueur in joueurs if joueur.dans_le_dj]) > 1:
