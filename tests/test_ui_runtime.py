@@ -11,16 +11,23 @@ from objets import (
     AnkhDeReincarnation,
     AnneauDesSquelettes,
     BarbecueDuPonceur,
+    BoiteDePandore,
     BouleDeCristal,
+    CanneAChep,
+    Chameau,
     ChapeletDeVitalite,
+    ClocheDuDejaVu,
     CoeurDeTarasque,
     CoeurDeGolem,
     CoquillageMagique,
     Egide,
     EnclumeInstable,
+    EplucheDonjon,
     FilDuDestin,
+    FromagePuant,
     FruitDuDestin,
     GrimoireInconnu,
+    JournalDuFutur,
     LameDraconique,
     LinceulDeResurrection,
     MasqueDeLInquisiteur,
@@ -28,9 +35,14 @@ from objets import (
     OeilDHorus,
     OiseauDeMauvaisAugure,
     OsseletsDeResurrection,
+    ParcheminDXP,
     PistoletLaser,
     PotionDeGlace,
+    PotionAuTheVert,
+    PorteBoulesDuPonceur,
     RouletteInfernale,
+    ShotDAdrenaline,
+    SlipDeLaResurgence,
     SANS_HOOK_OBJET,
 )
 from simu import (
@@ -448,6 +460,117 @@ def test_manual_turn_item_application_marks_item_used_once():
     assert _human_turn_action_options(joueur, Jeu, []) == []
     assert _apply_human_turn_action(joueur, Jeu, option["id"], []) is False
     assert joueur.pv_total == 6
+
+
+def test_more_turn_items_are_exposed_as_clickable_human_actions():
+    items = [
+        BoiteDePandore(),
+        Chameau(),
+        ShotDAdrenaline(),
+        CanneAChep(),
+        FromagePuant(),
+        ParcheminDXP(),
+        PorteBoulesDuPonceur(),
+        ClocheDuDejaVu(),
+        SlipDeLaResurgence(),
+        PotionAuTheVert(),
+        EplucheDonjon(),
+        JournalDuFutur(),
+    ]
+    filler_items = [Objet("Active A", actif=True), Objet("Active B", actif=True), Objet("Active C", actif=True)]
+    joueur = Joueur("Tester", Perso("Tester Hero", 10), items + filler_items, control="human")
+    joueur.pv_total = 1
+    joueur.tour = 2
+    joueur.monstres_ajoutes_ce_tour = 5
+    joueur.pile_monstres_vaincus = [CarteMonstre("Ogre", 6, ["Ogre"])]
+    alive = Joueur("Alive", Perso("Alive Hero", 12), [], control="ai")
+    dead_1 = Joueur("Dead 1", Perso("Dead Hero", 10), [Objet("Loot 1")], control="ai")
+    dead_1.vivant = False
+    dead_1.dans_le_dj = False
+    dead_2 = Joueur("Dead 2", Perso("Dead Hero", 10), [Objet("Loot 2")], control="ai")
+    dead_2.vivant = False
+    dead_2.dans_le_dj = False
+
+    class Jeu:
+        joueurs = [joueur, alive, dead_1, dead_2]
+        objets_dispo = [Objet("Spare")]
+        defausse = [CarteMonstre("Rat", 1, ["Rat"])]
+        donjon = DonjonDeck()
+        manual_turn_actions_used = set()
+
+    Jeu.donjon.cartes = [
+        CarteMonstre("Top", 3, ["Golem"]),
+        CarteMonstre("Second", 4, ["Orc"]),
+        CarteMonstre("Third", 5, ["Demon"]),
+    ]
+    Jeu.donjon.ordre = [0, 1, 2]
+    Jeu.donjon.nb_cartes = 3
+    Jeu.donjon.index = 0
+
+    options = _human_turn_action_options(joueur, Jeu, [])
+
+    assert {option["label"] for option in options} == {item.nom for item in items}
+    assert {option["itemId"] for option in options} == {str(id(item)) for item in items}
+
+
+def test_more_start_turn_items_no_longer_auto_trigger_for_human():
+    human_item = BoiteDePandore()
+    human = Joueur("Human", Perso("Tester Hero", 10), [human_item], control="human")
+    bot_item = BoiteDePandore()
+    bot = Joueur("Bot", Perso("Tester Hero", 10), [bot_item], control="ai")
+    human_pv = human.pv_total
+    bot_pv = bot.pv_total
+
+    class Jeu:
+        joueurs = [human, bot]
+        objets_dispo = [Objet("A"), Objet("B"), Objet("C"), Objet("D")]
+        manual_turn_actions_used = set()
+
+    _run_debut_tour_hooks(human, Jeu, [], SANS_HOOK_PERSO["debut_tour"], SANS_HOOK_OBJET["debut_tour"])
+    _run_debut_tour_hooks(bot, Jeu, [], SANS_HOOK_PERSO["debut_tour"], SANS_HOOK_OBJET["debut_tour"])
+
+    assert human.pv_total == human_pv
+    assert human_item.intact is True
+    assert bot.pv_total == bot_pv + 3
+    assert bot_item.intact is False
+
+
+def test_more_end_turn_items_no_longer_auto_trigger_for_human():
+    human_item = PorteBoulesDuPonceur()
+    human = Joueur("Human", Perso("Tester Hero", 10), [human_item], control="human")
+    human.monstres_ajoutes_ce_tour = 5
+    bot_item = PorteBoulesDuPonceur()
+    bot = Joueur("Bot", Perso("Tester Hero", 10), [bot_item], control="ai")
+    bot.monstres_ajoutes_ce_tour = 5
+    human_pv = human.pv_total
+    bot_pv = bot.pv_total
+
+    class Jeu:
+        manual_turn_actions_used = set()
+
+    _run_fin_tour_hooks(human, Jeu, [], SANS_HOOK_PERSO["fin_tour"], SANS_HOOK_OBJET["fin_tour"])
+    _run_fin_tour_hooks(bot, Jeu, [], SANS_HOOK_PERSO["fin_tour"], SANS_HOOK_OBJET["fin_tour"])
+
+    assert human.pv_total == human_pv
+    assert bot.pv_total == bot_pv + 5
+
+
+def test_green_tea_potion_manual_action_sets_skip_turn_state():
+    potion = PotionAuTheVert()
+    joueur = Joueur("Tester", Perso("Tester Hero", 10), [potion], control="human")
+    joueur.pv_total = 3
+    joueur.tour = 2
+
+    class Jeu:
+        joueurs = [joueur]
+        manual_turn_actions_used = set()
+
+    option = _human_turn_action_options(joueur, Jeu, [])[0]
+
+    assert _apply_human_turn_action(joueur, Jeu, option["id"], []) is True
+    assert joueur.pv_total == 7
+    assert joueur.passe_son_tour is True
+    assert potion.intact is False
 
 
 def test_current_card_update_can_refresh_resolved_x_power_without_log_event():

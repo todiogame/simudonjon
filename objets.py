@@ -1031,9 +1031,17 @@ class ChampDeForceEnMousse(Objet):
             self.destroy(joueur, Jeu, log_details)
 
 class BoiteDePandore(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Boîte de Pandore", True)
-    
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 3 PV; chaque joueur dans le Donjon pioche un objet."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
+
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
             self.gagnePV(3, joueur, log_details)
@@ -1691,8 +1699,19 @@ class ChapeauStyle(Objet):
         joueur.tiebreaker = True
         
 class Chameau(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Chameau", True)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        if not self.intact or not joueur.dans_le_dj:
+            return False
+        autres_joueurs_dans_le_dj = [j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur]
+        return bool(autres_joueurs_dans_le_dj) and joueur.pv_total < min(autres_joueurs_dans_le_dj)
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 6 PV si vous etes le joueur du Donjon avec le moins de PV."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def chameau(self, joueur, Jeu, log_details):
         if self.intact and joueur.dans_le_dj:
             autres_joueurs_dans_le_dj = [j.pv_total for j in Jeu.joueurs if j.dans_le_dj and j != joueur]
@@ -1768,8 +1787,16 @@ class CoeurDeDragon(Objet):
             self.gagnePV(4, joueur_proprietaire, log_details)
 
 class ShotDAdrenaline(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Shot d'adrénaline", True)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and joueur.pv_total == 1
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 10 PV a 1 PV."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def shotDAdrenaline(self, joueur, Jeu, log_details):
         if self.intact:
             if joueur.pv_total == 1:
@@ -1808,14 +1835,30 @@ class LampeMagique(Objet):
             log_details.append(f"{joueur.nom} gagne {2 * demons} points de victoire supplémentaires grâce à {self.nom} pour les Démons vaincus.")
 
 class CanneAChep(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Canne à Chep", True)
+    def _canne_condition(self, joueur, Jeu):
+        joueurs_morts = [autre_joueur for autre_joueur in Jeu.joueurs if not autre_joueur.vivant]
+        return (
+            self.intact
+            and joueur.dans_le_dj
+            and (
+                all(not autre_joueur.dans_le_dj for autre_joueur in Jeu.joueurs if autre_joueur != joueur)
+                or len(joueurs_morts) >= 2
+            )
+        )
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self._canne_condition(joueur, Jeu)
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 4 PV et voler un objet intact a chaque joueur mort."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
-        if self.intact and joueur.dans_le_dj:
-            joueurs_morts = [autre_joueur for autre_joueur in Jeu.joueurs if not autre_joueur.vivant]
-            if ((all(not autre_joueur.dans_le_dj for autre_joueur in Jeu.joueurs if autre_joueur != joueur) or len(joueurs_morts) >= 2)):
-                self.utiliser(joueur, Jeu, log_details)
-                self.destroy(joueur, Jeu, log_details)
+        if self._canne_condition(joueur, Jeu):
+            self.utiliser(joueur, Jeu, log_details)
+            self.destroy(joueur, Jeu, log_details)
     def worthit(self, joueur, carte, Jeu, log_details):
         joueurs_morts = [autre_joueur for autre_joueur in Jeu.joueurs if not autre_joueur.vivant]
         return joueur.pv_total <= carte.dommages or (all(not autre_joueur.dans_le_dj for autre_joueur in Jeu.joueurs if autre_joueur != joueur) or len(joueurs_morts) >= 2)
@@ -1930,8 +1973,20 @@ class PareBuffleDuPonceur(Objet):
         self.reduc_damage(4, joueur, carte, log_details)
 
 class FromagePuant(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Fromage Puant", True)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return (
+            self.intact
+            and bool(joueur.pile_monstres_vaincus)
+            and joueur.pile_monstres_vaincus[-1].puissance >= 6
+        )
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner autant de PV que la puissance du dernier monstre vaincu."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def utiliser(self, dernier_monstre, joueur, Jeu, log_details):
         self.gagnePV(dernier_monstre.puissance, joueur, log_details)
         self.destroy(joueur, Jeu, log_details)
@@ -3064,8 +3119,16 @@ class ParfumDeScandale(Objet):
 
 class ParcheminDXP(Objet):
     # "Votre héros passe (ou reste) niveau 2. Gagnez autant de PV que vos PV de héros."
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Parchemin d'XP", True)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and getattr(joueur.perso_obj, 'level', 1) == 1
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Passer le heros niveau 2 et gagner ses PV de base."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         # IA: la capacite N2 rapporte d'autant plus qu'elle arrive tot, et le soin
         # ne se perime pas -> upgrade immediat si le heros est encore niveau 1
@@ -3461,9 +3524,17 @@ class MontreDuLapinBlanc(Objet):
 # --- 4eme edition ---
 
 class PorteBoulesDuPonceur(Objet):
+    manual_turn_hook = "fin_tour"
+
     def __init__(self):
         super().__init__("Porte-Boules du Ponceur", False)
         self.objectif_multi_kill = 5  # l'IA repioche pour atteindre 5 monstres dans le tour
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and joueur.monstres_ajoutes_ce_tour >= 5
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 5 PV apres au moins 5 monstres vaincus ce tour."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.fin_tour(joueur, Jeu, log_details)
     def fin_tour(self, joueur, Jeu, log_details):
         if self.intact and joueur.monstres_ajoutes_ce_tour >= 5:
             self.gagnePV(5, joueur, log_details)
@@ -3519,12 +3590,20 @@ class PotageImprovise(Objet):
 
 class ClocheDuDejaVu(Objet):
     non_combattant = True  # son usage de combat (urgence) coute souvent 1 PV de score: pas une vraie option
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("La Cloche du Déjà-Vu", True)
     def _fodder(self, Jeu):
         return [c for c in Jeu.defausse
                 if isinstance(c, CarteMonstre) and not c.is_X and c.puissance_initiale <= 1
                 and not (c.effet and "GOLD" in c.effet)]
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and bool(self._fodder(Jeu))
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 3 PV et remettre un monstre faible sur le Donjon."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         # gagne 3 PV et remet un monstre facile de la defausse sur le Donjon (qu'il piochera lui-meme)
         if self.intact:
@@ -3573,10 +3652,18 @@ class CapeDInvisibilite(Objet):
 
 class SlipDeLaResurgence(Objet):
     non_combattant = True  # +2 PV par autre actif intact: a 1 PV pres, ce n'est pas une option de combat
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Slip de la Résurgence", True)
     def _compte(self, joueur):
         return sum(1 for o in joueur.objets if o is not self and o.actif and o.intact)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and self._compte(joueur) >= 3
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 2 PV par autre objet actif intact."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         # utiliser tot, pendant que les autres actifs sont encore intacts
         # (attendre des PV bas est perdant: les actifs se consomment plus vite que les PV)
@@ -3681,8 +3768,16 @@ class CompasDuCapitaine(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class PotionAuTheVert(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Potion au Thé Vert", True)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and joueur.pv_total <= 3 and joueur.tour >= 2
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 4 PV et passer le tour."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact and joueur.pv_total <= 3 and joueur.tour >= 2:
             self.gagnePV(4, joueur, log_details)
@@ -4069,8 +4164,16 @@ class Paratonnerre(Objet):
             _repare_un_objet(joueur, [self], log_details, self.nom)
 
 class EplucheDonjon(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Épluche-Donjon", False, 3)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and not Jeu.donjon.vide
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Defausser la carte du dessus du Donjon."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact and not Jeu.donjon.vide:
             carte = Jeu.donjon.prochaine_carte()
@@ -4212,8 +4315,17 @@ class CarapaceBleue(Objet):
 # --- objets de divination (utilisent joueur.cartes_connues, lu par l'IA de fuite/repioche) ---
 
 class JournalDuFutur(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Journal du futur", False)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        donjon = Jeu.donjon
+        return self.intact and donjon.index + 2 < donjon.nb_cartes
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Regarder secretement la troisieme carte du Donjon."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         # regarde secretement la 3eme carte du Donjon (memorisee jusqu'a ce qu'elle surface)
         donjon = Jeu.donjon

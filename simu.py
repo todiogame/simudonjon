@@ -1091,7 +1091,18 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                 action_suivante = joueur.choisir_action_suivante(Jeu, log_details, can_pass=can_pass_action)
                 if not _apply_human_turn_action(joueur, Jeu, action_suivante, log_details):
                     break
+                if joueur.passe_son_tour:
+                    action_suivante = "skip_turn"
+                    break
             Jeu.action_pass_allowed.discard(joueur)
+            if action_suivante == "skip_turn":
+                joueur.passe_son_tour = False
+                joueur.tour += 1
+                if len([j for j in joueurs if j.dans_le_dj]) > 1:
+                    index_joueur += 1
+                    if index_joueur >= nb_joueurs:
+                        index_joueur = 0
+                continue
             if action_suivante == "pass":
                 _run_fin_tour_hooks(joueur, Jeu, log_details, P_FIN, O_FIN)
                 joueur.tour += 1

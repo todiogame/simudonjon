@@ -29,16 +29,19 @@ Ces effets sont a malus ou contraintes et doivent rester forces quand leur condi
 - Objets simples de tour: `ChapeletDeVitalite`, `CoquillageMagique`, `GrimoireInconnu`, `RouletteInfernale`, `MasqueDeLInquisiteur`, `CoeurDeTarasque`.
   - Avant: les hooks `debut_tour` / `fin_tour` se resolvaient automatiquement pour l'humain.
   - Maintenant: ils sont proposes comme actions cliquables pendant la decision principale si leurs conditions sont reunies. Les hooks automatiques sont conserves pour l'IA.
+- Deuxieme lot d'objets simples de tour: `BoiteDePandore`, `Chameau`, `ShotDAdrenaline`, `CanneAChep`, `FromagePuant`, `ParcheminDXP`, `ClocheDuDejaVu`, `SlipDeLaResurgence`, `PotionAuTheVert`, `EplucheDonjon`, `JournalDuFutur`, `PorteBoulesDuPonceur`.
+  - Avant: ces effets se resolvaient automatiquement au debut ou en fin de tour humain.
+  - Maintenant: ils sont exposes comme actions cliquables pendant la decision principale quand leur condition est vraie. `PotionAuTheVert` conserve son effet special de passage de tour apres clic.
 
 ## Hooks objets encore a migrer
 
 ### Debut de tour
 
-`GantsDeGaia`, `BoiteDePandore`, `EnclumeInstable`, `BottesDeVitesse`, `CorneDAbordage`, `EspritDuDonjon`, `Chameau`, `ShotDAdrenaline`, `CanneAChep`, `FromagePuant`, `SacDeConstantinople`, `Imprimante`, `ParcheminDXP`, `BouleDeCristal`, `TatouageDuPonceur`, `ClocheDuDejaVu`, `SlipDeLaResurgence`, `PotionAuTheVert`, `PierreDePressentiment`, `MainInvisible`, `EventailMaudit`, `EplucheDonjon`, `GlandePineale`, `JournalDuFutur`, `FilDuDestin`.
+`GantsDeGaia`, `EnclumeInstable`, `BottesDeVitesse`, `CorneDAbordage`, `EspritDuDonjon`, `SacDeConstantinople`, `Imprimante`, `BouleDeCristal`, `TatouageDuPonceur`, `PierreDePressentiment`, `MainInvisible`, `EventailMaudit`, `GlandePineale`, `FilDuDestin`.
 
 ### Fin de tour
 
-`PelleDuFossoyeur`, `TaserManuel`, `PorteBoulesDuPonceur`, `TatouageDuPonceur`, `ConcoctionInstable`, `CoursierVolant`, `DisqueDeVishnu`, `SceauDeLegalisation` (obligatoire), `OiseauDeMauvaisAugure`.
+`PelleDuFossoyeur`, `TaserManuel`, `TatouageDuPonceur`, `ConcoctionInstable`, `CoursierVolant`, `DisqueDeVishnu`, `SceauDeLegalisation` (obligatoire), `OiseauDeMauvaisAugure`.
 
 ### Apres victoire / vaincu
 
