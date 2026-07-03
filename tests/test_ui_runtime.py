@@ -42,7 +42,9 @@ from simu import (
 )
 from ui_runtime import (
     GameSession,
+    DEFAULT_PLAYER_COUNT,
     HEURISTIC_STRATEGY_NAME,
+    ISMCTS_PROF_ITERS,
     ISMCTS_PROF_STRATEGY_NAME,
     TEACHER_STRATEGY_NAME,
     fresh_item_pool,
@@ -153,6 +155,8 @@ def test_bot_strategies_are_configured_per_ai_player():
 
 
 def test_default_bot_strategies_are_ismcts_professors():
+    assert DEFAULT_PLAYER_COUNT == 4
+    assert ISMCTS_PROF_ITERS[ISMCTS_PROF_STRATEGY_NAME] == 201
     assert normalize_bot_strategies({}, 4) == [
         ISMCTS_PROF_STRATEGY_NAME,
         ISMCTS_PROF_STRATEGY_NAME,
