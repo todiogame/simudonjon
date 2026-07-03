@@ -557,8 +557,10 @@ function renderDraft(draft) {
   const picked = draft.yourPicked || draft.picked || [];
   $("draftPickedWrap").hidden = picked.length === 0;
   $("draftPicked").innerHTML = picked.map(renderItem).join("");
+  const decision = snapshot?.pendingDecision?.kind === "draft_pick" ? snapshot.pendingDecision : null;
   $("draftHand").innerHTML = (draft.hand || []).map((item, index, hand) =>
     renderItem(item, {
+      decision,
       fanIndex: index,
       fanCenter: (hand.length - 1) / 2,
     })
@@ -818,7 +820,10 @@ function render() {
     renderedDecisionId = null;
     renderDecision(decision);
   });
-  renderIfChanged("draft", snapshot.draft, renderDraft);
+  renderIfChanged("draft", {
+    draft: snapshot.draft,
+    decision: snapshot.pendingDecision?.kind === "draft_pick" ? snapshot.pendingDecision : null,
+  }, ({ draft }) => renderDraft(draft));
   renderIfChanged("players", {
     players: snapshot.players,
     decision: snapshot.pendingDecision,
