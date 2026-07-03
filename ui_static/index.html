@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SimuDonjon</title>
-    <link rel="stylesheet" href="/static/styles.css?v=ui-ismcts-debug-20260703" />
+    <link rel="stylesheet" href="/static/styles.css?v=ui-perf-debug-20260703" />
   </head>
   <body>
     <main class="app-shell">
@@ -79,6 +79,16 @@
           <button type="submit">Start</button>
         </form>
       </header>
+
+      <section class="perf-panel" id="perfPanel" hidden>
+        <span>Status <b id="perfStatus">-</b></span>
+        <span>Poll <b id="perfPoll">-</b></span>
+        <span>Net <b id="perfNetwork">-</b></span>
+        <span>Render <b id="perfRender">-</b></span>
+        <span>Payload <b id="perfPayload">-</b></span>
+        <span>Frame <b id="perfFrame">-</b></span>
+        <span>Cadence <b id="perfCadence">-</b></span>
+      </section>
 
       <section class="game-layout">
         <section class="main-stage">

@@ -72,6 +72,8 @@ def fast_ismcts_decide(snapshot, within_prefix, searcher_seat, seed, n_iters, c=
 
     tick("start", force=True)
     _gc_on = gc.isenabled()
+    switch_interval = sys.getswitchinterval()
+    sys.setswitchinterval(min(switch_interval, 0.001))
     gc.disable()                                       # A4: per-iter clones churn the allocator;
     try:                                               # skip GC scans, free the batch at the end
         for it in range(n_iters):
@@ -94,6 +96,7 @@ def fast_ismcts_decide(snapshot, within_prefix, searcher_seat, seed, n_iters, c=
             except Exception:
                 stats["iterationsFailed"] += 1
                 tick("iteration_failed", extra={"errorIteration": it + 1})
+                time.sleep(0)
                 continue
             stats["iterationsCompleted"] += 1
             outcome = 1.0 if winner is searcher else (0.0 if winner is None else -1.0)
@@ -101,7 +104,9 @@ def fast_ismcts_decide(snapshot, within_prefix, searcher_seat, seed, n_iters, c=
                 nd.edges[k][0] += 1
                 nd.edges[k][1] += outcome
             tick("backup")
+            time.sleep(0)
     finally:
+        sys.setswitchinterval(switch_interval)
         if _gc_on:
             gc.enable()
         gc.collect()

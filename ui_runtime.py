@@ -349,6 +349,35 @@ class GameSession:
                 rows = [e for e in rows if e["basic"]]
             return rows
 
+    def debug_snapshot(self):
+        with self.lock:
+            last_event = self.events[-1] if self.events else None
+            last_ismcts = next(
+                (
+                    event
+                    for event in reversed(self.events)
+                    if event["kind"] in {"bot_thinking", "bot_thinking_progress", "bot_decision"}
+                ),
+                None,
+            )
+            pending = self.pending_decision or {}
+            return {
+                "id": self.id,
+                "status": self.status,
+                "phase": self.phase,
+                "threadAlive": bool(self.thread and self.thread.is_alive()),
+                "eventCount": len(self.events),
+                "lastEventId": self.next_event_id - 1,
+                "lastEvent": last_event,
+                "lastISMCTS": last_ismcts,
+                "pendingDecision": {
+                    "kind": pending.get("kind"),
+                    "player": pending.get("player"),
+                    "optionCount": len(pending.get("options") or []),
+                } if pending else None,
+                "playerCount": len(self.players),
+            }
+
     def finish(self, result):
         with self.lock:
             self.result = _json_safe(result)

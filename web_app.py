@@ -1,4 +1,8 @@
+from collections import deque
+import os
 from pathlib import Path
+import threading
+import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -25,16 +29,31 @@ if ASSET_ROOT is not None:
     app.mount("/assets", StaticFiles(directory=ASSET_ROOT), name="assets")
 
 sessions = {}
+request_metrics = deque(maxlen=300)
 
 
 @app.middleware("http")
 async def cache_static_assets(request, call_next):
+    start = time.perf_counter()
     response = await call_next(request)
+    elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
     path = request.url.path
     if path.startswith("/assets/") or path.startswith("/static/assets/"):
         response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
     elif path.startswith("/static/"):
         response.headers.setdefault("Cache-Control", "public, max-age=3600")
+    response.headers["Server-Timing"] = f"app;dur={elapsed_ms}"
+    response.headers["X-Response-Time-Ms"] = str(elapsed_ms)
+    if path.startswith("/api/"):
+        request_metrics.append({
+            "ts": time.time(),
+            "method": request.method,
+            "path": path,
+            "query": str(request.url.query),
+            "status": response.status_code,
+            "elapsedMs": elapsed_ms,
+            "contentLength": response.headers.get("content-length"),
+        })
     return response
 
 
@@ -95,6 +114,19 @@ def metadata():
     }
 
 
+@app.get("/api/debug/perf")
+def debug_perf():
+    return {
+        "pid": os.getpid(),
+        "threads": threading.active_count(),
+        "sessions": {
+            session_id: session.debug_snapshot()
+            for session_id, session in sessions.items()
+        },
+        "requests": list(request_metrics)[-80:],
+    }
+
+
 @app.post("/api/games")
 def create_game(payload: GameCreate):
     if payload.mode not in {"random", "draft", "party"}:
@@ -116,6 +148,11 @@ def get_session(session_id: str) -> GameSession:
 @app.get("/api/games/{session_id}")
 def get_game(session_id: str):
     return get_session(session_id).snapshot()
+
+
+@app.get("/api/games/{session_id}/debug")
+def get_game_debug(session_id: str):
+    return get_session(session_id).debug_snapshot()
 
 
 @app.get("/api/games/{session_id}/events")

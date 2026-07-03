@@ -150,6 +150,33 @@ h1 {
   align-items: end;
 }
 
+.perf-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 4px;
+  border: 2px inset #6f5d29;
+  background: #090806;
+  color: #f6e9b6;
+  padding: 5px 7px;
+  font-size: 0.76rem;
+  box-shadow: 3px 3px 0 #000;
+}
+
+.perf-panel[hidden] {
+  display: none;
+}
+
+.perf-panel span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.perf-panel b {
+  color: #79d8ff;
+  font-weight: 700;
+}
+
 label {
   display: grid;
   gap: 3px;

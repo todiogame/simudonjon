@@ -6,7 +6,11 @@ let renderedDecisionId = null;
 let renderedLogKey = "";
 let pollInFlight = false;
 let pollTimer = null;
+let lastPollStartedAt = 0;
+let worstFrameMs = 0;
 const logs = { basic: [], full: [] };
+const debugMode = new URLSearchParams(window.location.search).has("debug");
+const perfSamples = [];
 const playerRenderKeys = new Map();
 const handledFxEventIds = new Set();
 const renderKeys = {
@@ -31,6 +35,55 @@ const audioBank = {};
 let audioReady = false;
 
 const $ = (id) => document.getElementById(id);
+
+function trackFrame(now) {
+  if (trackFrame.last) {
+    worstFrameMs = Math.max(worstFrameMs, now - trackFrame.last);
+  }
+  trackFrame.last = now;
+  window.requestAnimationFrame(trackFrame);
+}
+window.requestAnimationFrame(trackFrame);
+
+function numericHeader(response, name) {
+  const value = Number(response.headers.get(name));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function average(values) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function formatMs(value) {
+  return `${Math.round(value)}ms`;
+}
+
+function renderPerfPanel(sample) {
+  if (!debugMode) return;
+  const panel = $("perfPanel");
+  if (!panel) return;
+  panel.hidden = false;
+  const recent = perfSamples.slice(-20);
+  const slowest = Math.max(...recent.map((entry) => entry.totalMs), 0);
+  const avgTotal = average(recent.map((entry) => entry.totalMs));
+  const avgRender = average(recent.map((entry) => entry.renderMs + entry.logRenderMs));
+  $("perfStatus").textContent = snapshot?.status || "no game";
+  $("perfPoll").textContent = `${formatMs(sample.totalMs)} avg ${formatMs(avgTotal)} max ${formatMs(slowest)}`;
+  $("perfNetwork").textContent = `${formatMs(sample.fetchMs)} server ${formatMs(sample.serverMs)}`;
+  $("perfRender").textContent = `${formatMs(sample.renderMs)} + logs ${formatMs(sample.logRenderMs)} avg ${formatMs(avgRender)}`;
+  $("perfPayload").textContent = `${sample.snapshotBytes + sample.eventsBytes} B / ${sample.eventCount} events`;
+  $("perfFrame").textContent = `${formatMs(worstFrameMs)} worst`;
+  $("perfCadence").textContent = `${formatMs(sample.pollGapMs)} gap`;
+}
+
+function recordPerf(sample) {
+  perfSamples.push(sample);
+  if (perfSamples.length > 80) {
+    perfSamples.shift();
+  }
+  renderPerfPanel(sample);
+}
 
 function stableRenderKey(value) {
   return JSON.stringify(value ?? null);
@@ -751,6 +804,9 @@ async function createGame(event) {
   event.preventDefault();
   ensureAudioReady();
   lastEventId = 0;
+  lastPollStartedAt = 0;
+  worstFrameMs = 0;
+  perfSamples.length = 0;
   resetRenderKeys();
   renderedLogKey = "";
   collapsePiles();
@@ -797,19 +853,30 @@ async function submitDecision(decisionId, optionId) {
 async function poll() {
   if (!sessionId || pollInFlight) return;
   pollInFlight = true;
+  const startedAt = performance.now();
+  const pollGapMs = lastPollStartedAt ? startedAt - lastPollStartedAt : 0;
+  lastPollStartedAt = startedAt;
   try {
+    const fetchStartedAt = performance.now();
     const [snapResponse, fullResponse] = await Promise.all([
       fetch(`/api/games/${sessionId}`),
       fetch(`/api/games/${sessionId}/events?after=${lastEventId}&level=full`),
     ]);
+    const fetchMs = performance.now() - fetchStartedAt;
     if (snapResponse.status === 404 || fullResponse.status === 404) {
       stopPolling();
       sessionId = null;
       return;
     }
     if (!snapResponse.ok || !fullResponse.ok) return;
-    snapshot = await snapResponse.json();
-    const fullBody = await fullResponse.json();
+    const parseStartedAt = performance.now();
+    const [snapText, fullText] = await Promise.all([
+      snapResponse.text(),
+      fullResponse.text(),
+    ]);
+    snapshot = JSON.parse(snapText);
+    const fullBody = JSON.parse(fullText);
+    const parseMs = performance.now() - parseStartedAt;
     const fullEvents = fullBody.events || [];
     if (fullEvents.length) {
       lastEventId = Math.max(lastEventId, ...fullEvents.map((e) => e.id));
@@ -819,8 +886,25 @@ async function poll() {
       logs.basic.push(...fullEvents.filter((event) => event.basic));
       logs.basic = logs.basic.slice(-400);
     }
+    const renderStartedAt = performance.now();
     render();
+    const renderMs = performance.now() - renderStartedAt;
+    const logRenderStartedAt = performance.now();
     renderLogs();
+    const logRenderMs = performance.now() - logRenderStartedAt;
+    recordPerf({
+      totalMs: performance.now() - startedAt,
+      pollGapMs,
+      fetchMs,
+      parseMs,
+      renderMs,
+      logRenderMs,
+      serverMs: numericHeader(snapResponse, "x-response-time-ms")
+        + numericHeader(fullResponse, "x-response-time-ms"),
+      snapshotBytes: snapText.length,
+      eventsBytes: fullText.length,
+      eventCount: fullEvents.length,
+    });
     if (snapshot?.status && snapshot.status !== "running") {
       stopPolling();
     }
