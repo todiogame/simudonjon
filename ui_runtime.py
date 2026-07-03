@@ -33,13 +33,23 @@ DEFAULT_PLAYER_COUNT = 4
 RANDOM_SEUIL_PV_ESSAI_FUITE = 6
 TEACHER_STRATEGY_NAME = "teacher_best"
 HEURISTIC_STRATEGY_NAME = "baseline"
+ISMCTS_PROF_STRATEGY_NAME = "ismcts_prof"
+ISMCTS_PROF_FAST_STRATEGY_NAME = "ismcts_prof_fast"
+ISMCTS_PROF_ITERS = {
+    ISMCTS_PROF_STRATEGY_NAME: 200,
+    ISMCTS_PROF_FAST_STRATEGY_NAME: 50,
+}
 BOT_STRATEGY_LABELS = {
     TEACHER_STRATEGY_NAME: "Teacher",
     HEURISTIC_STRATEGY_NAME: "Heuristic",
+    ISMCTS_PROF_STRATEGY_NAME: "ISMCTS Prof",
+    ISMCTS_PROF_FAST_STRATEGY_NAME: "ISMCTS Prof Fast",
 }
 BOT_CONTROL_LABELS = {
     TEACHER_STRATEGY_NAME: "teacher ai",
     HEURISTIC_STRATEGY_NAME: "heuristic ai",
+    ISMCTS_PROF_STRATEGY_NAME: "ismcts prof",
+    ISMCTS_PROF_FAST_STRATEGY_NAME: "ismcts prof",
 }
 ITEM_COLOR_HEX = {
     1: "#c84b4b",
@@ -445,6 +455,96 @@ def make_players(names, heroes, builds, provider, medals=None, bot_strategies=No
     return players
 
 
+class UiLiveISMCTSPolicy:
+    def __init__(self, session, seat, seed, n_iters):
+        import fast_search
+
+        self.session = session
+        self.seat = seat
+        self.n_iters = n_iters
+        self._live = fast_search._LivePolicy(seat, seed, n_iters)
+
+    def on_turn_start(self, game, index):
+        self._live.on_turn_start(game, index)
+
+    def decide(self, context):
+        import real_search as rs
+
+        searchable = (
+            self._live.searcher is not None
+            and context.actor is self._live.searcher
+            and context.kind.name in rs.TREE_KINDS
+            and rs.legal_keys(context)
+        )
+        if searchable:
+            self.session.emit({
+                "kind": "bot_thinking",
+                "text": f"{context.actor.nom}: ISMCTS search ({self.n_iters} iterations).",
+                "payload": {
+                    "player": context.actor.nom,
+                    "decision": context.kind.name,
+                    "iterations": self.n_iters,
+                },
+                "basic": True,
+            })
+            start = time.perf_counter()
+            action = self._live.decide(context)
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            label = getattr(action, "nom", None) or getattr(action, "titre", None) or str(action)
+            self.session.emit({
+                "kind": "bot_decision",
+                "text": f"{context.actor.nom}: {label}",
+                "payload": {
+                    "kind": context.kind.name,
+                    "option": label,
+                    "elapsedMs": elapsed_ms,
+                    "iterations": self.n_iters,
+                },
+                "basic": True,
+            })
+            return action
+        return self._live.decide(context)
+
+
+def build_dungeon_policy(session, players, bot_strategies):
+    if not any(strategy in ISMCTS_PROF_ITERS for strategy in bot_strategies):
+        return None, None
+
+    from ai_policy import default_dungeon_policy
+
+    base_seed = session.config.get("seed")
+    if base_seed in (None, ""):
+        base_seed = random.randrange(1, 2**31)
+    else:
+        base_seed = int(base_seed)
+
+    policies = [default_dungeon_policy() for _ in players]
+    live_policies = []
+    for bot_offset, strategy in enumerate(bot_strategies, start=1):
+        if strategy not in ISMCTS_PROF_ITERS or bot_offset >= len(players):
+            continue
+        n_iters = ISMCTS_PROF_ITERS[strategy]
+        if strategy == ISMCTS_PROF_STRATEGY_NAME:
+            try:
+                n_iters = max(1, int(session.config.get("ismctsIterations") or n_iters))
+            except (TypeError, ValueError):
+                pass
+        live = UiLiveISMCTSPolicy(
+            session,
+            seat=bot_offset,
+            seed=base_seed + bot_offset * 1009,
+            n_iters=n_iters,
+        )
+        policies[bot_offset] = live
+        live_policies.append(live)
+
+    def on_turn_start(game, index):
+        for live in live_policies:
+            live.on_turn_start(game, index)
+
+    return policies, on_turn_start
+
+
 def choose_draft_pick(session, draft_player, hand, default_pick, round_no, pick_no,
                       picked=None, your_picked=None):
     session.set_draft_state({
@@ -528,9 +628,10 @@ def run_draft_phase(session, provider, names, heroes, medals=None, party_mode=Fa
     return builds, pool + trash
 
 
-def run_dungeon(session, provider, players, remaining_items, threshold):
+def run_dungeon(session, provider, players, remaining_items, threshold, bot_strategies=None):
     session.set_phase("dungeon", session.round_label)
     session.set_players(players)
+    policy, on_turn_start = build_dungeon_policy(session, players, bot_strategies or [])
     winner, final_players = ordonnanceur(
         players,
         DonjonDeck(),
@@ -540,6 +641,8 @@ def run_dungeon(session, provider, players, remaining_items, threshold):
         event_sink=session.emit,
         decision_provider=provider,
         bot_delay_ms=session.bot_delay_ms,
+        policy=policy,
+        on_turn_start=on_turn_start,
     )
     session.set_players(final_players)
     return winner, final_players
@@ -557,7 +660,7 @@ def run_random(session, provider, names, bot_strategies):
     players = make_players(names, heroes, builds, provider, bot_strategies=bot_strategies)
     session.emit({"kind": "setup", "text": "Random game started.", "basic": True})
     winner, final_players = run_dungeon(
-        session, provider, players, pool, RANDOM_SEUIL_PV_ESSAI_FUITE
+        session, provider, players, pool, RANDOM_SEUIL_PV_ESSAI_FUITE, bot_strategies
     )
     return {
         "winner": winner.nom if winner else None,
@@ -572,7 +675,7 @@ def run_draft(session, provider, names, bot_strategies):
     )
     players = make_players(names, heroes, builds, provider, bot_strategies=bot_strategies)
     winner, final_players = run_dungeon(
-        session, provider, players, remaining, RANDOM_SEUIL_PV_ESSAI_FUITE
+        session, provider, players, remaining, RANDOM_SEUIL_PV_ESSAI_FUITE, bot_strategies
     )
     return {
         "winner": winner.nom if winner else None,
@@ -622,7 +725,7 @@ def run_party(session, provider, names, bot_strategies):
             names, heroes, builds, provider, medals=medals, bot_strategies=bot_strategies
         )
         winner, final_players = run_dungeon(
-            session, provider, players, remaining, PARTY_SEUIL_PV_ESSAI_FUITE
+            session, provider, players, remaining, PARTY_SEUIL_PV_ESSAI_FUITE, bot_strategies
         )
 
         for idx, player in enumerate(final_players):

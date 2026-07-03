@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SimuDonjon</title>
-    <link rel="stylesheet" href="/static/styles.css?v=ui-rework-4-20260703" />
+    <link rel="stylesheet" href="/static/styles.css?v=ui-ismcts-1-20260703" />
   </head>
   <body>
     <main class="app-shell">
@@ -41,11 +41,17 @@
             Bot delay
             <input id="botDelay" type="number" min="0" step="100" value="800" />
           </label>
+          <label>
+            ISMCTS iterations
+            <input id="ismctsIterations" type="number" min="1" step="10" value="200" />
+          </label>
           <label class="bot-ai-control" data-bot-slot="1">
             Bot 1 AI
             <select id="botStrategy1">
               <option value="teacher_best">Teacher</option>
               <option value="baseline">Heuristic</option>
+              <option value="ismcts_prof">ISMCTS Prof</option>
+              <option value="ismcts_prof_fast">ISMCTS Prof Fast</option>
             </select>
           </label>
           <label class="bot-ai-control" data-bot-slot="2">
@@ -53,6 +59,8 @@
             <select id="botStrategy2">
               <option value="teacher_best">Teacher</option>
               <option value="baseline">Heuristic</option>
+              <option value="ismcts_prof">ISMCTS Prof</option>
+              <option value="ismcts_prof_fast">ISMCTS Prof Fast</option>
             </select>
           </label>
           <label class="bot-ai-control" data-bot-slot="3">
@@ -60,6 +68,8 @@
             <select id="botStrategy3">
               <option value="teacher_best">Teacher</option>
               <option value="baseline">Heuristic</option>
+              <option value="ismcts_prof">ISMCTS Prof</option>
+              <option value="ismcts_prof_fast">ISMCTS Prof Fast</option>
             </select>
           </label>
           <button type="submit">Start</button>
@@ -151,6 +161,6 @@
       <img id="cardZoomImage" alt="" />
       <div id="cardZoomTitle" class="card-zoom-title"></div>
     </div>
-    <script src="/static/app.js?v=ui-rework-4-20260703"></script>
+    <script src="/static/app.js?v=ui-ismcts-1-20260703"></script>
   </body>
 </html>

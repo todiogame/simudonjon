@@ -6,7 +6,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ui_assets import assets_enabled, configured_asset_root
-from ui_runtime import GameSession, HEURISTIC_STRATEGY_NAME, TEACHER_STRATEGY_NAME
+from ui_runtime import (
+    GameSession,
+    HEURISTIC_STRATEGY_NAME,
+    ISMCTS_PROF_FAST_STRATEGY_NAME,
+    ISMCTS_PROF_STRATEGY_NAME,
+    TEACHER_STRATEGY_NAME,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -27,6 +33,7 @@ class GameCreate(BaseModel):
     playerCount: int = 4
     seed: int | None = None
     botDelayMs: int = 800
+    ismctsIterations: int | None = None
     partyRounds: int | None = None
     botStrategies: list[str] | None = None
 
@@ -60,6 +67,16 @@ def metadata():
                 "id": HEURISTIC_STRATEGY_NAME,
                 "label": "Heuristic",
                 "description": "Uses the baseline heuristic bot.",
+            },
+            {
+                "id": ISMCTS_PROF_STRATEGY_NAME,
+                "label": "ISMCTS Prof",
+                "description": "Uses the clone-based ISMCTS teacher from the full-game branch.",
+            },
+            {
+                "id": ISMCTS_PROF_FAST_STRATEGY_NAME,
+                "label": "ISMCTS Prof Fast",
+                "description": "Uses fewer ISMCTS iterations for a faster playable opponent.",
             },
         ],
         "assets": {"enabled": assets_enabled()},

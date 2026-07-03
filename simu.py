@@ -1,6 +1,15 @@
 import random
 import numpy as np
 
+from ai_policy import RoutedDungeonPolicy, default_dungeon_policy
+from ai_decisions import (
+    CombatObjectChoice,
+    DecisionContext,
+    DecisionKind,
+    require_bool,
+    require_combat_object_choice,
+    require_option,
+)
 from objets import *
 from objets import SANS_HOOK_OBJET, ajouter_execution_gratuite, retirer_executions_gratuites
 from joueurs import Joueur
@@ -10,6 +19,72 @@ from heros import Perso, persos_disponibles, SANS_HOOK_PERSO
 from ui_assets import asset_url
 
 TRAQUENARD_STRATEGIES = ('baseline', 'degats_purs', 'net_gain', 'net_gain_prudent')
+
+
+class GameState:
+    def __init__(
+        self,
+        joueurs,
+        donjon,
+        objets_dispo,
+        policy=None,
+        event_sink=None,
+        decision_provider=None,
+        bot_delay_ms=0,
+    ):
+        self.defausse = []
+        self.tour = 0
+        self.execute_next_monster = False
+        self.traquenard_actif = False
+        self.traquenard_paye = False
+        self.carte_ignoree = False
+        self.carte_courante = None
+        self.carte_passee = None
+        self.action_pass_allowed = set()
+        self.kraken_vu = False
+        self.joueurs = joueurs
+        self.donjon = donjon
+        self.objets_dispo = objets_dispo
+        self.nb_joueurs = len(joueurs)
+        self.event_sink = event_sink
+        self.decision_provider = decision_provider
+        self.bot_delay_ms = bot_delay_ms
+        self.index_joueur = 0
+        self.executions_gratuites = []
+        self.policy_enabled = policy is not None
+        self.policy = self._normalize_policy(policy)
+        for joueur in self.joueurs:
+            joueur.policy = self.policy
+
+    def _normalize_policy(self, policy):
+        if isinstance(policy, RoutedDungeonPolicy):
+            return policy
+        if policy is None or hasattr(policy, "decide"):
+            return RoutedDungeonPolicy(policy or default_dungeon_policy())
+        if isinstance(policy, (list, tuple)):
+            if len(policy) != len(self.joueurs):
+                raise ValueError("Per-seat policy list must match the number of players")
+            assignments = {joueur: seat_policy for joueur, seat_policy in zip(self.joueurs, policy)}
+            return RoutedDungeonPolicy(default_dungeon_policy(), assignments)
+        if isinstance(policy, dict):
+            assignments = {}
+            for key, seat_policy in policy.items():
+                joueur = self._resolve_policy_player(key)
+                assignments[joueur] = seat_policy
+            return RoutedDungeonPolicy(default_dungeon_policy(), assignments)
+        raise TypeError(f"Unsupported dungeon policy container: {type(policy).__name__}")
+
+    def _resolve_policy_player(self, key):
+        if key in self.joueurs:
+            return key
+        if isinstance(key, int):
+            return self.joueurs[key]
+        if isinstance(key, str):
+            for joueur in self.joueurs:
+                if joueur.nom == key:
+                    return joueur
+            raise KeyError(f"Unknown player name for policy routing: {key}")
+        raise KeyError(f"Unsupported player key for policy routing: {key!r}")
 
 
 _BASIC_LOG_MARKERS = (
@@ -522,7 +597,25 @@ def _run_combat_object_phase(joueur, carte, Jeu, log_details, O_COMBAT, P_COMBAT
         if not options and not joueur.is_human():
             return carte, False, False
 
-        choice = joueur.choisir_source_combat(options, carte, Jeu, log_details)
+        if joueur.is_human() or not getattr(Jeu, "policy_enabled", False):
+            choice = joueur.choisir_source_combat(options, carte, Jeu, log_details)
+        else:
+            decision = Jeu.policy.decide(DecisionContext(
+                kind=DecisionKind.CHOOSE_COMBAT_OBJECT,
+                actor=joueur,
+                game=Jeu,
+                phase="combat",
+                subject=carte,
+                options=tuple(options),
+                metadata={"log_details": log_details},
+            ))
+            choice = require_combat_object_choice(
+                decision,
+                tuple(options),
+                decision_name="CHOOSE_COMBAT_OBJECT",
+            )
+            if choice is CombatObjectChoice.RESOLVE_NOW:
+                choice = None
         if choice is None:
             return carte, False, False
 
@@ -743,15 +836,14 @@ def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, do
         donjon.rajoute_en_haut_de_la_pile(carte)
         Jeu.carte_passee = carte
 
-def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
-                 event_sink=None, decision_provider=None, bot_delay_ms=0):
-    # arreter la simulation si on a un objet casse dans une main
-    for j in joueurs:
-        for o in j.objets:
-            if not o.intact: 1/0
+def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True,
+                 event_sink=None, decision_provider=None, bot_delay_ms=0,
+                 policy=None, resume_state=None, resume_index=0, on_turn_start=None):
+    if objets_dispo is None and pv_min_fuite is not None and not isinstance(pv_min_fuite, (int, float)):
+        objets_dispo = pv_min_fuite
+        pv_min_fuite = None
 
     log_details = _make_log(event_sink)
-    nb_joueurs = len(joueurs)
     details_enabled = log or event_sink is not None
 
     # tables de dispatch : pour chaque hook, les classes qui ne l'implementent pas
@@ -769,50 +861,62 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
     P_FUITE = SANS_HOOK_PERSO['en_fuite']
     P_DEBUT = SANS_HOOK_PERSO['debut_tour']; P_FIN = SANS_HOOK_PERSO['fin_tour']
 
-    class Jeu:
-        tour = 0
-        execute_next_monster = False
-        traquenard_actif = False
-        traquenard_paye = False
-        carte_ignoree = False
-        carte_courante = None
-        carte_passee = None
-        action_pass_allowed = set()
-        kraken_vu = False
-        donjon
-    Jeu.joueurs = joueurs
-    Jeu.donjon = donjon
-    Jeu.defausse = _TrackedDiscard(lambda: _emit_dungeon_state(event_sink, Jeu))
-    Jeu.executions_gratuites = []
-    Jeu.objets_dispo = objets_dispo
-    Jeu.nb_joueurs = nb_joueurs
-    Jeu.event_sink = event_sink
-    Jeu.decision_provider = decision_provider
-    Jeu.bot_delay_ms = bot_delay_ms
-    if event_sink is not None:
-        donjon.on_change = lambda: _emit_dungeon_state(event_sink, Jeu)
-    donjon.melange()
-    _emit_dungeon_state(event_sink, Jeu)
-    log_details = _make_log(event_sink)
-    index_joueur = 0  # Initialisation de l'index du joueur courant
-    
-    for j in joueurs:
-        if decision_provider is not None:
-            j.decision_provider = decision_provider
-        j.partie_joueurs = joueurs  # utilise par perdre_medaille (Parfum de Scandale)
-        j.trier_objets_par_priorite()
-        j.appliquer_panoplies(log_details)  # +2 PV par 3 objets de meme couleur (bonus d'avant-partie)
-        j.perso_obj.debut_partie(j, Jeu, log_details)  # reset aussi l'etat une-fois-par-partie du perso
-        for objet in j.objets:
-            objet.debut_partie(j, Jeu, log_details)
-    
-    if log:
-        for detail in log_details:
-            print(detail)
-        print("\n")
-    log_details = _make_log(event_sink)
+    if resume_state is None:
+        # arreter la simulation si on a un objet casse dans une main
+        for j in joueurs:
+            for o in j.objets:
+                if not o.intact: 1/0
+
+        Jeu = GameState(
+            joueurs,
+            donjon,
+            objets_dispo,
+            policy=policy,
+            event_sink=event_sink,
+            decision_provider=decision_provider,
+            bot_delay_ms=bot_delay_ms,
+        )
+        Jeu.defausse = _TrackedDiscard(lambda: _emit_dungeon_state(event_sink, Jeu))
+        if event_sink is not None:
+            donjon.on_change = lambda: _emit_dungeon_state(event_sink, Jeu)
+        donjon.melange()
+        _emit_dungeon_state(event_sink, Jeu)
+        log_details = _make_log(event_sink)
+        index_joueur = 0  # Initialisation de l'index du joueur courant
+
+        for j in joueurs:
+            if decision_provider is not None:
+                j.decision_provider = decision_provider
+            j.partie_joueurs = joueurs  # utilise par perdre_medaille (Parfum de Scandale)
+            j.trier_objets_par_priorite()
+            j.appliquer_panoplies(log_details)  # +2 PV par 3 objets de meme couleur (bonus d'avant-partie)
+            j.perso_obj.debut_partie(j, Jeu, log_details)  # reset aussi l'etat une-fois-par-partie du perso
+            for objet in j.objets:
+                objet.debut_partie(j, Jeu, log_details)
+
+        if log:
+            for detail in log_details:
+                print(detail)
+            print("\n")
+        log_details = _make_log(event_sink)
+    else:
+        Jeu = resume_state
+        joueurs = Jeu.joueurs
+        donjon = Jeu.donjon
+        index_joueur = resume_index
+        event_sink = getattr(Jeu, "event_sink", None)
+        decision_provider = getattr(Jeu, "decision_provider", None)
+        if policy is not None:
+            Jeu.policy = Jeu._normalize_policy(policy)
+            Jeu.policy_enabled = True
+            for j in joueurs:
+                j.policy = Jeu.policy
+
+    nb_joueurs = len(joueurs)
     # Boucle de jeu principale
     while not Jeu.donjon.vide:
+        if on_turn_start is not None:
+            on_turn_start(Jeu, index_joueur)
         Jeu.tour += 1
         
         if log:
@@ -888,6 +992,17 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                         index_joueur = 0
                 continue
             tente_fuite = action_suivante == "flee"
+        elif getattr(Jeu, "policy_enabled", False):
+            tente_fuite = require_bool(
+                Jeu.policy.decide(DecisionContext(
+                    kind=DecisionKind.SHOULD_FLEE,
+                    actor=joueur,
+                    game=Jeu,
+                    phase="start_turn",
+                    metadata={"log_details": log_details},
+                )),
+                "SHOULD_FLEE",
+            )
         else:
             tente_fuite = joueur.deciderDeFuir(Jeu, log_details)
 
@@ -1566,7 +1681,19 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite, objets_dispo, log=True,
                 if joueur.is_human():
                     Jeu.action_pass_allowed.add(joueur)
                     joueur.rejoue = True
-                elif joueur.deciderDeRejouer(Jeu, log_details):
+                elif getattr(Jeu, "policy_enabled", False) and require_bool(
+                    Jeu.policy.decide(DecisionContext(
+                        kind=DecisionKind.SHOULD_REPLAY,
+                        actor=joueur,
+                        game=Jeu,
+                        phase="after_card",
+                        subject=carte,
+                        metadata={"log_details": log_details},
+                    )),
+                    "SHOULD_REPLAY",
+                ):
+                    joueur.rejoue = True
+                elif not getattr(Jeu, "policy_enabled", False) and joueur.deciderDeRejouer(Jeu, log_details):
                     joueur.rejoue = True
 
             # si le joueur est toujours la, et que soit il doit passer, soit il ne doit pas rejouer et il ne peut pas executer le prochain monstre

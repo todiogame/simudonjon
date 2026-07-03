@@ -1,5 +1,6 @@
 from objets import *
 from objets import COULEUR_NOMS, SANS_HOOK_OBJET
+from ai_decisions import DecisionContext, DecisionKind, require_option
 from ia_strategies import DEFAULT_STRATEGY_NAME, get_strategy
 import math
 import random
@@ -676,6 +677,37 @@ class Joueur:
     def choisir_objet(self, candidats, jeu, usage="generic"):
         if not candidats:
             return None
+        if not self.is_human() and jeu is not None and getattr(jeu, "policy_enabled", False):
+            options = tuple(candidats)
+            if usage == "repair":
+                return require_option(
+                    jeu.policy.decide(DecisionContext(
+                        kind=DecisionKind.CHOOSE_OBJECT_TO_REPAIR,
+                        actor=self,
+                        game=jeu,
+                        phase="repair_object",
+                        options=options,
+                        metadata={"usage": usage},
+                    )),
+                    options,
+                    decision_name="repair_object",
+                )
+            if usage.startswith("sacrifice"):
+                return require_option(
+                    jeu.policy.decide(DecisionContext(
+                        kind=DecisionKind.CHOOSE_OBJECT_TO_SACRIFICE,
+                        actor=self,
+                        game=jeu,
+                        phase=f"object_{usage}",
+                        options=options,
+                        metadata={
+                            "usage": usage,
+                            "reason": "limon" if "limon" in usage else usage,
+                        },
+                    )),
+                    options,
+                    decision_name=usage,
+                )
         strategy = self.ia_strategy()
         if usage == "repair":
             if strategy.repair_policy == "strategic":

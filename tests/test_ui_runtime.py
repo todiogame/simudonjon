@@ -38,6 +38,7 @@ from simu import (
 from ui_runtime import (
     GameSession,
     HEURISTIC_STRATEGY_NAME,
+    ISMCTS_PROF_STRATEGY_NAME,
     TEACHER_STRATEGY_NAME,
     fresh_item_pool,
     normalize_bot_strategies,
@@ -88,6 +89,23 @@ def test_ui_sessions_finish_with_default_human_choices(mode, extra):
     assert decisions > 0
     assert snap["lastEventId"] > 0
     assert len(snap["players"]) in {0, 3}
+
+
+def test_ui_session_can_play_against_ismcts_prof():
+    session = GameSession({
+        "mode": "random",
+        "playerName": "Tester",
+        "playerCount": 3,
+        "seed": 123,
+        "botDelayMs": 0,
+        "ismctsIterations": 5,
+        "botStrategies": [ISMCTS_PROF_STRATEGY_NAME, HEURISTIC_STRATEGY_NAME],
+    })
+    session.start()
+
+    drive_defaults(session, timeout=30)
+
+    assert any(event["kind"] == "bot_thinking" for event in session.events)
 
 
 def test_bot_strategies_are_configured_per_ai_player():
