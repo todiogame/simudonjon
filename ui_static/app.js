@@ -13,6 +13,7 @@ const debugMode = new URLSearchParams(window.location.search).has("debug");
 const perfSamples = [];
 const playerRenderKeys = new Map();
 const handledFxEventIds = new Set();
+const recentItemFxKeys = new Map();
 const botThinking = new Map();
 let thinkingRevision = 0;
 const renderKeys = {
@@ -26,6 +27,13 @@ const renderKeys = {
 const TEACHER_MARK = "\u{1F9D1}\u200D\u{1F3EB}";
 const ACTIVE_MARK = "\u26A1";
 const STATIC_ASSETS = "/static/assets";
+const ITEM_FX_LANES = [
+  { x: 118, y: 0 },
+  { x: 250, y: 18 },
+  { x: -118, y: 18 },
+  { x: 382, y: 38 },
+  { x: -250, y: 38 },
+];
 const AUDIO_FILES = {
   draw: `${STATIC_ASSETS}/sounds/draw.wav`,
   execute: `${STATIC_ASSETS}/sounds/execute.mp3`,
@@ -35,6 +43,7 @@ const AUDIO_FILES = {
 };
 const audioBank = {};
 let audioReady = false;
+let itemFxLane = 0;
 
 const $ = (id) => document.getElementById(id);
 
@@ -99,6 +108,8 @@ function resetRenderKeys() {
   botThinking.clear();
   thinkingRevision += 1;
   handledFxEventIds.clear();
+  recentItemFxKeys.clear();
+  itemFxLane = 0;
   renderedDecisionId = null;
 }
 
@@ -133,7 +144,9 @@ function updateBotThinking(events) {
 }
 
 function isLogEvent(event) {
-  return event.kind !== "bot_thinking" && event.kind !== "bot_thinking_progress";
+  return event.kind !== "bot_thinking"
+    && event.kind !== "bot_thinking_progress"
+    && event.kind !== "bot_item_fx";
 }
 
 function renderIfChanged(key, value, callback) {
@@ -151,6 +164,14 @@ function cleanText(value) {
     .replaceAll("</b>", "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function searchKey(value) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function escapeHtml(value) {
@@ -276,6 +297,96 @@ function showDiceRoll(value) {
   setTimeout(() => dice.remove(), 1100);
 }
 
+function showBotItemEffect(payload) {
+  const layer = $("fxLayer");
+  if (!layer) return;
+  const item = payload?.item || {};
+  const name = cleanText(item.name || payload?.itemName || "Item");
+  const player = cleanText(payload?.player || "");
+  const broken = payload?.effect === "break";
+  const fxKey = `${searchKey(player)}:${searchKey(name)}:${broken ? "break" : "use"}`;
+  const now = Date.now();
+  if (recentItemFxKeys.has(fxKey) && now - recentItemFxKeys.get(fxKey) < 1200) {
+    return;
+  }
+  recentItemFxKeys.set(fxKey, now);
+  for (const [key, seenAt] of recentItemFxKeys.entries()) {
+    if (now - seenAt > 3000) recentItemFxKeys.delete(key);
+  }
+  const fx = document.createElement("div");
+  fx.className = `item-use-fx${broken ? " item-break-fx" : ""}`;
+  const lane = ITEM_FX_LANES[itemFxLane % ITEM_FX_LANES.length];
+  itemFxLane += 1;
+  fx.style.setProperty("--item-fx-x", `${lane.x}px`);
+  fx.style.setProperty("--item-fx-y", `${lane.y}px`);
+
+  const src = String(item.image || "").trim();
+  if (src) {
+    const image = document.createElement("img");
+    image.src = src;
+    image.alt = name;
+    fx.appendChild(image);
+  } else {
+    const fallback = document.createElement("div");
+    fallback.className = "item-fx-fallback";
+    fallback.textContent = (name[0] || "?").toUpperCase();
+    fx.appendChild(fallback);
+  }
+
+  const label = document.createElement("div");
+  label.className = "item-fx-label";
+  label.textContent = broken ? `${name} breaks` : name;
+  fx.appendChild(label);
+
+  if (player) {
+    const playerLabel = document.createElement("div");
+    playerLabel.className = "item-fx-player";
+    playerLabel.textContent = player;
+    fx.appendChild(playerLabel);
+  }
+
+  layer.appendChild(fx);
+  setTimeout(() => fx.remove(), broken ? 1900 : 1700);
+}
+
+function botItemEffectFromLog(event) {
+  if (event.kind !== "log" || !snapshot?.players?.length) return null;
+  const textKey = searchKey(event.text || "");
+  if (!textKey) return null;
+  if (["nutilisepas", "nepeutpas", "impossible"].some((marker) => textKey.includes(marker))) {
+    return null;
+  }
+
+  const useMarkers = ["utilise", "active", "avec", "gracea", "execute", "defausse", "remet", "repare", "vole", "absorbe"];
+  const breakMarkers = ["brise", "brisee", "casse", "cassee", "detruit", "detruite"];
+  const hasUseMarker = useMarkers.some((marker) => textKey.includes(marker));
+  const hasBreakMarker = breakMarkers.some((marker) => textKey.includes(marker));
+
+  for (const player of snapshot.players || []) {
+    if (player.control === "human") continue;
+    const playerMentioned = textKey.includes(searchKey(player.name));
+    for (const item of player.items || []) {
+      const itemNameKey = searchKey(item.name);
+      if (!itemNameKey || !textKey.includes(itemNameKey)) continue;
+      if (playerMentioned && hasUseMarker) {
+        return {
+          player: player.name,
+          item,
+          effect: item.intact === false || hasBreakMarker ? "break" : "use",
+        };
+      }
+      if (hasBreakMarker) {
+        return {
+          player: player.name,
+          item,
+          effect: "break",
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function showHitEffect() {
   const layer = $("fxLayer");
   if (!layer) return;
@@ -310,6 +421,10 @@ function handleEventEffects(events) {
       flashCurrentCard();
     } else if (event.kind === "draft_pick" || event.kind === "human_decision") {
       playSound("playcard");
+    } else if (event.kind === "bot_item_fx") {
+      const broken = event.payload?.effect === "break";
+      playSound(broken ? "execute" : "playcard");
+      showBotItemEffect(event.payload || {});
     }
 
     const rollMatch = text.match(/\broll un ([1-6])\b/i);
@@ -321,6 +436,12 @@ function handleEventEffects(events) {
     if (event.kind === "log" && /ex[eéèÃ©]cut|execute|mort de/i.test(lowered)) {
       playSound("execute");
       showHitEffect();
+    }
+
+    const logItemFx = botItemEffectFromLog(event);
+    if (logItemFx) {
+      playSound(logItemFx.effect === "break" ? "execute" : "playcard");
+      showBotItemEffect(logItemFx);
     }
   }
   if (handledFxEventIds.size > 800) {

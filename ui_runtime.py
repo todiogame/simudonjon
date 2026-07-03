@@ -209,6 +209,130 @@ class GameSession:
         self.error = None
         self.thread = None
         self.cancelled = False
+        self._bot_item_fx_state = None
+        self._pending_bot_item_uses = {}
+
+    def _append_event_row(self, kind, text="", payload=None, basic=False):
+        row = {
+            "id": self.next_event_id,
+            "kind": kind,
+            "text": str(text),
+            "payload": _json_safe(payload or {}),
+            "basic": bool(basic),
+            "ts": time.time(),
+        }
+        self.next_event_id += 1
+        self.events.append(row)
+        return row
+
+    def _trim_events(self):
+        if len(self.events) > 2000:
+            self.events = self.events[-2000:]
+
+    def _bot_item_snapshots(self):
+        snapshots = {}
+        for player in self.players:
+            if getattr(player, "control", "ai") == "human":
+                continue
+            player_name = getattr(player, "nom", "")
+            for item in getattr(player, "objets", []):
+                payload = serialize_object(item)
+                snapshots[payload["itemId"]] = {
+                    "player": player_name,
+                    "item": payload,
+                }
+        return snapshots
+
+    def _log_mentions_bot_item_use(self, text, player_name, item_name):
+        text_key = _cle_nom(text)
+        item_key = _cle_nom(item_name)
+        if not item_key or item_key not in text_key:
+            return False
+        if any(marker in text_key for marker in ("nutilisepas", "nepeutpas", "impossible")):
+            return False
+
+        player_key = _cle_nom(player_name)
+        use_markers = (
+            "utilise",
+            "active",
+            "avec",
+            "gracea",
+            "execute",
+            "defausse",
+            "remet",
+            "repare",
+            "vole",
+            "absorbe",
+        )
+        if player_key and player_key in text_key:
+            return any(marker in text_key for marker in use_markers)
+        return text_key.startswith(f"utilise{item_key}") or text_key.startswith(f"active{item_key}")
+
+    def _emit_bot_item_fx_row(self, player_name, item_payload, effect):
+        action = "breaks" if effect == "break" else "uses"
+        self._append_event_row(
+            "bot_item_fx",
+            f"{player_name} {action} {item_payload.get('name', 'item')}.",
+            {
+                "player": player_name,
+                "item": item_payload,
+                "effect": effect,
+            },
+            basic=False,
+        )
+
+    def _flush_pending_bot_item_uses(self, force=False):
+        for item_id, data in list(self._pending_bot_item_uses.items()):
+            if not force and data.get("age", 0) < 2:
+                continue
+            self._emit_bot_item_fx_row(data["player"], data["item"], "use")
+            self._pending_bot_item_uses.pop(item_id, None)
+
+    def _sync_bot_item_fx(self, kind, text=""):
+        current = self._bot_item_snapshots()
+        previous = self._bot_item_fx_state
+        if previous is None:
+            self._bot_item_fx_state = current
+            return
+
+        emitted = set()
+        text_key = _cle_nom(text)
+        break_markers = ("brise", "brisee", "casse", "cassee", "detruit", "detruite")
+        for data in self._pending_bot_item_uses.values():
+            data["age"] = data.get("age", 0) + 1
+
+        for item_id, old in previous.items():
+            old_item = old["item"]
+            new = current.get(item_id)
+            if not old_item.get("intact"):
+                continue
+            if new and not new["item"].get("intact"):
+                self._emit_bot_item_fx_row(new["player"], new["item"], "break")
+                emitted.add(item_id)
+                self._pending_bot_item_uses.pop(item_id, None)
+            elif (
+                new is None
+                and _cle_nom(old_item.get("name", "")) in text_key
+                and any(marker in text_key for marker in break_markers)
+            ):
+                self._emit_bot_item_fx_row(old["player"], old_item, "break")
+                emitted.add(item_id)
+                self._pending_bot_item_uses.pop(item_id, None)
+
+        self._flush_pending_bot_item_uses()
+
+        if kind == "log":
+            for item_id, data in current.items():
+                if item_id in emitted:
+                    continue
+                if self._log_mentions_bot_item_use(text, data["player"], data["item"].get("name", "")):
+                    self._pending_bot_item_uses[item_id] = {
+                        "player": data["player"],
+                        "item": data["item"],
+                        "age": 0,
+                    }
+
+        self._bot_item_fx_state = current
 
     def start(self):
         self.status = "running"
@@ -239,24 +363,25 @@ class GameSession:
                 self.current_card = payload.get("card")
             if kind == "current_card":
                 self.current_card = payload.get("card")
+                self._sync_bot_item_fx(kind)
+                self._trim_events()
                 self.condition.notify_all()
                 return
             if kind == "dungeon_state":
                 self.dungeon_state = payload
+                self._sync_bot_item_fx(kind)
+                self._trim_events()
                 self.condition.notify_all()
                 return
-            row = {
-                "id": self.next_event_id,
-                "kind": kind,
-                "text": str(event.get("text", "")),
-                "payload": payload,
-                "basic": bool(event.get("basic", False)),
-                "ts": time.time(),
-            }
-            self.next_event_id += 1
-            self.events.append(row)
-            if len(self.events) > 2000:
-                self.events = self.events[-2000:]
+            row = self._append_event_row(
+                kind,
+                str(event.get("text", "")),
+                payload,
+                bool(event.get("basic", False)),
+            )
+            if kind != "bot_item_fx":
+                self._sync_bot_item_fx(kind, row["text"])
+            self._trim_events()
             self.condition.notify_all()
 
     def set_phase(self, phase, round_label=""):
@@ -268,6 +393,8 @@ class GameSession:
     def set_players(self, players):
         with self.lock:
             self.players = list(players)
+            self._bot_item_fx_state = self._bot_item_snapshots()
+            self._pending_bot_item_uses.clear()
             self.condition.notify_all()
 
     def set_draft_state(self, state):
@@ -381,6 +508,8 @@ class GameSession:
 
     def finish(self, result):
         with self.lock:
+            self._flush_pending_bot_item_uses(force=True)
+            self._trim_events()
             self.result = _json_safe(result)
             self.status = "finished"
             self.phase = "finished"

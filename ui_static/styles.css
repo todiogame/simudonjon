@@ -1205,6 +1205,91 @@ button.default .button-desc {
   animation: dice-pop 1050ms ease-out forwards;
 }
 
+.item-use-fx {
+  position: absolute;
+  left: clamp(76px, calc(50% + var(--item-fx-x, 118px)), calc(100vw - 76px));
+  top: calc(22% + var(--item-fx-y, 0px));
+  z-index: 2;
+  width: 118px;
+  min-height: 132px;
+  display: grid;
+  grid-template-rows: 82px auto auto;
+  align-items: center;
+  justify-items: center;
+  gap: 3px;
+  padding: 7px;
+  border: 4px ridge #f7e8b2;
+  background: #f5ead0;
+  color: #161006;
+  box-shadow: 5px 5px 0 #000;
+  transform: translate(-50%, -50%);
+  animation: item-use-pop 1650ms ease-out forwards;
+}
+
+.item-use-fx img,
+.item-fx-fallback {
+  width: 78px;
+  height: 78px;
+  object-fit: cover;
+  border: 2px solid #1b1208;
+  background: #d8caa9;
+  image-rendering: auto;
+}
+
+.item-fx-fallback {
+  display: grid;
+  place-items: center;
+  font-family: "Arial Black", Arial, sans-serif;
+  font-size: 2.2rem;
+  color: #781000;
+}
+
+.item-fx-label,
+.item-fx-player {
+  max-width: 100%;
+  font-family: Arial, sans-serif;
+  line-height: 1.05;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.item-fx-label {
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.item-fx-player {
+  font-size: 0.65rem;
+  color: #5e160a;
+}
+
+.item-break-fx {
+  border-color: #ffcf54;
+  background: #4b0808;
+  color: #ffe9a8;
+  animation: item-break-pop 1850ms ease-out forwards;
+}
+
+.item-break-fx img,
+.item-break-fx .item-fx-fallback {
+  border-color: #ffcf54;
+  filter: saturate(0.9) contrast(1.2);
+}
+
+.item-break-fx::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-left: 4px solid #fff3b0;
+  transform: rotate(24deg);
+  box-shadow: 10px 8px 0 #260000;
+  pointer-events: none;
+}
+
+.item-break-fx .item-fx-player {
+  color: #ffd87c;
+}
+
 .card-zoom {
   position: fixed;
   inset: 0;
@@ -1304,6 +1389,47 @@ button.default .button-desc {
   100% {
     opacity: 0;
     transform: translate(-50%, -70%) scale(0.95) rotate(0deg);
+  }
+}
+
+@keyframes item-use-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.42) rotate(14deg);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08) rotate(-6deg);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -72%) scale(0.94) rotate(0deg);
+  }
+}
+
+@keyframes item-break-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.38) rotate(-16deg);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12) rotate(9deg);
+  }
+  34% {
+    transform: translate(-50%, -50%) scale(0.98) rotate(-10deg);
+  }
+  58% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04) rotate(5deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -66%) scale(0.54) rotate(22deg);
   }
 }
 

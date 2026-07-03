@@ -1295,6 +1295,42 @@ def test_serialized_items_expose_color_and_description_for_ui():
     assert payload["itemId"] == str(id(item))
 
 
+def test_bot_item_use_emits_delayed_fx_event():
+    session = GameSession({"mode": "random"})
+    item = Objet("Debug Relic", actif=True)
+    bot = Joueur("Bot 1", Perso("Bot Hero", 10), [item], control="ai")
+    session.set_players([bot])
+
+    session.emit({"kind": "log", "text": "Bot 1 utilise Debug Relic pour gagner 1 PV.", "basic": True})
+    assert not [event for event in session.events_after() if event["kind"] == "bot_item_fx"]
+
+    session.emit({"kind": "log", "text": "Bot 1 continue.", "basic": True})
+    session.emit({"kind": "log", "text": "Bot 1 continue encore.", "basic": True})
+
+    fx_events = [event for event in session.events_after() if event["kind"] == "bot_item_fx"]
+    assert len(fx_events) == 1
+    assert fx_events[0]["payload"]["effect"] == "use"
+    assert fx_events[0]["payload"]["player"] == "Bot 1"
+    assert fx_events[0]["payload"]["item"]["name"] == "Debug Relic"
+
+
+def test_bot_item_break_fx_replaces_pending_use_fx():
+    session = GameSession({"mode": "random"})
+    item = Objet("Debug Relic", actif=True)
+    bot = Joueur("Bot 1", Perso("Bot Hero", 10), [item], control="ai")
+    session.set_players([bot])
+
+    session.emit({"kind": "log", "text": "Bot 1 utilise Debug Relic.", "basic": True})
+    item.intact = False
+    session.emit({"kind": "current_card", "payload": {"card": None}})
+
+    fx_events = [event for event in session.events_after() if event["kind"] == "bot_item_fx"]
+    assert len(fx_events) == 1
+    assert fx_events[0]["payload"]["effect"] == "break"
+    assert fx_events[0]["payload"]["player"] == "Bot 1"
+    assert fx_events[0]["payload"]["item"]["name"] == "Debug Relic"
+
+
 def test_human_item_choice_options_hide_zero_pv_and_expose_color():
     item = Objet("Zero PV Test", actif=True, pv_bonus=0, modificateur_de=0)
     item.couleur = 1
