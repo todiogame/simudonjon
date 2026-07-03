@@ -32,16 +32,55 @@ from fast_engine import clone_state
 from simu import ordonnanceur
 
 
-def fast_ismcts_decide(snapshot, within_prefix, searcher_seat, seed, n_iters, c=1.4, p_heur=0.75):
+def fast_ismcts_decide(snapshot, within_prefix, searcher_seat, seed, n_iters, c=1.4, p_heur=0.75,
+                       progress=None, deadline=None, return_stats=False):
     """Decide the current searcher decision via n_iters clone+resume re-simulations from a
     turn-boundary snapshot. `within_prefix` = the searcher's tree keys already chosen THIS turn.
     iter_seed scheme matches real_search exactly so the two searches are identical."""
     clone0, turn_index, rng_state = snapshot
     root = rs.Node()
+    start = time.perf_counter()
+    stats = {
+        "iterationsRequested": n_iters,
+        "iterationsCompleted": 0,
+        "iterationsFailed": 0,
+        "lastIteration": 0,
+        "lastStage": "start",
+        "elapsedMs": 0,
+        "timedOut": False,
+        "rootEdges": 0,
+    }
+    progress_every = 1 if n_iters <= 20 else max(10, n_iters // 10)
+
+    def tick(stage, force=False, extra=None):
+        stats["lastStage"] = stage
+        stats["elapsedMs"] = int((time.perf_counter() - start) * 1000)
+        stats["rootEdges"] = len(root.edges)
+        if progress is None:
+            return
+        first_resume = stage == "resume" and stats["lastIteration"] == 1
+        if (
+            force
+            or first_resume
+            or stats["iterationsCompleted"] == n_iters
+            or (stats["iterationsCompleted"] > 0 and stats["iterationsCompleted"] % progress_every == 0)
+        ):
+            payload = dict(stats)
+            if extra:
+                payload.update(extra)
+            progress(payload)
+
+    tick("start", force=True)
     _gc_on = gc.isenabled()
     gc.disable()                                       # A4: per-iter clones churn the allocator;
     try:                                               # skip GC scans, free the batch at the end
         for it in range(n_iters):
+            if deadline is not None and time.perf_counter() >= deadline:
+                stats["timedOut"] = True
+                tick("timeout", force=True)
+                break
+            stats["lastIteration"] = it + 1
+            tick("clone")
             random.setstate(rng_state[0])              # turn-start RNG: within-turn replay reproduces live
             np.random.set_state(rng_state[1])
             clone = clone_state(clone0)
@@ -49,35 +88,49 @@ def fast_ismcts_decide(snapshot, within_prefix, searcher_seat, seed, n_iters, c=
             pol = rs._ISMCTSPolicy(searcher, within_prefix, root,
                                    iter_seed=(seed * 1000003 + it + 1), c=c, p_heur=p_heur)
             try:
+                tick("resume")
                 winner, _ = ordonnanceur(None, None, None, log=False, policy=pol,
                                          resume_state=clone, resume_index=turn_index)
             except Exception:
+                stats["iterationsFailed"] += 1
+                tick("iteration_failed", extra={"errorIteration": it + 1})
                 continue
+            stats["iterationsCompleted"] += 1
             outcome = 1.0 if winner is searcher else (0.0 if winner is None else -1.0)
             for nd, k in pol.path:
                 nd.edges[k][0] += 1
                 nd.edges[k][1] += outcome
+            tick("backup")
     finally:
         if _gc_on:
             gc.enable()
         gc.collect()
+    tick("done", force=True)
     if not root.edges:
+        if return_stats:
+            return None, {}, stats
         return None, {}
     best = max(root.edges, key=lambda k: root.edges[k][0])
-    return best, {k: e[0] for k, e in root.edges.items()}
+    visits = {k: e[0] for k, e in root.edges.items()}
+    if return_stats:
+        return best, visits, stats
+    return best, visits
 
 
 class _LivePolicy:
     """Drives the live game: searcher seat = clone-based ISMCTS, other seat = heuristic.
     Snapshots at each turn start; records the searcher's within-turn keys + (ctx, visits)."""
 
-    def __init__(self, searcher_seat, seed, n_iters, c=1.4, p_heur=0.75):
+    def __init__(self, searcher_seat, seed, n_iters, c=1.4, p_heur=0.75, progress=None, max_seconds=None):
         self.seat, self.seed, self.n_iters, self.c, self.p_heur = searcher_seat, seed, n_iters, c, p_heur
         self.heur = DefaultDungeonPolicy()
         self.searcher = None
         self.snapshot = None
         self.within = []
         self.records = []
+        self.progress = progress
+        self.max_seconds = max_seconds
+        self.last_stats = None
 
     def on_turn_start(self, Jeu, index):
         if self.searcher is None:
@@ -89,8 +142,19 @@ class _LivePolicy:
         if ctx.actor is not self.searcher or ctx.kind.name not in rs.TREE_KINDS or not rs.legal_keys(ctx):
             return self.heur.decide(ctx)
         rs_state, np_state = random.getstate(), np.random.get_state()      # preserve the live RNG
-        best, visits = fast_ismcts_decide(self.snapshot, list(self.within), self.seat,
-                                          self.seed, self.n_iters, self.c, self.p_heur)
+        deadline = time.perf_counter() + self.max_seconds if self.max_seconds else None
+        best, visits, self.last_stats = fast_ismcts_decide(
+            self.snapshot,
+            list(self.within),
+            self.seat,
+            self.seed,
+            self.n_iters,
+            self.c,
+            self.p_heur,
+            progress=self.progress,
+            deadline=deadline,
+            return_stats=True,
+        )
         random.setstate(rs_state)
         np.random.set_state(np_state)
         if best is None:

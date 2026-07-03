@@ -462,10 +462,47 @@ class UiLiveISMCTSPolicy:
         self.session = session
         self.seat = seat
         self.n_iters = n_iters
-        self._live = fast_search._LivePolicy(seat, seed, n_iters)
+        self.max_seconds = 20
+        try:
+            self.max_seconds = max(1, int(session.config.get("ismctsMaxSeconds") or self.max_seconds))
+        except (TypeError, ValueError):
+            pass
+        self._active_context = None
+        self._live = fast_search._LivePolicy(
+            seat,
+            seed,
+            n_iters,
+            progress=self._emit_progress,
+            max_seconds=self.max_seconds,
+        )
 
     def on_turn_start(self, game, index):
         self._live.on_turn_start(game, index)
+
+    def _emit_progress(self, stats):
+        context = self._active_context
+        player = context.actor.nom if context is not None else f"Bot {self.seat}"
+        decision = context.kind.name if context is not None else "unknown"
+        done = stats.get("iterationsCompleted", 0)
+        requested = stats.get("iterationsRequested", self.n_iters)
+        failed = stats.get("iterationsFailed", 0)
+        elapsed = stats.get("elapsedMs", 0)
+        stage = stats.get("lastStage", "search")
+        timeout = stats.get("timedOut", False)
+        suffix = " timeout" if timeout else ""
+        self.session.emit({
+            "kind": "bot_thinking_progress",
+            "text": (
+                f"{player}: ISMCTS {done}/{requested} "
+                f"({stage}, {elapsed}ms, failed {failed}){suffix}."
+            ),
+            "payload": {
+                "player": player,
+                "decision": decision,
+                **stats,
+            },
+            "basic": True,
+        })
 
     def decide(self, context):
         import real_search as rs
@@ -484,13 +521,19 @@ class UiLiveISMCTSPolicy:
                     "player": context.actor.nom,
                     "decision": context.kind.name,
                     "iterations": self.n_iters,
+                    "maxSeconds": self.max_seconds,
                 },
                 "basic": True,
             })
             start = time.perf_counter()
-            action = self._live.decide(context)
+            self._active_context = context
+            try:
+                action = self._live.decide(context)
+            finally:
+                self._active_context = None
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             label = getattr(action, "nom", None) or getattr(action, "titre", None) or str(action)
+            stats = self._live.last_stats or {}
             self.session.emit({
                 "kind": "bot_decision",
                 "text": f"{context.actor.nom}: {label}",
@@ -499,6 +542,7 @@ class UiLiveISMCTSPolicy:
                     "option": label,
                     "elapsedMs": elapsed_ms,
                     "iterations": self.n_iters,
+                    "search": stats,
                 },
                 "basic": True,
             })

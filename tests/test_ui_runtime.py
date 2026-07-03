@@ -99,6 +99,7 @@ def test_ui_session_can_play_against_ismcts_prof():
         "seed": 123,
         "botDelayMs": 0,
         "ismctsIterations": 5,
+        "ismctsMaxSeconds": 5,
         "botStrategies": [ISMCTS_PROF_STRATEGY_NAME, HEURISTIC_STRATEGY_NAME],
     })
     session.start()
@@ -106,6 +107,7 @@ def test_ui_session_can_play_against_ismcts_prof():
     drive_defaults(session, timeout=30)
 
     assert any(event["kind"] == "bot_thinking" for event in session.events)
+    assert any(event["kind"] == "bot_thinking_progress" for event in session.events)
 
 
 def test_bot_strategies_are_configured_per_ai_player():

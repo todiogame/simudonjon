@@ -45,6 +45,7 @@ class GameCreate(BaseModel):
     seed: int | None = None
     botDelayMs: int = 800
     ismctsIterations: int | None = None
+    ismctsMaxSeconds: int | None = None
     partyRounds: int | None = None
     botStrategies: list[str] | None = None
 

@@ -764,6 +764,7 @@ async function createGame(event) {
     seed: seedValue ? Number(seedValue) : null,
     botDelayMs: Number($("botDelay").value || 0),
     ismctsIterations: Number($("ismctsIterations").value || 200),
+    ismctsMaxSeconds: Number($("ismctsMaxSeconds").value || 20),
     botStrategies: botStrategiesForGame(),
   };
   const response = await fetch("/api/games", {

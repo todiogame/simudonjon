@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SimuDonjon</title>
-    <link rel="stylesheet" href="/static/styles.css?v=ui-ismcts-2-20260703" />
+    <link rel="stylesheet" href="/static/styles.css?v=ui-ismcts-debug-20260703" />
   </head>
   <body>
     <main class="app-shell">
@@ -44,6 +44,10 @@
           <label>
             ISMCTS iterations
             <input id="ismctsIterations" type="number" min="1" step="10" value="200" />
+          </label>
+          <label>
+            ISMCTS max sec
+            <input id="ismctsMaxSeconds" type="number" min="1" step="1" value="20" />
           </label>
           <label class="bot-ai-control" data-bot-slot="1">
             Bot 1 AI
