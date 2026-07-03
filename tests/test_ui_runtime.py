@@ -20,13 +20,19 @@ from objets import (
     CoeurDeTarasque,
     CoeurDeGolem,
     CoquillageMagique,
+    CorneDAbordage,
+    CoursierVolant,
     Egide,
     EnclumeInstable,
+    EspritDuDonjon,
     EplucheDonjon,
+    EventailMaudit,
     FilDuDestin,
     FromagePuant,
     FruitDuDestin,
+    GantsDeGaia,
     GrimoireInconnu,
+    Imprimante,
     JournalDuFutur,
     LameDraconique,
     LinceulDeResurrection,
@@ -36,13 +42,18 @@ from objets import (
     OiseauDeMauvaisAugure,
     OsseletsDeResurrection,
     ParcheminDXP,
+    PelleDuFossoyeur,
+    PierreDePressentiment,
     PistoletLaser,
     PotionDeGlace,
     PotionAuTheVert,
     PorteBoulesDuPonceur,
     RouletteInfernale,
+    SacDeConstantinople,
     ShotDAdrenaline,
     SlipDeLaResurgence,
+    TaserManuel,
+    DisqueDeVishnu,
     SANS_HOOK_OBJET,
 )
 from simu import (
@@ -572,6 +583,144 @@ def test_green_tea_potion_manual_action_sets_skip_turn_state():
     assert joueur.pv_total == 7
     assert joueur.passe_son_tour is True
     assert potion.intact is False
+
+
+def test_additional_start_turn_items_are_exposed_as_clickable_human_actions():
+    items = [
+        GantsDeGaia(),
+        EnclumeInstable(),
+        CorneDAbordage(),
+        EspritDuDonjon(),
+        SacDeConstantinople(),
+        Imprimante(),
+        BouleDeCristal(),
+        PierreDePressentiment(),
+        EventailMaudit(),
+    ]
+    broken_a = Objet("Broken A")
+    broken_a.intact = False
+    broken_b = Objet("Broken B")
+    broken_b.intact = False
+    copy_model = Objet("Copy Model")
+    joueur = Joueur("Tester", Perso("Tester Hero", 10), items + [broken_a, broken_b, copy_model], control="human")
+    joueur.pv_total = 5
+    opponent_broken = Objet("Opponent Broken")
+    opponent_broken.intact = False
+    opponent = Joueur("Other", Perso("Other Hero", 10), [opponent_broken])
+    dragon_a = CarteMonstre("Dragon A", 3)
+    dragon_a.types = ["Dragon"]
+    dragon_b = CarteMonstre("Dragon B", 4)
+    dragon_b.types = ["Dragon"]
+    opponent.pile_monstres_vaincus = [dragon_a, CarteMonstre("Other Monster", 2)]
+
+    class Jeu:
+        joueurs = [joueur, opponent]
+        defausse = [dragon_b]
+        donjon = DonjonDeck()
+        objets_dispo = [Objet("Spare")]
+        traquenard_actif = False
+        manual_turn_actions_used = set()
+
+    Jeu.donjon.ordre = list(range(4))
+    Jeu.donjon.nb_cartes = 4
+    Jeu.donjon.index = 0
+    options = _human_turn_action_options(joueur, Jeu, [])
+
+    assert {
+        "Gants de Gaïa",
+        "Enclume instable",
+        "Corne d'abordage",
+        "Esprit du Donjon",
+        "Sac de Constantinople",
+        "Imprimante",
+        "Boule de cristal",
+        "Pierre de Pressentiment",
+        "Eventail Maudit",
+    } <= {option["label"] for option in options}
+    assert all(option["manualAction"] is True for option in options)
+
+
+def test_additional_start_turn_items_no_longer_auto_trigger_for_human():
+    human_item = PierreDePressentiment()
+    human = Joueur("Human", Perso("Tester Hero", 10), [human_item], control="human")
+    human.pv_total = 5
+    bot_item = PierreDePressentiment()
+    bot = Joueur("Bot", Perso("Tester Hero", 10), [bot_item], control="ai")
+    bot.pv_total = 5
+
+    class Jeu:
+        joueurs = [human, bot]
+        traquenard_actif = False
+        manual_turn_actions_used = set()
+        executions_gratuites = []
+
+    _run_debut_tour_hooks(human, Jeu, [], SANS_HOOK_PERSO["debut_tour"], SANS_HOOK_OBJET["debut_tour"])
+    _run_debut_tour_hooks(bot, Jeu, [], SANS_HOOK_PERSO["debut_tour"], SANS_HOOK_OBJET["debut_tour"])
+
+    assert human.pv_total == 5
+    assert human_item.intact is True
+    assert bot.pv_total == 8
+    assert bot_item.intact is False
+
+
+def test_additional_end_turn_items_are_exposed_as_clickable_human_actions():
+    pelle = PelleDuFossoyeur()
+    taser = TaserManuel()
+    coursier = CoursierVolant()
+    disque = DisqueDeVishnu()
+    useless = Objet("Useless")
+    useless.priorite = 10
+    joueur = Joueur("Tester", Perso("Tester Hero", 10), [pelle, taser, coursier, disque, useless], control="human")
+    taser_card = CarteMonstre("Taser Target", 2)
+    disque_card = CarteMonstre("Disque Target", 3)
+    taser.carte_a_defausser = taser_card
+    disque.carte_defaussee = disque_card
+    joueur.pile_monstres_vaincus = [taser_card]
+
+    class Jeu:
+        defausse = [
+            CarteMonstre("Discard A", 1),
+            CarteMonstre("Discard B", 2),
+            CarteMonstre("Discard C", 3),
+            disque_card,
+        ]
+        objets_dispo = [Objet("Spare")]
+        manual_turn_actions_used = set()
+
+    options = _human_turn_action_options(joueur, Jeu, [])
+
+    assert {
+        "Pelle du Fossoyeur",
+        "Taser manuel",
+        "Coursier volant",
+        "Disque de Vishnu",
+    } <= {option["label"] for option in options}
+    assert all(option["manualAction"] is True for option in options)
+
+
+def test_additional_end_turn_items_no_longer_auto_trigger_for_human():
+    human_item = PelleDuFossoyeur()
+    human = Joueur("Human", Perso("Tester Hero", 10), [human_item], control="human")
+    bot_item = PelleDuFossoyeur()
+    bot = Joueur("Bot", Perso("Tester Hero", 10), [bot_item], control="ai")
+
+    class Jeu:
+        joueurs = [human, bot]
+        defausse = [
+            CarteMonstre("Discard A", 1),
+            CarteMonstre("Discard B", 2),
+            CarteMonstre("Discard C", 3),
+            CarteMonstre("Discard D", 4),
+        ]
+        manual_turn_actions_used = set()
+
+    _run_fin_tour_hooks(human, Jeu, [], SANS_HOOK_PERSO["fin_tour"], SANS_HOOK_OBJET["fin_tour"])
+    assert human_item.intact is True
+    assert human.pile_monstres_vaincus == []
+
+    _run_fin_tour_hooks(bot, Jeu, [], SANS_HOOK_PERSO["fin_tour"], SANS_HOOK_OBJET["fin_tour"])
+    assert bot_item.intact is False
+    assert len(bot.pile_monstres_vaincus) == 4
 
 
 def test_current_card_update_can_refresh_resolved_x_power_without_log_event():

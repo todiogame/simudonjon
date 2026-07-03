@@ -978,7 +978,7 @@ class GrimoireInconnu(Objet):
         return "Lancer un de: sur 6, piocher un objet."
     def apply_manual_turn(self, joueur, Jeu, log_details):
         self.debut_tour(joueur, Jeu, log_details)
-    
+
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
             jet_grimoire = joueur.rollDice(Jeu, log_details, 6)
@@ -998,9 +998,28 @@ class GantsDeCombat(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class GantsDeGaia(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Gants de Gaïa", True)
-    
+
+    def _peut_activer(self, joueur):
+        objets_brises = [obj for obj in joueur.objets if not obj.intact]
+        objets_actifs_intacts = [obj for obj in joueur.objets if obj.actif and obj.intact]
+        return (
+            len(objets_brises) >= 2
+            or (len(objets_brises) == 1 and len(objets_actifs_intacts) == 1 and objets_actifs_intacts[0] == self)
+        )
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and self._peut_activer(joueur)
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Defausser jusqu'a 2 objets brises et piocher autant d'objets."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
+
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact:
             objets_brisés = [obj for obj in joueur.objets if not obj.intact]
@@ -1120,6 +1139,8 @@ class BourseGarnie(Objet):
         self.scoreChange(1,joueur,log_details)
                 
 class EnclumeInstable(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Enclume instable", True)
 
@@ -1180,6 +1201,15 @@ class EnclumeInstable(Objet):
                 objet_vole.repare()
                 log_details.append(f"{joueur.nom} utilise {self.nom} pour voler et réparer {objet_vole.nom} de {ancien_proprietaire.nom}")
                 self.destroy(joueur, Jeu, log_details)
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and bool(self._objets_brises_volables(joueur, Jeu))
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Voler et reparer un objet brise d'un autre joueur dans le Donjon."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
 
 class CoffreAnime(Objet):
     def __init__(self):
@@ -1419,6 +1449,8 @@ class SeringueDuDocteurFou(Objet):
             self.perdPV(1, joueur, log_details)
             
 class CorneDAbordage(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Corne d'abordage", True)
 
@@ -1439,6 +1471,16 @@ class CorneDAbordage(Objet):
             autres_joueurs_dans_le_dj = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
             if all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres_joueurs_dans_le_dj) and joueur.pv_total > 2:
                 self._activer_corne(joueur, Jeu, log_details)
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        autres = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
+        return self.intact and joueur.pv_total > 2 and all(autre_joueur.pile_monstres_vaincus for autre_joueur in autres)
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Perdre 2 PV et voler un monstre vaincu a chaque autre joueur dans le Donjon."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
 
     def fuite_definitive_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
         if self.intact and joueur_proprietaire == joueur:
@@ -1485,6 +1527,8 @@ class DeDuTricheur(Objet):
             return jet + 1
 
 class EspritDuDonjon(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Esprit du Donjon", True)
 
@@ -1507,8 +1551,18 @@ class EspritDuDonjon(Objet):
                         log_details.append(f"{autre_joueur.nom} a remis {monstre_remis.titre} dans le Donjon.")
                     else:
                         log_details.append(f"{autre_joueur.nom} n'a rien a remettre dans le Donjon.")   
-                Jeu.donjon.remelange()                 
+                Jeu.donjon.remelange()
                 self.destroy(joueur, Jeu, log_details)
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        autres = [autre_joueur for autre_joueur in Jeu.joueurs if autre_joueur != joueur and autre_joueur.dans_le_dj]
+        return self.intact and all(len(autre_joueur.pile_monstres_vaincus) >= 2 for autre_joueur in autres)
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Remettre deux monstres vaincus de chaque autre joueur dans le Donjon, puis melanger."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
 
 class SabreMecanique(Objet):
     def __init__(self):
@@ -2161,6 +2215,8 @@ class DeMaudit(Objet):
             log_details.append(f"rate !")
 
 class PelleDuFossoyeur(Objet):
+    manual_turn_hook = "fin_tour"
+
     def __init__(self):
         super().__init__("Pelle du Fossoyeur", True)
 
@@ -2208,6 +2264,16 @@ class PelleDuFossoyeur(Objet):
 
         if self.intact and len(monstres_defausse) >= 4:
             self._activer_pelle(joueur, Jeu, log_details)
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        monstres_defausse = [c for c in Jeu.defausse if hasattr(c, 'types') and not getattr(c, 'event', False)]
+        return self.intact and len(monstres_defausse) >= 4
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Recuperer jusqu'a 4 monstres depuis la defausse."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.fin_tour(joueur, Jeu, log_details)
 
     # Trigger 2: Fuite définitive
     def fuite_definitive_effet(self, joueur_proprietaire, joueur, objet, Jeu, log_details):
@@ -2577,6 +2643,7 @@ class BouillonDAmes(Objet):
          
 class SacDeConstantinople(Objet):
     non_combattant = True  # utile seulement s'il y a des Dragons a voler: ne retarde pas la fuite
+    manual_turn_hook = "debut_tour"
 
     def __init__(self):
         super().__init__("Sac de Constantinople", True)
@@ -2624,6 +2691,15 @@ class SacDeConstantinople(Objet):
         # Activation seulement s'il y a au moins 2 dragons a recuperer (autres joueurs + defausse)
         if self.intact and self._dragons_volables(joueur, Jeu) >= 2:
             self._activer_sac(joueur, Jeu, log_details)
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and self._dragons_volables(joueur, Jeu) >= 2
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Voler les Dragons disponibles, recuperer ceux de la defausse, puis gagner des PV."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
 
     def worthit(self, joueur, carte, Jeu, log_details):
         # en urgence: les PV gagnes (dragons voles + deja en pile) peuvent sauver
@@ -3021,15 +3097,30 @@ class LinceulDeResurrection(Objet):
             self.destroy(joueur, Jeu, log_details)
 
 class Imprimante(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Imprimante", False)
+
+    def _modeles_disponibles(self, joueur):
+        return [o for o in joueur.objets if o is not self and o.intact and type(o) is not Imprimante]
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return not self.compteur and self.intact and self in joueur.objets and bool(self._modeles_disponibles(joueur))
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Transformer l'Imprimante en copie d'un autre objet intact."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
+
     def debut_tour(self, joueur, Jeu, log_details):
         # avant d'entrer dans le Donjon: devient la copie d'un autre objet (IA: le plus prioritaire)
         # garde-fous: elle peut avoir ete brisee ou defaussee (Gants de Gaia...) avant son premier tour
         if self.compteur or not self.intact or self not in joueur.objets:
             return
         self.compteur = 1
-        autres = [o for o in joueur.objets if o is not self and o.intact and type(o) is not Imprimante]
+        autres = self._modeles_disponibles(joueur)
         if not autres:
             return
         choisir = getattr(joueur, 'choisir_objet', None)
@@ -3245,20 +3336,31 @@ class AnneauDuVent(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class BouleDeCristal(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Boule de cristal", False)
         self.annonce = None
     def debut_partie(self, joueur, Jeu, log_details):
         self.annonce = None
-    def debut_tour(self, joueur, Jeu, log_details):
-        if not self.intact:
-            return
+    def _comptes_puissance(self, Jeu):
         comptes = {}
         donjon = Jeu.donjon
         for idx in donjon.ordre[donjon.index:]:
             c = donjon.cartes[idx]
             if isinstance(c, CarteMonstre) and not c.is_X:
                 comptes[c.puissance_initiale] = comptes.get(c.puissance_initiale, 0) + 1
+        return comptes
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and bool(self._comptes_puissance(Jeu))
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Annoncer une puissance; la prochaine carte de cette puissance pourra etre executee."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
+    def debut_tour(self, joueur, Jeu, log_details):
+        if not self.intact:
+            return
+        comptes = self._comptes_puissance(Jeu)
         if not comptes:
             self.annonce = None
             return
@@ -3454,6 +3556,8 @@ class BagouzeDuParrain(Objet):
             self.scoreChange(2, joueur, log_details)
 
 class TaserManuel(Objet):
+    manual_turn_hook = "fin_tour"
+
     def __init__(self):
         super().__init__("Taser manuel", True)
         self.carte_a_defausser = None
@@ -3474,6 +3578,15 @@ class TaserManuel(Objet):
                 Jeu.defausse.append(self.carte_a_defausser)
                 log_details.append(f"{joueur.nom} défausse {self.carte_a_defausser.titre} ({self.nom}).")
             self.carte_a_defausser = None
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return bool(self.carte_a_defausser and joueur.dans_le_dj and self.carte_a_defausser in joueur.pile_monstres_vaincus)
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Defausser le monstre execute avec Taser manuel."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.fin_tour(joueur, Jeu, log_details)
 
 class BarbecueDuPonceur(Objet):
     def __init__(self):
@@ -3855,11 +3968,19 @@ class CouteauxDeLancer(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class PierreDePressentiment(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Pierre de Pressentiment", True)
         self.en_attente = False
     def debut_partie(self, joueur, Jeu, log_details):
         self.en_attente = False
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and joueur.pv_total <= 5 and not Jeu.traquenard_actif
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 3 PV et executer gratuitement le prochain monstre pioche."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         # utilisation avant de piocher: 3 PV, et le prochain monstre pioche est execute
         if self.intact and joueur.pv_total <= 5 and not Jeu.traquenard_actif:
@@ -3887,12 +4008,24 @@ class ToupieDuChaos(Objet):
 # --- fournee janvier 2025 ---
 
 class CoursierVolant(Objet):
+    manual_turn_hook = "fin_tour"
+
     def __init__(self):
         super().__init__("Coursier volant", False, 2)
+    def _objets_defaussables(self, joueur):
+        return [
+            o for o in joueur.objets
+            if o.intact and o is not self and not o.actif and o.pv_bonus == 0 and o.priorite < 40
+        ]
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and bool(Jeu.objets_dispo) and bool(self._objets_defaussables(joueur))
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Defausser un objet peu utile pour piocher un nouvel objet."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.fin_tour(joueur, Jeu, log_details)
     def fin_tour(self, joueur, Jeu, log_details):
         if self.intact and Jeu.objets_dispo:
-            inutiles = [o for o in joueur.objets
-                        if o.intact and o is not self and not o.actif and o.pv_bonus == 0 and o.priorite < 40]
+            inutiles = self._objets_defaussables(joueur)
             if inutiles:
                 choisir = getattr(joueur, 'choisir_objet', None)
                 jete = choisir(inutiles, Jeu, usage="sacrifice_coursier") if choisir is not None else min(inutiles, key=lambda o: o.priorite)
@@ -4033,6 +4166,8 @@ class RouletteInfernale(Objet):
                 joueur._gerer_pv_bonus(self, log_details)
 
 class DisqueDeVishnu(Objet):
+    manual_turn_hook = "fin_tour"
+
     def __init__(self):
         super().__init__("Disque de Vishnu", True)
         self.carte_defaussee = None
@@ -4049,6 +4184,15 @@ class DisqueDeVishnu(Objet):
     def fin_tour(self, joueur, Jeu, log_details):
         if self.carte_defaussee and Jeu.defausse and Jeu.defausse[-1] is self.carte_defaussee:
             self.gagnePV(1, joueur, log_details)
+
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return bool(self.carte_defaussee and Jeu.defausse and Jeu.defausse[-1] is self.carte_defaussee)
+
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Gagner 1 PV si la carte defaussee par le Disque est encore sur la defausse."
+
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.fin_tour(joueur, Jeu, log_details)
 
 class MasqueDeFer(Objet):
     def __init__(self):
@@ -4075,8 +4219,16 @@ class MainInvisible(Objet):
             self.scoreChange(compte, joueur, log_details)
 
 class EventailMaudit(Objet):
+    manual_turn_hook = "debut_tour"
+
     def __init__(self):
         super().__init__("Eventail Maudit", False, 2)
+    def can_use_manual_turn(self, joueur, Jeu, log_details):
+        return self.intact and any(j is not joueur and j.dans_le_dj for j in Jeu.joueurs)
+    def manual_turn_description(self, joueur, Jeu, log_details):
+        return "Lancer un de; sur 6, chaque autre joueur dans le Donjon perd 1 PV."
+    def apply_manual_turn(self, joueur, Jeu, log_details):
+        self.debut_tour(joueur, Jeu, log_details)
     def debut_tour(self, joueur, Jeu, log_details):
         if self.intact and any(j is not joueur and j.dans_le_dj for j in Jeu.joueurs):
             jet = joueur.rollDice(Jeu, log_details)

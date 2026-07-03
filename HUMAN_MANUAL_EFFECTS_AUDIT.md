@@ -32,16 +32,19 @@ Ces effets sont a malus ou contraintes et doivent rester forces quand leur condi
 - Deuxieme lot d'objets simples de tour: `BoiteDePandore`, `Chameau`, `ShotDAdrenaline`, `CanneAChep`, `FromagePuant`, `ParcheminDXP`, `ClocheDuDejaVu`, `SlipDeLaResurgence`, `PotionAuTheVert`, `EplucheDonjon`, `JournalDuFutur`, `PorteBoulesDuPonceur`.
   - Avant: ces effets se resolvaient automatiquement au debut ou en fin de tour humain.
   - Maintenant: ils sont exposes comme actions cliquables pendant la decision principale quand leur condition est vraie. `PotionAuTheVert` conserve son effet special de passage de tour apres clic.
+- Troisieme lot d'objets de debut/fin de tour: `GantsDeGaia`, `EnclumeInstable`, `CorneDAbordage`, `EspritDuDonjon`, `SacDeConstantinople`, `Imprimante`, `BouleDeCristal`, `PierreDePressentiment`, `EventailMaudit`, `PelleDuFossoyeur`, `TaserManuel`, `CoursierVolant`, `DisqueDeVishnu`.
+  - Avant: ces hooks pouvaient se resoudre automatiquement pour l'humain au debut/fin du tour, ou ouvrir une decision interne sans action de carte prealable.
+  - Maintenant: ils passent par le registre `manual_turn_hook` et apparaissent comme actions cliquables dans la decision principale. Les sous-choix utiles restent disponibles apres clic (ex: objet a copier/voler, puissance annoncee).
 
 ## Hooks objets encore a migrer
 
 ### Debut de tour
 
-`GantsDeGaia`, `EnclumeInstable`, `BottesDeVitesse`, `CorneDAbordage`, `EspritDuDonjon`, `SacDeConstantinople`, `Imprimante`, `BouleDeCristal`, `TatouageDuPonceur`, `PierreDePressentiment`, `MainInvisible`, `EventailMaudit`, `GlandePineale`, `FilDuDestin`.
+`BottesDeVitesse`, `TatouageDuPonceur`, `MainInvisible`, `GlandePineale`, `FilDuDestin`.
 
 ### Fin de tour
 
-`PelleDuFossoyeur`, `TaserManuel`, `TatouageDuPonceur`, `ConcoctionInstable`, `CoursierVolant`, `DisqueDeVishnu`, `SceauDeLegalisation` (obligatoire), `OiseauDeMauvaisAugure`.
+`TatouageDuPonceur`, `ConcoctionInstable`, `SceauDeLegalisation` (obligatoire), `OiseauDeMauvaisAugure`.
 
 ### Apres victoire / vaincu
 
@@ -83,9 +86,8 @@ Note: les objets de survie sont deja exposes comme sources de combat quand le mo
 
 ## Prochaine etape technique
 
-Mettre en place un registre d'actions humaines utilisables pendant le tour:
+Le registre d'actions humaines existe maintenant pour les hooks `debut_tour` / `fin_tour` via `manual_turn_hook`. Prochaine extension:
 
-- collecter les actions disponibles depuis les hooks ci-dessus sans les executer;
-- les exposer dans `pendingDecision` sous forme d'options cliquables;
-- appliquer l'action choisie puis recalculer les actions restantes;
-- conserver les exceptions obligatoires dans le chemin auto.
+- etendre le meme modele aux phases post-combat (`vaincu`, `rencontre`, `subit_dommages`, `fuite`, `roll`, `activated`) sans executer les effets optionnels a la collecte;
+- separer les effets vraiment passifs/obligatoires des options humaines dans les listes restantes (`BottesDeVitesse`, `TatouageDuPonceur`, `MainInvisible`, `GlandePineale`, `ConcoctionInstable`);
+- garder les exceptions obligatoires dans le chemin auto.
