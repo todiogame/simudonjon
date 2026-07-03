@@ -1696,7 +1696,7 @@ class AnkhDeReincarnation(Objet):
     def __init__(self):
         super().__init__("Ankh de réincarnation", True)
     def survie_effet(self, joueur, carte, Jeu, log_details):
-        if self.intact and joueur.pv_total <= 0:
+        if self.intact and self.survie_possible(joueur, carte, Jeu):
             self.survit(1, joueur, carte, log_details)
             self.destroy(joueur, Jeu, log_details)
     def en_mort(self, joueur_proprietaire, joueur, carte, Jeu, log_details):

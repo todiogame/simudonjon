@@ -7,6 +7,7 @@ from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
 from objets import (
     AllianceSanguine,
+    AnkhDeReincarnation,
     AnneauDesSquelettes,
     BarbecueDuPonceur,
     BouleDeCristal,
@@ -688,6 +689,49 @@ def test_clicking_survival_item_resolves_without_second_yes_no_prompt():
     assert getattr(card, "resolved_by_survival", False) is True
     assert not egide.intact
     assert [call["kind"] for call in provider.calls] == ["choose_combat_source"]
+
+
+def test_ankh_survival_resolves_before_damage_is_applied():
+    ankh = AnkhDeReincarnation()
+    joueur = Joueur("Tester", Perso("Tester Hero", 1), [ankh])
+    card = CarteMonstre("Dragon", 9, ["Dragon"])
+    card.dommages = 9
+    jeu = _Jeu([joueur])
+
+    _run_combat_object_phase(
+        joueur,
+        card,
+        jeu,
+        [],
+        SANS_HOOK_OBJET["en_combat"],
+        SANS_HOOK_PERSO["en_combat_late"],
+        SANS_HOOK_OBJET["en_survie"],
+    )
+
+    assert joueur.pv_total == 1
+    assert card in joueur.pile_monstres_vaincus
+    assert getattr(card, "resolved_by_survival", False) is True
+    assert not ankh.intact
+
+
+def test_attempted_survival_item_is_not_reoffered_in_same_combat_phase():
+    ankh = AnkhDeReincarnation()
+    joueur = Joueur("Tester", Perso("Tester Hero", 1), [ankh])
+    card = CarteMonstre("Dragon", 9, ["Dragon"])
+    card.dommages = 9
+    jeu = _Jeu([joueur])
+
+    candidates = _combat_object_candidates(
+        joueur,
+        card,
+        jeu,
+        SANS_HOOK_OBJET["en_combat"],
+        SANS_HOOK_PERSO["en_combat_late"],
+        SANS_HOOK_OBJET["en_survie"],
+        attempted_ids={id(ankh)},
+    )
+
+    assert candidates == ()
 
 
 def test_ice_potion_power_change_is_temporary():

@@ -550,7 +550,9 @@ def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE=(), O_
         if legal:
             candidates.append(source)
     for objet in joueur.objets:
-        if type(objet) in O_COMBAT or id(objet) in attempted_ids:
+        if id(objet) in attempted_ids:
+            continue
+        if type(objet) in O_COMBAT:
             legal = False
         else:
             try:
