@@ -27,6 +27,17 @@ if ASSET_ROOT is not None:
 sessions = {}
 
 
+@app.middleware("http")
+async def cache_static_assets(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/assets/") or path.startswith("/static/assets/"):
+        response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
+    elif path.startswith("/static/"):
+        response.headers.setdefault("Cache-Control", "public, max-age=3600")
+    return response
+
+
 class GameCreate(BaseModel):
     mode: str = "random"
     playerName: str = "Human"

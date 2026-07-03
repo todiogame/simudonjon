@@ -4,6 +4,8 @@ let lastEventId = 0;
 let logLevel = "basic";
 let renderedDecisionId = null;
 let renderedLogKey = "";
+let pollInFlight = false;
+let pollTimer = null;
 const logs = { basic: [], full: [] };
 const playerRenderKeys = new Map();
 const handledFxEventIds = new Set();
@@ -773,6 +775,7 @@ async function createGame(event) {
   sessionId = snapshot.id;
   render();
   renderLogs(true);
+  startPolling();
 }
 
 async function submitDecision(decisionId, optionId) {
@@ -791,30 +794,49 @@ async function submitDecision(decisionId, optionId) {
 }
 
 async function poll() {
-  if (!sessionId) return;
-  const [snapResponse, basicResponse, fullResponse] = await Promise.all([
-    fetch(`/api/games/${sessionId}`),
-    fetch(`/api/games/${sessionId}/events?after=${lastEventId}&level=basic`),
-    fetch(`/api/games/${sessionId}/events?after=${lastEventId}&level=full`),
-  ]);
-  if (!snapResponse.ok) return;
-  snapshot = await snapResponse.json();
-  const fullBody = await fullResponse.json();
-  const basicBody = await basicResponse.json();
-  const fullEvents = fullBody.events || [];
-  const basicEvents = basicBody.events || [];
-  if (fullEvents.length) {
-    lastEventId = Math.max(lastEventId, ...fullEvents.map((e) => e.id));
-    handleEventEffects(fullEvents);
-    logs.full.push(...fullEvents);
-    logs.full = logs.full.slice(-600);
+  if (!sessionId || pollInFlight) return;
+  pollInFlight = true;
+  try {
+    const [snapResponse, fullResponse] = await Promise.all([
+      fetch(`/api/games/${sessionId}`),
+      fetch(`/api/games/${sessionId}/events?after=${lastEventId}&level=full`),
+    ]);
+    if (snapResponse.status === 404 || fullResponse.status === 404) {
+      stopPolling();
+      sessionId = null;
+      return;
+    }
+    if (!snapResponse.ok || !fullResponse.ok) return;
+    snapshot = await snapResponse.json();
+    const fullBody = await fullResponse.json();
+    const fullEvents = fullBody.events || [];
+    if (fullEvents.length) {
+      lastEventId = Math.max(lastEventId, ...fullEvents.map((e) => e.id));
+      handleEventEffects(fullEvents);
+      logs.full.push(...fullEvents);
+      logs.full = logs.full.slice(-600);
+      logs.basic.push(...fullEvents.filter((event) => event.basic));
+      logs.basic = logs.basic.slice(-400);
+    }
+    render();
+    renderLogs();
+    if (snapshot?.status && snapshot.status !== "running") {
+      stopPolling();
+    }
+  } finally {
+    pollInFlight = false;
   }
-  if (basicEvents.length) {
-    logs.basic.push(...basicEvents);
-    logs.basic = logs.basic.slice(-400);
-  }
-  render();
-  renderLogs();
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(poll, 700);
+}
+
+function stopPolling() {
+  if (!pollTimer) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
 }
 
 function setLogLevel(level) {
@@ -845,4 +867,4 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeCardZoom();
 });
 updateBotStrategyControls();
-setInterval(poll, 700);
+startPolling();
