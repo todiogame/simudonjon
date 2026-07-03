@@ -126,7 +126,7 @@ class Joueur:
         return metadata
 
     def peut_tenter_fuite(self):
-        if self.tour == 1:
+        if self.tour == 1 and not self.is_human():
             return False
         return not (
             self.pv_total < 6

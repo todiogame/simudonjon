@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SimuDonjon</title>
-    <link rel="stylesheet" href="/static/styles.css?v=ui-rework-2-20260702" />
+    <link rel="stylesheet" href="/static/styles.css?v=ui-rework-3-20260703" />
   </head>
   <body>
     <main class="app-shell">
@@ -86,6 +86,10 @@
             </section>
           </section>
 
+          <section class="panel human-panel" id="humanPanel">
+            <div class="empty">Start a game to see your hero and items.</div>
+          </section>
+
           <section class="panel piles-panel">
             <div class="panel-title">
               <span>Dungeon / Discard</span>
@@ -129,10 +133,6 @@
             <div id="draftHand" class="item-grid"></div>
           </section>
 
-          <section class="panel human-panel" id="humanPanel">
-            <div class="empty">Start a game to see your hero and items.</div>
-          </section>
-
           <section class="panel logs">
             <div class="tabs">
               <button id="basicTab" class="active" type="button">Basic log</button>
@@ -145,6 +145,12 @@
         <aside class="opponents" id="opponents"></aside>
       </section>
     </main>
-    <script src="/static/app.js?v=ui-rework-2-20260702"></script>
+    <div id="fxLayer" class="fx-layer" aria-hidden="true"></div>
+    <div id="cardZoom" class="card-zoom" hidden>
+      <button id="cardZoomClose" class="card-zoom-close" type="button" aria-label="Close card zoom">x</button>
+      <img id="cardZoomImage" alt="" />
+      <div id="cardZoomTitle" class="card-zoom-title"></div>
+    </div>
+    <script src="/static/app.js?v=ui-rework-3-20260703"></script>
   </body>
 </html>

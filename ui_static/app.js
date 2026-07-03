@@ -6,6 +6,7 @@ let renderedDecisionId = null;
 let renderedLogKey = "";
 const logs = { basic: [], full: [] };
 const playerRenderKeys = new Map();
+const handledFxEventIds = new Set();
 const renderKeys = {
   status: "",
   card: "",
@@ -16,6 +17,16 @@ const renderKeys = {
 };
 const TEACHER_MARK = "\u{1F9D1}\u200D\u{1F3EB}";
 const ACTIVE_MARK = "\u26A1";
+const STATIC_ASSETS = "/static/assets";
+const AUDIO_FILES = {
+  draw: `${STATIC_ASSETS}/sounds/draw.wav`,
+  execute: `${STATIC_ASSETS}/sounds/execute.mp3`,
+  playcard: `${STATIC_ASSETS}/sounds/playcard.wav`,
+  rolldie: `${STATIC_ASSETS}/sounds/rolldie.wav`,
+  shuffle: `${STATIC_ASSETS}/sounds/shuffle.wav`,
+};
+const audioBank = {};
+let audioReady = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -28,6 +39,7 @@ function resetRenderKeys() {
     renderKeys[key] = "";
   }
   playerRenderKeys.clear();
+  handledFxEventIds.clear();
   renderedDecisionId = null;
 }
 
@@ -130,7 +142,216 @@ function assetImage(entity, className, altText, titleText = "") {
   const alt = altText || entity?.title || entity?.name || "card";
   const title = cleanText(titleText || "");
   const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
-  return `<img class="${className}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}"${titleAttr} loading="lazy">`;
+  return `<img class="${className} zoomable-art" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}"${titleAttr} loading="lazy" data-zoom-src="${escapeAttr(src)}" data-zoom-title="${escapeAttr(alt)}">`;
+}
+
+function ensureAudioReady() {
+  if (audioReady) return;
+  for (const [key, src] of Object.entries(AUDIO_FILES)) {
+    const audio = new Audio(src);
+    audio.preload = "auto";
+    audio.volume = key === "execute" ? 0.55 : 0.42;
+    audioBank[key] = audio;
+  }
+  audioReady = true;
+}
+
+function playSound(key) {
+  ensureAudioReady();
+  const source = audioBank[key];
+  if (!source) return;
+  const audio = source.cloneNode();
+  audio.volume = source.volume;
+  audio.play().catch(() => {});
+}
+
+function flashCurrentCard() {
+  const card = $("currentCard")?.querySelector(".card-detail");
+  if (!card) return;
+  card.classList.remove("card-flash");
+  void card.offsetWidth;
+  card.classList.add("card-flash");
+}
+
+function showDiceRoll(value) {
+  const layer = $("fxLayer");
+  if (!layer) return;
+  const dice = document.createElement("div");
+  dice.className = "dice-roll-fx";
+  dice.textContent = value;
+  layer.appendChild(dice);
+  setTimeout(() => dice.remove(), 1100);
+}
+
+function showHitEffect() {
+  const layer = $("fxLayer");
+  if (!layer) return;
+  const hit = document.createElement("div");
+  hit.className = "hit-fx";
+  layer.appendChild(hit);
+  let frame = 0;
+  const frameMs = 1000 / 60;
+  const timer = setInterval(() => {
+    const x = frame % 4;
+    const y = Math.floor(frame / 4);
+    hit.style.backgroundPosition = `${x * 33.3333}% ${y * 33.3333}%`;
+    frame += 1;
+    if (frame >= 16) {
+      clearInterval(timer);
+      hit.remove();
+    }
+  }, frameMs);
+}
+
+function handleEventEffects(events) {
+  for (const event of events || []) {
+    if (handledFxEventIds.has(event.id)) continue;
+    handledFxEventIds.add(event.id);
+    const text = cleanText(event.text || "");
+    const lowered = text.toLowerCase();
+
+    if (event.kind === "setup" || event.kind === "party_round") {
+      playSound("shuffle");
+    } else if (event.kind === "card_drawn") {
+      playSound("draw");
+      flashCurrentCard();
+    } else if (event.kind === "draft_pick" || event.kind === "human_decision") {
+      playSound("playcard");
+    }
+
+    const rollMatch = text.match(/\broll un ([1-6])\b/i);
+    if (rollMatch) {
+      playSound("rolldie");
+      showDiceRoll(rollMatch[1]);
+    }
+
+    if (event.kind === "log" && /ex[eéèÃ©]cut|execute|mort de/i.test(lowered)) {
+      playSound("execute");
+      showHitEffect();
+    }
+  }
+  if (handledFxEventIds.size > 800) {
+    const recent = new Set(Array.from(handledFxEventIds).slice(-500));
+    handledFxEventIds.clear();
+    recent.forEach((id) => handledFxEventIds.add(id));
+  }
+}
+
+function openCardZoom(src, title) {
+  const modal = $("cardZoom");
+  const image = $("cardZoomImage");
+  const label = $("cardZoomTitle");
+  if (!modal || !image || !src) return;
+  image.src = src;
+  image.alt = title || "Card";
+  label.textContent = title || "";
+  modal.hidden = false;
+  modal.classList.add("open");
+  $("cardZoomClose")?.focus();
+}
+
+function closeCardZoom() {
+  const modal = $("cardZoom");
+  const image = $("cardZoomImage");
+  if (!modal || modal.hidden) return;
+  modal.classList.remove("open");
+  modal.hidden = true;
+  if (image) image.removeAttribute("src");
+}
+
+function drawOptionForCurrentDecision() {
+  const decision = snapshot?.pendingDecision;
+  if (decision?.kind !== "next_action") return null;
+  return (decision.options || []).find((option) => option.id === "draw") || null;
+}
+
+function renderDungeonStack(count, options = {}) {
+  const total = Number(count || 0);
+  if (!total) {
+    return `<div class="empty">No remaining dungeon cards.</div>`;
+  }
+  const compact = Boolean(options.compact);
+  const interactive = options.interactive !== false;
+  const visible = Math.min(total, compact ? 12 : 24);
+  const drawOption = drawOptionForCurrentDecision();
+  const decisionAttrs = interactive && drawOption
+    ? ` role="button" tabindex="0" data-decision="${escapeAttr(snapshot.pendingDecision.id)}" data-option="${escapeAttr(drawOption.id)}"`
+    : "";
+  const cards = Array.from({ length: visible }, (_, index) => {
+    const offset = index * (compact ? 0.34 : 0.45);
+    const angle = ((index * 7) % 13 - 6) * 0.18;
+    return `<span class="dungeon-back-card" style="--dx:${offset}px; --dy:${-offset * 0.55}px; --rot:${angle}deg"></span>`;
+  }).join("");
+  return `
+    <div class="dungeon-stack-wrap ${compact ? "is-compact" : ""}">
+      <div class="dungeon-stack ${interactive && drawOption ? "is-ready" : ""}"${decisionAttrs} aria-label="Draw from dungeon">
+        ${cards}
+        <span class="dungeon-stack-count">${total}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderDecisionDie() {
+  return `
+    <img class="decision-die-image" src="${STATIC_ASSETS}/ui/dice.png" alt="" aria-hidden="true" loading="lazy">
+  `;
+}
+
+function renderDecisionActionVisual(option) {
+  if (option.id === "draw") {
+    return `<span class="decision-action-visual decision-stack">${renderDungeonStack(snapshot?.dungeon?.remainingCount || 0, {
+      compact: true,
+      interactive: false,
+    })}</span>`;
+  }
+  if (option.id === "flee") {
+    return `<span class="decision-action-visual">${renderDecisionDie()}</span>`;
+  }
+  return "";
+}
+
+function renderDecisionButton(decision, option) {
+  const cls = option.id === decision.defaultId ? "default" : "secondary";
+  const desc = cleanOptionDescription(option.description || "");
+  const titleAttr = desc ? ` title="${escapeAttr(desc)}"` : "";
+  const optionColor = itemColorCode(option) || option.color ? itemColorSwatch(option, "decision-color") : "";
+  const visual = renderDecisionActionVisual(option);
+  const actionClass = [
+    cls,
+    visual ? "decision-action-button" : "",
+    option.id === "draw" ? "draw-decision-button" : "",
+    option.id === "flee" ? "flee-decision-button" : "",
+  ].filter(Boolean).join(" ");
+  const buttonInner = `
+    <span class="button-main">${isTeacherOption(decision, option) ? `<span class="teacher-mark">${TEACHER_MARK}</span>` : ""}${optionColor}<span>${escapeHtml(option.label)}</span></span>
+  `;
+
+  if (option.id === "draw") {
+    return `
+      <div class="decision-draw-control">
+        ${visual}
+        <button class="${actionClass}" data-decision="${decision.id}" data-option="${option.id}" type="button"${titleAttr}>
+          ${buttonInner}
+        </button>
+      </div>
+    `;
+  }
+
+  if (option.id === "flee") {
+    return `
+      <div class="decision-flee-control">
+        ${visual}
+        <button class="${actionClass}" data-decision="${decision.id}" data-option="${option.id}" type="button"${titleAttr}>
+          ${buttonInner}
+        </button>
+      </div>
+    `;
+  }
+
+  return `<button class="${actionClass}" data-decision="${decision.id}" data-option="${option.id}" type="button"${titleAttr}>
+    ${buttonInner}${visual}
+  </button>`;
 }
 
 function renderCard(card) {
@@ -177,12 +398,13 @@ function renderDungeon(dungeon) {
   const knownCards = knownGroups.flatMap((group) =>
     (group.cards || []).map((card) => ({ ...card, player: group.player }))
   );
-  $("pilesMeta").textContent = "dungeon grouped | discard top first";
+  $("pilesMeta").textContent = "stacked dungeon | discard top first";
   $("dungeonCount").textContent = `${state.remainingCount || 0} left`;
   $("discardCount").textContent = `${state.discardCount || 0} cards`;
-  $("dungeonRemaining").innerHTML = remaining.length
-    ? remaining.map((card) => renderPileCard(card)).join("")
-    : `<div class="empty">No remaining dungeon cards.</div>`;
+  $("dungeonRemaining").innerHTML = `
+    ${renderDungeonStack(state.remainingCount || 0, { interactive: false })}
+    ${remaining.length ? `<div class="dungeon-summary">${remaining.map((card) => renderPileCard(card)).join("")}</div>` : ""}
+  `;
   $("discardCards").innerHTML = discard.length
     ? discard.map((card, index) => renderPileCard(card, index + 1)).join("")
     : `<div class="empty">No discarded cards yet.</div>`;
@@ -211,14 +433,7 @@ function renderDecision(decision) {
     ? decision.options.filter((option) => !option.itemId && !option.heroId)
     : decision.options;
   const buttons = actionOptions
-    .map((option) => {
-      const cls = option.id === decision.defaultId ? "default" : "secondary";
-      const desc = cleanOptionDescription(option.description || "");
-      const optionColor = itemColorCode(option) || option.color ? itemColorSwatch(option, "decision-color") : "";
-      return `<button class="${cls}" data-decision="${decision.id}" data-option="${option.id}" type="button">
-        <span class="button-main">${isTeacherOption(decision, option) ? `<span class="teacher-mark">${TEACHER_MARK}</span>` : ""}${optionColor}<span>${escapeHtml(option.label)}</span></span>${desc ? `<span class="button-desc">${escapeHtml(desc)}</span>` : ""}
-      </button>`;
-    })
+    .map((option) => renderDecisionButton(decision, option))
     .join("");
   const itemHint = decision.kind === "choose_combat_source"
     ? `<div class="combat-hint">Cliquez votre personnage ou un objet sur votre panneau pour l'utiliser.</div>`
@@ -251,7 +466,12 @@ function renderDraft(draft) {
   const picked = draft.yourPicked || draft.picked || [];
   $("draftPickedWrap").hidden = picked.length === 0;
   $("draftPicked").innerHTML = picked.map(renderItem).join("");
-  $("draftHand").innerHTML = (draft.hand || []).map(renderItem).join("");
+  $("draftHand").innerHTML = (draft.hand || []).map((item, index, hand) =>
+    renderItem(item, {
+      fanIndex: index,
+      fanCenter: (hand.length - 1) / 2,
+    })
+  ).join("");
 }
 
 function renderItem(item, options = {}) {
@@ -268,6 +488,7 @@ function renderItem(item, options = {}) {
     actionable ? "actionable" : "",
     teacher ? "teacher-choice" : "",
     options.large ? "item-large" : "",
+    options.fanIndex !== undefined ? "draft-fan-card" : "",
   ].filter(Boolean).join(" ");
   const description = cleanText(item.description || item.effect || "");
   const tooltip = description ? ` title="${escapeAttr(description)}"` : "";
@@ -285,8 +506,11 @@ function renderItem(item, options = {}) {
     ...(item.types || []),
     ...(item.powers || []).map((p) => `power ${p}`),
   ].join(", ");
+  const fanStyle = options.fanIndex !== undefined
+    ? ` style="--fan-rot:${((options.fanIndex - options.fanCenter) * 1.4).toFixed(2)}deg; --fan-y:${Math.abs(options.fanIndex - options.fanCenter) * 2.5}px"`
+    : "";
   return `
-    <div class="item-card ${status}"${tooltip}${actionAttrs}>
+    <div class="item-card ${status}"${tooltip}${actionAttrs}${fanStyle}>
       <div class="item-name">
         ${assetImage(item, "item-art", item.name, description)}
         ${itemColorSwatch(item)}
@@ -497,12 +721,12 @@ function render() {
     players: snapshot.players,
     decision: snapshot.pendingDecision,
   }, ({ players, decision }) => renderPlayers(players, decision));
+  bindDecisionControls();
 }
 
 function collapsePiles() {
-  for (const id of ["dungeonDetails", "discardDetails"]) {
-    $(id)?.removeAttribute("open");
-  }
+  $("dungeonDetails")?.removeAttribute("open");
+  $("discardDetails")?.removeAttribute("open");
 }
 
 function botStrategiesForGame() {
@@ -523,6 +747,7 @@ function updateBotStrategyControls() {
 
 async function createGame(event) {
   event.preventDefault();
+  ensureAudioReady();
   lastEventId = 0;
   resetRenderKeys();
   renderedLogKey = "";
@@ -551,6 +776,7 @@ async function createGame(event) {
 
 async function submitDecision(decisionId, optionId) {
   if (!sessionId) return;
+  ensureAudioReady();
   const response = await fetch(`/api/games/${sessionId}/decision`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -578,6 +804,7 @@ async function poll() {
   const basicEvents = basicBody.events || [];
   if (fullEvents.length) {
     lastEventId = Math.max(lastEventId, ...fullEvents.map((e) => e.id));
+    handleEventEffects(fullEvents);
     logs.full.push(...fullEvents);
     logs.full = logs.full.slice(-600);
   }
@@ -600,5 +827,21 @@ $("newGameForm").addEventListener("submit", createGame);
 $("playerCount").addEventListener("change", updateBotStrategyControls);
 $("basicTab").addEventListener("click", () => setLogLevel("basic"));
 $("fullTab").addEventListener("click", () => setLogLevel("full"));
+$("cardZoomClose")?.addEventListener("click", closeCardZoom);
+document.addEventListener("pointerdown", ensureAudioReady, { once: true });
+document.addEventListener("click", (event) => {
+  if (event.target.closest("#cardZoomClose")) return;
+  if (event.target.id === "cardZoom") {
+    closeCardZoom();
+    return;
+  }
+  const image = event.target.closest("[data-zoom-src]");
+  if (!image || image.closest("[data-decision]")) return;
+  event.preventDefault();
+  openCardZoom(image.dataset.zoomSrc, image.dataset.zoomTitle || image.alt);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeCardZoom();
+});
 updateBotStrategyControls();
 setInterval(poll, 700);

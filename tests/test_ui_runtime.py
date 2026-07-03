@@ -175,6 +175,30 @@ def test_human_next_action_does_not_expose_unknown_next_card():
     assert "power" not in call["context"]
 
 
+def test_human_next_action_can_flee_on_first_turn():
+    provider = _Provider("flee")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+    joueur.tour = 1
+
+    class Jeu:
+        joueurs = [joueur]
+        carte_courante = None
+        donjon = DonjonDeck()
+
+    Jeu.donjon.ordre = [0]
+    Jeu.donjon.nb_cartes = 1
+    Jeu.donjon.index = 0
+
+    assert joueur.choisir_action_suivante(Jeu, []) == "flee"
+    assert [option["id"] for option in provider.calls[0]["options"]] == ["flee", "draw"]
+
+
 def test_human_next_action_exposes_passed_monster():
     provider = _Provider("draw")
     joueur = Joueur(
