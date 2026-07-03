@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from heros import Avatar, ChevalierDragon, Perso, SANS_HOOK_PERSO
+from heros import Avatar, ChevalierDragon, DocteurDePeste, Perso, SANS_HOOK_PERSO
 from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
 from objets import (
@@ -699,6 +699,35 @@ def test_clicking_survival_item_resolves_without_second_yes_no_prompt():
     assert getattr(card, "resolved_by_survival", False) is True
     assert not egide.intact
     assert [call["kind"] for call in provider.calls] == ["choose_combat_source"]
+
+
+def test_human_combat_hero_is_clicked_as_combat_source():
+    provider = _Provider("0")
+    joueur = Joueur(
+        "Tester",
+        DocteurDePeste(level=1),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+    card = CarteMonstre("Rat Liche", 6, ["Rat", "Liche"])
+    card.dommages = 6
+    jeu = _Jeu([joueur])
+
+    _run_combat_object_phase(
+        joueur,
+        card,
+        jeu,
+        [],
+        SANS_HOOK_OBJET["en_combat"],
+        SANS_HOOK_PERSO["en_combat_late"],
+        SANS_HOOK_OBJET["en_survie"],
+    )
+
+    assert card.executed
+    assert card in joueur.pile_monstres_vaincus
+    assert [call["kind"] for call in provider.calls] == ["choose_combat_source"]
+    assert provider.calls[0]["options"][0]["heroId"] == str(id(joueur.perso_obj))
 
 
 def test_ankh_survival_resolves_before_damage_is_applied():

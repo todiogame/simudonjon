@@ -95,6 +95,12 @@ class Perso:
         if self.condition(joueur, carte, Jeu, log_details):
             self.combat_effet_late(joueur, carte, Jeu, log_details)
 
+    def can_use_in_combat(self, joueur, carte, Jeu, log_details):
+        return self.rules(joueur, carte, Jeu, log_details)
+
+    def apply_in_combat(self, joueur, carte, Jeu, log_details):
+        self.combat_effet(joueur, carte, Jeu, log_details)
+
     def can_use_in_combat_late(self, joueur, carte, Jeu, log_details):
         return self.rules(joueur, carte, Jeu, log_details)
 

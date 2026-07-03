@@ -537,6 +537,10 @@ def _perso_has_late_combat_source(perso):
     return type(perso).combat_effet_late is not Perso.combat_effet_late
 
 
+def _perso_has_combat_source(perso):
+    return type(perso).combat_effet is not Perso.combat_effet
+
+
 def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE=(), O_SURVIE=(), attempted_ids=()):
     attempted_ids = set(attempted_ids)
     candidates = []
@@ -562,6 +566,13 @@ def _combat_object_candidates(joueur, carte, Jeu, O_COMBAT, P_COMBAT_LATE=(), O_
         if legal or _survival_source_possible(objet, joueur, carte, Jeu, O_SURVIE):
             candidates.append(objet)
     perso = joueur.perso_obj
+    if _perso_has_combat_source(perso) and id(perso) not in attempted_ids:
+        try:
+            legal = perso.can_use_in_combat(joueur, carte, Jeu, [])
+        except Exception:
+            legal = False
+        if legal:
+            candidates.append(perso)
     if _perso_has_late_combat_source(perso) and type(perso) not in P_COMBAT_LATE and id(perso) not in attempted_ids:
         try:
             legal = perso.can_use_in_combat_late(joueur, carte, Jeu, [])
@@ -579,7 +590,12 @@ def _apply_combat_source(choice, joueur, carte, Jeu, log_details, O_COMBAT=(), O
         if carte in joueur.pile_monstres_vaincus:
             carte.resolved_by_survival = True
         return
-    if hasattr(choice, "apply_in_combat_late") and not hasattr(choice, "intact"):
+    if (
+        hasattr(choice, "apply_in_combat_late")
+        and not hasattr(choice, "intact")
+        and _perso_has_late_combat_source(choice)
+        and not _perso_has_combat_source(choice)
+    ):
         choice.apply_in_combat_late(joueur, carte, Jeu, log_details)
     else:
         choice.apply_in_combat(joueur, carte, Jeu, log_details)
@@ -1499,7 +1515,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                         joueur.traquenard_payes += 1
                     while True:
                         remplacement = False
-                        if type(joueur.perso_obj) not in P_COMBAT:
+                        if not joueur.is_human() and type(joueur.perso_obj) not in P_COMBAT:
                             joueur.perso_obj.en_combat(joueur, carte, Jeu, log_details)
                         if getattr(Jeu, 'carte_ignoree', False):
                             carte_ignoree = True
