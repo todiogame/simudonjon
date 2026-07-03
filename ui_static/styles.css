@@ -524,6 +524,7 @@ button:focus-visible {
   gap: 12px;
   padding-top: 0.7rem;
   align-items: stretch;
+  justify-content: flex-start;
 }
 
 .decision-panel {
@@ -591,21 +592,31 @@ button.default .button-desc {
 .decision-flee-control {
   position: relative;
   width: 170px;
+  flex: 0 0 170px;
   min-height: 170px;
   display: grid;
   place-items: center;
+  isolation: isolate;
 }
 
 .draw-decision-button,
 .flee-decision-button {
   position: absolute;
-  left: 50%;
+  left: 18px;
+  right: 18px;
   bottom: 5px;
   z-index: 2;
-  min-width: 112px;
+  width: auto;
+  min-width: 0;
   padding: 0.34rem 0.48rem;
-  transform: translateX(-50%);
+  transform: none;
   box-shadow: 0 0 0 2px #3a0000, 3px 3px 0 #000;
+}
+
+.draw-decision-button .button-main,
+.flee-decision-button .button-main {
+  width: 100%;
+  white-space: nowrap;
 }
 
 .decision-stack {
