@@ -51,6 +51,7 @@ from simu import (
     _combat_object_candidates,
     _emit_current_card,
     _emit_dungeon_state,
+    _clear_current_card_unless_passed,
     _apply_human_turn_action,
     _human_turn_action_options,
     _run_debut_tour_hooks,
@@ -585,6 +586,34 @@ def test_current_card_update_can_refresh_resolved_x_power_without_log_event():
     assert snap["currentCard"]["title"] == "Dragon endormi"
     assert snap["currentCard"]["power"] == 9
     assert snap["currentCard"]["damage"] == 9
+    assert session.events_after() == []
+
+
+def test_current_card_update_can_clear_between_turns_without_log_event():
+    session = GameSession({"mode": "random"})
+    orc = CarteMonstre("Orc", 3, ["Orc"])
+
+    _emit_current_card(session.emit, orc, "Bot 3")
+    _emit_current_card(session.emit, None, "Human")
+
+    assert session.snapshot()["currentCard"] is None
+    assert session.events_after() == []
+
+
+def test_current_card_clear_keeps_passed_monster_visible_without_log_event():
+    session = GameSession({"mode": "random"})
+    orc = CarteMonstre("Orc", 3, ["Orc"])
+
+    class Jeu:
+        carte_passee = orc
+        carte_courante = orc
+
+    _emit_current_card(session.emit, orc, "Bot 3")
+    _clear_current_card_unless_passed(Jeu, session.emit, orc, "Human")
+
+    snap = session.snapshot()
+    assert snap["currentCard"]["title"] == "Orc"
+    assert Jeu.carte_courante is orc
     assert session.events_after() == []
 
 

@@ -311,6 +311,19 @@ def _emit_current_card(event_sink, carte, player=None):
     )
 
 
+def _clear_current_card(Jeu, event_sink, player=None):
+    Jeu.carte_courante = None
+    _emit_current_card(event_sink, None, player)
+
+
+def _clear_current_card_unless_passed(Jeu, event_sink, carte, player=None):
+    if getattr(Jeu, 'carte_passee', None) is carte:
+        Jeu.carte_courante = carte
+        _emit_current_card(event_sink, carte, player)
+        return
+    _clear_current_card(Jeu, event_sink, player)
+
+
 class _TrackedDiscard(list):
     def __init__(self, on_change):
         super().__init__()
@@ -1056,6 +1069,11 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
 
         Jeu.index_joueur = index_joueur
         joueur = joueurs[index_joueur]
+        if getattr(Jeu, 'carte_passee', None) is not None:
+            Jeu.carte_courante = Jeu.carte_passee
+            _emit_current_card(event_sink, Jeu.carte_courante, joueur.nom)
+        else:
+            _clear_current_card(Jeu, event_sink, joueur.nom)
 
         if details_enabled:
             log_details.append(f"Tour de {joueur.nom} ({joueur.perso_obj.nom}), {joueur.pv_total}PV, {len(joueur.pile_monstres_vaincus)}MV {',qui rejoue' if joueur.rejoue else ''}")
@@ -1382,6 +1400,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
             # Le joueur rejoue
             _acknowledge_event_discard(joueur, carte)
             Jeu.defausse.append(carte)
+            _clear_current_card(Jeu, event_sink, joueur.nom)
             joueur.rejoue = True
             
         if isinstance(carte, CarteMonstre):
@@ -1495,6 +1514,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
 
             if not joueur.vivant or joueur.pv_total <= 0:
                 _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT)
+                _clear_current_card_unless_passed(Jeu, event_sink, carte, joueur.nom)
                 index_joueur += 1
                 if index_joueur >= nb_joueurs:
                     index_joueur = 0
@@ -1513,6 +1533,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                         for objet in joueur_proprietaire.objets:
                             if type(objet) not in O_FUITE_DEF:
                                 objet.en_fuite_definitive(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                    _clear_current_card_unless_passed(Jeu, event_sink, carte, joueur.nom)
                     continue
                 else:
                     # Fuite échouée, affronter le monstre normalement
@@ -1656,6 +1677,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                         _reset_temporary_card_modifiers(carte)
                     if not joueur.vivant or joueur.pv_total <= 0:
                         _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT)
+                        _clear_current_card_unless_passed(Jeu, event_sink, carte, joueur.nom)
                         index_joueur += 1
                         if index_joueur >= nb_joueurs:
                             index_joueur = 0
@@ -1667,6 +1689,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                             _reset_temporary_card_modifiers(carte)
                             donjon.rajoute_en_haut_de_la_pile(carte)
                             Jeu.carte_passee = carte
+                        _clear_current_card_unless_passed(Jeu, event_sink, carte, joueur.nom)
                         continue
                     if not carte_ignoree:
                         if not joueur.is_human() and type(joueur.perso_obj) not in P_COMBAT_LATE:
@@ -1782,6 +1805,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                 index_joueur += 1
                 if index_joueur >= nb_joueurs:
                     index_joueur = 0
+                _clear_current_card_unless_passed(Jeu, event_sink, carte, joueur.nom)
                 continue
             
             #use items en_vaincu
@@ -1835,6 +1859,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
             else:
                 # Le joueur rejoue
                 joueur.rejoue = True
+            _clear_current_card(Jeu, event_sink, joueur.nom)
 
     log_details.append(f"\nFIN DE LA PARTIE !\nCalcul des scores:")
     # Calculer les scores finaux pour chaque joueur
