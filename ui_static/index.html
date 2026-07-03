@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SimuDonjon</title>
-    <link rel="stylesheet" href="/static/styles.css?v=ui-thinking-20260703" />
+    <link rel="stylesheet" href="/static/styles.css?v=ui-defaults-20260703" />
   </head>
   <body>
     <main class="app-shell">
@@ -43,7 +43,7 @@
           </label>
           <label>
             ISMCTS iterations
-            <input id="ismctsIterations" type="number" min="1" step="10" value="200" />
+            <input id="ismctsIterations" type="number" min="1" step="10" value="201" />
           </label>
           <label>
             ISMCTS max sec
@@ -54,7 +54,7 @@
             <select id="botStrategy1">
               <option value="teacher_best">Teacher</option>
               <option value="baseline">Heuristic</option>
-              <option value="ismcts_prof">ISMCTS Prof</option>
+              <option value="ismcts_prof" selected>ISMCTS Prof</option>
               <option value="ismcts_prof_fast">ISMCTS Prof Fast</option>
             </select>
           </label>
@@ -63,7 +63,7 @@
             <select id="botStrategy2">
               <option value="teacher_best">Teacher</option>
               <option value="baseline">Heuristic</option>
-              <option value="ismcts_prof">ISMCTS Prof</option>
+              <option value="ismcts_prof" selected>ISMCTS Prof</option>
               <option value="ismcts_prof_fast">ISMCTS Prof Fast</option>
             </select>
           </label>
@@ -72,7 +72,7 @@
             <select id="botStrategy3">
               <option value="teacher_best">Teacher</option>
               <option value="baseline">Heuristic</option>
-              <option value="ismcts_prof">ISMCTS Prof</option>
+              <option value="ismcts_prof" selected>ISMCTS Prof</option>
               <option value="ismcts_prof_fast">ISMCTS Prof Fast</option>
             </select>
           </label>
@@ -175,6 +175,6 @@
       <img id="cardZoomImage" alt="" />
       <div id="cardZoomTitle" class="card-zoom-title"></div>
     </div>
-    <script src="/static/app.js?v=ui-thinking-20260703"></script>
+    <script src="/static/app.js?v=ui-defaults-20260703"></script>
   </body>
 </html>

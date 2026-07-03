@@ -35,8 +35,9 @@ TEACHER_STRATEGY_NAME = "teacher_best"
 HEURISTIC_STRATEGY_NAME = "baseline"
 ISMCTS_PROF_STRATEGY_NAME = "ismcts_prof"
 ISMCTS_PROF_FAST_STRATEGY_NAME = "ismcts_prof_fast"
+DEFAULT_BOT_STRATEGY_NAME = ISMCTS_PROF_STRATEGY_NAME
 ISMCTS_PROF_ITERS = {
-    ISMCTS_PROF_STRATEGY_NAME: 200,
+    ISMCTS_PROF_STRATEGY_NAME: 201,
     ISMCTS_PROF_FAST_STRATEGY_NAME: 50,
 }
 BOT_STRATEGY_LABELS = {
@@ -453,9 +454,9 @@ def normalize_bot_strategies(config, count):
     requested = config.get("botStrategies") or []
     strategies = []
     for bot_idx in range(max(0, count - 1)):
-        strategy = requested[bot_idx] if bot_idx < len(requested) else TEACHER_STRATEGY_NAME
+        strategy = requested[bot_idx] if bot_idx < len(requested) else DEFAULT_BOT_STRATEGY_NAME
         if strategy not in BOT_STRATEGY_LABELS:
-            strategy = TEACHER_STRATEGY_NAME
+            strategy = DEFAULT_BOT_STRATEGY_NAME
         strategies.append(strategy)
     return strategies
 
@@ -463,13 +464,13 @@ def normalize_bot_strategies(config, count):
 def make_players(names, heroes, builds, provider, medals=None, bot_strategies=None):
     players = []
     medals = medals or [0] * len(names)
-    bot_strategies = bot_strategies or [TEACHER_STRATEGY_NAME] * max(0, len(names) - 1)
+    bot_strategies = bot_strategies or [DEFAULT_BOT_STRATEGY_NAME] * max(0, len(names) - 1)
     for idx, name in enumerate(names):
         if idx == 0:
             control = "human"
             strategy = None
         else:
-            strategy = bot_strategies[idx - 1] if idx - 1 < len(bot_strategies) else TEACHER_STRATEGY_NAME
+            strategy = bot_strategies[idx - 1] if idx - 1 < len(bot_strategies) else DEFAULT_BOT_STRATEGY_NAME
             control = BOT_CONTROL_LABELS.get(strategy, "ai")
         player = Joueur(
             name,

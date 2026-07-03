@@ -27,6 +27,7 @@ def test_api_game_flow_finishes_with_default_choices():
             "playerCount": 3,
             "seed": 7,
             "botDelayMs": 0,
+            "botStrategies": ["baseline", "baseline"],
         },
     )
     assert response.status_code == 200

@@ -869,7 +869,7 @@ async function createGame(event) {
     playerCount: Number($("playerCount").value),
     seed: seedValue ? Number(seedValue) : null,
     botDelayMs: Number($("botDelay").value || 0),
-    ismctsIterations: Number($("ismctsIterations").value || 200),
+    ismctsIterations: Number($("ismctsIterations").value || 201),
     ismctsMaxSeconds: Number($("ismctsMaxSeconds").value || 20),
     botStrategies: botStrategiesForGame(),
   };

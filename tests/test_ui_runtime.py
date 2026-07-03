@@ -80,6 +80,7 @@ def test_ui_sessions_finish_with_default_human_choices(mode, extra):
         "playerCount": 3,
         "seed": 11,
         "botDelayMs": 0,
+        "botStrategies": [TEACHER_STRATEGY_NAME, TEACHER_STRATEGY_NAME],
         **extra,
     }
     session = GameSession(config)
@@ -118,6 +119,7 @@ def test_bot_strategies_are_configured_per_ai_player():
         "playerCount": 4,
         "seed": 13,
         "botDelayMs": 0,
+        "ismctsIterations": 5,
         "botStrategies": [
             HEURISTIC_STRATEGY_NAME,
             TEACHER_STRATEGY_NAME,
@@ -127,7 +129,7 @@ def test_bot_strategies_are_configured_per_ai_player():
     assert normalize_bot_strategies(config, 4) == [
         HEURISTIC_STRATEGY_NAME,
         TEACHER_STRATEGY_NAME,
-        TEACHER_STRATEGY_NAME,
+        ISMCTS_PROF_STRATEGY_NAME,
     ]
     session = GameSession(config)
     session.start()
@@ -137,12 +139,20 @@ def test_bot_strategies_are_configured_per_ai_player():
     assert [player["strategy"] for player in snap["players"][1:]] == [
         HEURISTIC_STRATEGY_NAME,
         TEACHER_STRATEGY_NAME,
-        TEACHER_STRATEGY_NAME,
+        ISMCTS_PROF_STRATEGY_NAME,
     ]
     assert [player["control"] for player in snap["players"][1:]] == [
         "heuristic ai",
         "teacher ai",
-        "teacher ai",
+        "ismcts prof",
+    ]
+
+
+def test_default_bot_strategies_are_ismcts_professors():
+    assert normalize_bot_strategies({}, 4) == [
+        ISMCTS_PROF_STRATEGY_NAME,
+        ISMCTS_PROF_STRATEGY_NAME,
+        ISMCTS_PROF_STRATEGY_NAME,
     ]
 
 
