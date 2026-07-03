@@ -13,6 +13,8 @@ const debugMode = new URLSearchParams(window.location.search).has("debug");
 const perfSamples = [];
 const playerRenderKeys = new Map();
 const handledFxEventIds = new Set();
+const botThinking = new Map();
+let thinkingRevision = 0;
 const renderKeys = {
   status: "",
   card: "",
@@ -94,8 +96,44 @@ function resetRenderKeys() {
     renderKeys[key] = "";
   }
   playerRenderKeys.clear();
+  botThinking.clear();
+  thinkingRevision += 1;
   handledFxEventIds.clear();
   renderedDecisionId = null;
+}
+
+function updateBotThinking(events) {
+  let changed = false;
+  for (const event of events || []) {
+    if (event.kind === "bot_thinking" || event.kind === "bot_thinking_progress") {
+      const player = event.payload?.player;
+      if (!player) continue;
+      botThinking.set(player, {
+        decision: event.payload?.decision || "",
+        iterationsDone: event.payload?.iterationsCompleted || 0,
+        iterationsTotal: event.payload?.iterationsRequested || event.payload?.iterations || 0,
+        elapsedMs: event.payload?.elapsedMs || 0,
+      });
+      changed = true;
+    } else if (event.kind === "bot_decision") {
+      const player = event.payload?.player || event.text?.split(":")[0];
+      if (player && botThinking.delete(player)) {
+        changed = true;
+      }
+    } else if (event.kind === "finished" || event.kind === "error") {
+      if (botThinking.size) {
+        botThinking.clear();
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    thinkingRevision += 1;
+  }
+}
+
+function isLogEvent(event) {
+  return event.kind !== "bot_thinking" && event.kind !== "bot_thinking_progress";
 }
 
 function renderIfChanged(key, value, callback) {
@@ -611,11 +649,18 @@ function renderOpponent(player, index, decision) {
   const itemList = (player.items || []).map((item) => renderItem(item, { decision })).join("");
   const monsterStack = renderMonsterStack(player.monsters || []);
   const strategyText = player.strategy ? ` | ${player.strategy}` : "";
+  const thinking = botThinking.get(player.name);
+  const thinkingLabel = thinking
+    ? `${thinking.iterationsDone || 0}/${thinking.iterationsTotal || "?"}`
+    : "";
   return `
-    <article class="player opponent ${player.alive ? "" : "dead"}" data-player-index="${index}">
+    <article class="player opponent ${player.alive ? "" : "dead"} ${thinking ? "thinking" : ""}" data-player-index="${index}">
       <div class="player-head">
         <div>
-          <div class="player-name">${escapeHtml(player.name)}</div>
+          <div class="player-name">
+            <span>${escapeHtml(player.name)}</span>
+            ${thinking ? `<span class="thinking-indicator" title="ISMCTS thinking"><span class="thinking-spinner" aria-hidden="true"></span><span>${escapeHtml(thinkingLabel)}</span></span>` : ""}
+          </div>
           <div class="muted">${escapeHtml(`${player.control}${strategyText}`)}</div>
         </div>
         <div class="${statusClass}">${status}</div>
@@ -705,7 +750,11 @@ function renderPlayers(players, decision) {
     if (player.control === "human") return;
     const cacheKey = String(index);
     const opponentDecision = decision?.kind === "unstable_anvil" ? decision : null;
-    const renderKey = stableRenderKey({ player, decision: opponentDecision });
+    const renderKey = stableRenderKey({
+      player,
+      decision: opponentDecision,
+      thinking: botThinking.get(player.name) || null,
+    });
     const current = container.querySelector(`[data-player-index="${index}"]`);
     seen.add(cacheKey);
 
@@ -775,6 +824,7 @@ function render() {
   renderIfChanged("players", {
     players: snapshot.players,
     decision: snapshot.pendingDecision,
+    thinkingRevision,
   }, ({ players, decision }) => renderPlayers(players, decision));
   bindDecisionControls();
 }
@@ -880,10 +930,12 @@ async function poll() {
     const fullEvents = fullBody.events || [];
     if (fullEvents.length) {
       lastEventId = Math.max(lastEventId, ...fullEvents.map((e) => e.id));
+      updateBotThinking(fullEvents);
       handleEventEffects(fullEvents);
-      logs.full.push(...fullEvents);
+      const logEvents = fullEvents.filter(isLogEvent);
+      logs.full.push(...logEvents);
       logs.full = logs.full.slice(-600);
-      logs.basic.push(...fullEvents.filter((event) => event.basic));
+      logs.basic.push(...logEvents.filter((event) => event.basic));
       logs.basic = logs.basic.slice(-400);
     }
     const renderStartedAt = performance.now();

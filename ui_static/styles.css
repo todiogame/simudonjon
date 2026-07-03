@@ -967,6 +967,11 @@ button.default .button-desc {
   background: #c5b6a4;
 }
 
+.player.thinking {
+  border-color: #79d8ff;
+  box-shadow: 3px 3px 0 #000, 0 0 0 2px rgba(121, 216, 255, 0.3);
+}
+
 .player-head {
   display: flex;
   justify-content: space-between;
@@ -978,8 +983,34 @@ button.default .button-desc {
 }
 
 .player-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
   font-weight: 900;
   overflow-wrap: anywhere;
+}
+
+.thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #79d8ff;
+  background: #08324b;
+  color: #d9f6ff;
+  padding: 0.06rem 0.28rem;
+  font-size: 0.68rem;
+  line-height: 1.1;
+  text-shadow: none;
+}
+
+.thinking-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(217, 246, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: thinking-spin 650ms linear infinite;
 }
 
 .player-body {
@@ -1228,6 +1259,12 @@ button.default .button-desc {
   }
   to {
     transform: rotate(2.5deg) translateY(-2px);
+  }
+}
+
+@keyframes thinking-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

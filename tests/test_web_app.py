@@ -96,6 +96,9 @@ def test_api_game_flow_accepts_ismcts_iteration_override():
 
     snap = client.get(f"/api/games/{session_id}").json()
     assert snap["status"] == "finished", snap.get("error")
-    events = client.get(f"/api/games/{session_id}/events?level=basic").json()["events"]
-    assert any(event["kind"] == "bot_thinking" for event in events)
-    assert any(event["kind"] == "bot_thinking_progress" for event in events)
+    basic_events = client.get(f"/api/games/{session_id}/events?level=basic").json()["events"]
+    full_events = client.get(f"/api/games/{session_id}/events?level=full").json()["events"]
+    assert not any(event["kind"] == "bot_thinking" for event in basic_events)
+    assert not any(event["kind"] == "bot_thinking_progress" for event in basic_events)
+    assert any(event["kind"] == "bot_thinking" for event in full_events)
+    assert any(event["kind"] == "bot_thinking_progress" for event in full_events)

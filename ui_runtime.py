@@ -530,7 +530,7 @@ class UiLiveISMCTSPolicy:
                 "decision": decision,
                 **stats,
             },
-            "basic": True,
+            "basic": False,
         })
 
     def decide(self, context):
@@ -552,7 +552,7 @@ class UiLiveISMCTSPolicy:
                     "iterations": self.n_iters,
                     "maxSeconds": self.max_seconds,
                 },
-                "basic": True,
+                "basic": False,
             })
             start = time.perf_counter()
             self._active_context = context
@@ -567,6 +567,7 @@ class UiLiveISMCTSPolicy:
                 "kind": "bot_decision",
                 "text": f"{context.actor.nom}: {label}",
                 "payload": {
+                    "player": context.actor.nom,
                     "kind": context.kind.name,
                     "option": label,
                     "elapsedMs": elapsed_ms,
