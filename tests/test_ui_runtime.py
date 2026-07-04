@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from heros import Avatar, ChevalierDragon, DocteurDePeste, Perso, SANS_HOOK_PERSO
+from heros import Avatar, ChevalierDragon, DocteurDePeste, Perso, Princesse, SANS_HOOK_PERSO
 from joueurs import Joueur
 from monstres import CarteEvent, CarteMonstre, DonjonDeck
 from objets import (
@@ -54,7 +54,9 @@ from objets import (
     SlipDeLaResurgence,
     TaserManuel,
     DisqueDeVishnu,
+    KitDeSoin,
     SANS_HOOK_OBJET,
+    TrousseDeSecours,
 )
 from simu import (
     _acknowledge_event_discard,
@@ -67,6 +69,8 @@ from simu import (
     _human_turn_action_options,
     _run_debut_tour_hooks,
     _run_fin_tour_hooks,
+    _run_subit_dommages_hooks,
+    _finaliser_mort_immediate,
     _run_combat_object_phase,
     _reset_temporary_card_modifiers,
     _resolve_heal_event,
@@ -764,6 +768,41 @@ def test_current_card_clear_keeps_passed_monster_visible_without_log_event():
     assert snap["currentCard"]["title"] == "Orc"
     assert Jeu.carte_courante is orc
     assert session.events_after() == []
+
+
+def test_dead_player_monster_returns_on_top_even_if_duplicate_index_remains():
+    human = Joueur("Human", Perso("Hero", 10), [], control="human")
+    bot = Joueur("Bot", Perso("Bot", 10), [])
+    donjon = DonjonDeck()
+    dragon_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Dragon")
+    mirror_idx = next(i for i, card in enumerate(donjon.cartes) if card.titre == "Miroir Malefique")
+    donjon.ordre = [dragon_idx, mirror_idx, dragon_idx]
+    donjon.nb_cartes = len(donjon.ordre)
+    donjon.index = 1
+    dragon = donjon.cartes[dragon_idx]
+
+    class Jeu:
+        joueurs = [human, bot]
+        defausse = []
+        carte_passee = None
+
+    Jeu.donjon = donjon
+
+    _finaliser_mort_immediate(
+        human,
+        dragon,
+        None,
+        False,
+        Jeu,
+        donjon,
+        [],
+        SANS_HOOK_OBJET["en_mort"],
+    )
+
+    assert Jeu.carte_passee is dragon
+    assert donjon.cartes[int(donjon.ordre[donjon.index])] is dragon
+    assert list(donjon.ordre[donjon.index:]).count(dragon_idx) == 1
+    assert donjon.prochaine_carte() is dragon
 
 
 def test_heavenly_descent_is_optional_for_human_drawer():
@@ -1499,6 +1538,130 @@ def test_human_item_choice_options_hide_zero_pv_and_expose_color():
     assert "PV +0" not in option["description"]
     assert option["colorCode"] == 1
     assert option["colorName"] == "rouge"
+
+
+def test_princess_level_two_draw_keep_exposes_new_items_as_choice_options(monkeypatch):
+    first = Objet("First Princess Item", pv_bonus=1)
+    second = Objet("Second Princess Item", pv_bonus=2)
+    monkeypatch.setattr("heros.random.sample", lambda seq, count: list(seq)[:count])
+    provider = _Provider("1")
+    joueur = Joueur(
+        "Tester",
+        Princesse(level=2),
+        [],
+        control="human",
+        decision_provider=provider,
+    )
+
+    class Jeu:
+        objets_dispo = [first, second]
+
+    joueur.perso_obj.debut_tour(joueur, Jeu, [])
+
+    assert joueur.objets == [second]
+    assert Jeu.objets_dispo == []
+    call = provider.calls[0]
+    assert call["kind"] == "choose_object_draw_keep"
+    assert [option["label"] for option in call["options"]] == [
+        "First Princess Item",
+        "Second Princess Item",
+    ]
+    assert {option["itemId"] for option in call["options"]} == {str(id(first)), str(id(second))}
+
+
+def test_human_post_damage_heal_items_can_be_declined():
+    trousse = TrousseDeSecours()
+    kit = KitDeSoin()
+    provider = _Provider("continue")
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [trousse, kit],
+        control="human",
+        decision_provider=provider,
+    )
+    joueur.pv_total = 2
+    card = CarteMonstre("Orc", 4, ["Orc"])
+    card.dommages = 4
+    jeu = _Jeu([joueur])
+
+    _run_subit_dommages_hooks(
+        joueur,
+        card,
+        jeu,
+        [],
+        SANS_HOOK_PERSO["en_subit_dommages"],
+        SANS_HOOK_OBJET["en_subit_dommages"],
+    )
+
+    assert joueur.pv_total == 2
+    assert trousse.intact is True
+    assert kit.intact is True
+    assert provider.calls[0]["kind"] == "choose_object_damage_response"
+    assert [option["label"] for option in provider.calls[0]["options"]] == [
+        "Trousse de secours",
+        "Kit de Soin",
+        "Continuer",
+    ]
+    assert provider.calls[0]["options"][0]["itemId"] == str(id(trousse))
+    assert provider.calls[0]["options"][1]["itemId"] == str(id(kit))
+
+
+def test_human_post_damage_heal_item_applies_selected_item_only():
+    trousse = TrousseDeSecours()
+    kit = KitDeSoin()
+    provider = _SequenceProvider(["1", "continue"])
+    joueur = Joueur(
+        "Tester",
+        Perso("Tester Hero", 10),
+        [trousse, kit],
+        control="human",
+        decision_provider=provider,
+    )
+    joueur.pv_total = 2
+    card = CarteMonstre("Orc", 4, ["Orc"])
+    card.dommages = 4
+    jeu = _Jeu([joueur])
+
+    _run_subit_dommages_hooks(
+        joueur,
+        card,
+        jeu,
+        [],
+        SANS_HOOK_PERSO["en_subit_dommages"],
+        SANS_HOOK_OBJET["en_subit_dommages"],
+    )
+
+    assert joueur.pv_total == 7
+    assert trousse.intact is True
+    assert kit.intact is False
+    assert [call["kind"] for call in provider.calls] == [
+        "choose_object_damage_response",
+        "choose_object_damage_response",
+    ]
+
+
+def test_bot_post_damage_heal_items_still_trigger_automatically():
+    trousse = TrousseDeSecours()
+    kit = KitDeSoin()
+    bot = Joueur("Bot", Perso("Tester Hero", 10), [trousse, kit], control="ai")
+    bot.pv_total = 2
+    card = CarteMonstre("Orc", 4, ["Orc"])
+    card.dommages = 4
+    jeu = _Jeu([bot])
+
+    _run_subit_dommages_hooks(
+        bot,
+        card,
+        jeu,
+        [],
+        SANS_HOOK_PERSO["en_subit_dommages"],
+        SANS_HOOK_OBJET["en_subit_dommages"],
+    )
+
+    assert bot.pv_total == 6
+    assert trousse.intact is False
+    assert kit.intact is True
 
 
 def test_dungeon_state_hides_deck_order_but_orders_discard():

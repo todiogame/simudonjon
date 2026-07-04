@@ -643,7 +643,9 @@ function renderDecision(decision) {
     .slice(0, 8)
     .map(([key, value]) => chip(`${key}: ${Array.isArray(value) ? value.join(", ") : value}`))
     .join("");
-  const actionOptions = decision.options.filter((option) => !option.itemId && !option.heroId);
+  const actionOptions = decision.options.filter((option) =>
+    !option.heroId && (!option.itemId || (decision.kind || "").startsWith("choose_object_"))
+  );
   const buttons = actionOptions
     .map((option) => renderDecisionButton(decision, option))
     .join("");

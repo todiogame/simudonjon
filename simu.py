@@ -237,6 +237,89 @@ def _run_debut_tour_hooks(joueur, Jeu, log_details, P_DEBUT, O_DEBUT):
         objet.debut_tour(joueur, Jeu, log_details)
 
 
+def _is_manual_damage_response_for_human(joueur_proprietaire, source):
+    return (
+        joueur_proprietaire.is_human()
+        and getattr(source, "manual_damage_response", False)
+        and callable(getattr(source, "can_use_damage_response", None))
+        and callable(getattr(source, "apply_damage_response", None))
+    )
+
+
+def _human_damage_response_candidates(joueur, carte, Jeu, O_SUBIT, log_details):
+    candidates = []
+    for objet in joueur.objets:
+        if type(objet) in O_SUBIT or not _is_manual_damage_response_for_human(joueur, objet):
+            continue
+        if objet.can_use_damage_response(joueur, joueur, carte, Jeu, log_details):
+            candidates.append(objet)
+    return tuple(candidates)
+
+
+def _choose_human_damage_response(joueur, candidates, carte, Jeu, log_details):
+    options = []
+    for idx, source in enumerate(candidates):
+        options.append({
+            "id": str(idx),
+            "label": joueur._decision_option_label(source),
+            "description": joueur._decision_option_description(source),
+            **joueur._decision_option_metadata(source),
+        })
+    options.append({
+        "id": "continue",
+        "label": "Continuer",
+        "description": "Ne pas utiliser d'objet apres ces dommages.",
+    })
+    provider = getattr(joueur, "decision_provider", None)
+    if provider is None:
+        return None
+    selected = provider.choose(
+        joueur,
+        kind="choose_object_damage_response",
+        prompt=f"Utiliser un objet apres les dommages de {getattr(carte, 'titre', 'la carte')} ?",
+        options=options,
+        default_id="continue",
+        context={
+            "card": getattr(carte, "titre", None),
+            "pv": joueur.pv_total,
+            "damage": getattr(carte, "dommages", None),
+            "options": [joueur._decision_option_label(source) for source in candidates],
+        },
+    )
+    if selected == "continue":
+        return None
+    try:
+        return candidates[int(selected)]
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _run_human_damage_response_phase(joueur, carte, Jeu, log_details, O_SUBIT):
+    if not joueur.is_human():
+        return
+    while True:
+        candidates = _human_damage_response_candidates(joueur, carte, Jeu, O_SUBIT, log_details)
+        if not candidates:
+            return
+        choice = _choose_human_damage_response(joueur, candidates, carte, Jeu, log_details)
+        if choice is None:
+            return
+        choice.apply_damage_response(joueur, joueur, carte, Jeu, log_details)
+
+
+def _run_subit_dommages_hooks(joueur, carte, Jeu, log_details, P_SUBIT, O_SUBIT):
+    for joueur_proprietaire in Jeu.joueurs:
+        if type(joueur_proprietaire.perso_obj) not in P_SUBIT:
+            joueur_proprietaire.perso_obj.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
+        for objet in joueur_proprietaire.objets:
+            if type(objet) in O_SUBIT:
+                continue
+            if _is_manual_damage_response_for_human(joueur_proprietaire, objet):
+                continue
+            objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
+    _run_human_damage_response_phase(joueur, carte, Jeu, log_details, O_SUBIT)
+
+
 def _card_summary(cards):
     groups = {}
     for carte in cards:
@@ -951,6 +1034,15 @@ def _acknowledge_event_discard(joueur, carte):
     )
 
 
+def _remet_carte_en_haut_sans_doublon(donjon, carte):
+    prefixe = donjon.ordre[:donjon.index]
+    suffixe = [idx for idx in donjon.ordre[donjon.index:] if int(idx) != carte.index]
+    dtype = getattr(donjon.ordre, "dtype", int)
+    donjon.ordre = np.concatenate((np.array(prefixe, dtype=dtype), np.array(suffixe, dtype=dtype)))
+    donjon.nb_cartes = len(donjon.ordre)
+    donjon.rajoute_en_haut_de_la_pile(carte)
+
+
 def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, donjon, log_details, O_MORT):
     joueur.mort(log_details)
     log_details.append(f"OUPS!! Mort de {joueur.nom}, a court de PV.\n")
@@ -960,9 +1052,9 @@ def _finaliser_mort_immediate(joueur, carte, effet_carte, carte_ignoree, Jeu, do
                 objet.en_mort(joueur_proprietaire, joueur, carte, Jeu, log_details)
     if (isinstance(carte, CarteMonstre) and not carte.executed and not carte_ignoree
             and effet_carte != "MAUDIT" and carte not in joueur.pile_monstres_vaincus
-            and carte not in Jeu.defausse and carte.index not in Jeu.donjon.ordre[Jeu.donjon.index:]):
+            and carte not in Jeu.defausse):
         _reset_temporary_card_modifiers(carte)
-        donjon.rajoute_en_haut_de_la_pile(carte)
+        _remet_carte_en_haut_sans_doublon(donjon, carte)
         Jeu.carte_passee = carte
 
 def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True,
@@ -1526,7 +1618,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                     log_details.append(f"Fuite réussie avec un jet de {joueur.jet_fuite} contre {carte.titre} puissance {carte.puissance}\n")
                     joueur.fuite()
                     _reset_temporary_card_modifiers(carte)
-                    donjon.rajoute_en_haut_de_la_pile(carte)
+                    _remet_carte_en_haut_sans_doublon(donjon, carte)
                     Jeu.carte_passee = carte
                     joueur.jet_fuite_lance = False
                     for joueur_proprietaire in Jeu.joueurs:
@@ -1687,7 +1779,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                         # que si elle n'a pas deja ete executee (sinon elle est deja dans une pile/defausse)
                         if not carte.executed:
                             _reset_temporary_card_modifiers(carte)
-                            donjon.rajoute_en_haut_de_la_pile(carte)
+                            _remet_carte_en_haut_sans_doublon(donjon, carte)
                             Jeu.carte_passee = carte
                         _clear_current_card_unless_passed(Jeu, event_sink, carte, joueur.nom)
                         continue
@@ -1730,12 +1822,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                 if details_enabled:
                     log_details.append(f"Affronté {carte.titre}, perdu {carte.dommages} PV, restant {joueur.pv_total} PV.")
 
-                for joueur_proprietaire in Jeu.joueurs:
-                    if type(joueur_proprietaire.perso_obj) not in P_SUBIT:
-                        joueur_proprietaire.perso_obj.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
-                    for objet in joueur_proprietaire.objets:
-                        if type(objet) not in O_SUBIT:
-                            objet.en_subit_dommages(joueur_proprietaire, joueur, carte, Jeu, log_details)
+                _run_subit_dommages_hooks(joueur, carte, Jeu, log_details, P_SUBIT, O_SUBIT)
                         
                 if (
                     effet_carte and "ARRA" in effet_carte
@@ -1800,7 +1887,7 @@ def ordonnanceur(joueurs, donjon, pv_min_fuite=None, objets_dispo=None, log=True
                 #  carte_ignoree -> Kraken deja remis sous le donjon / Ange Gardien deja defausse)
                 if not carte.executed and not carte_ignoree and effet_carte != "MAUDIT" and carte not in joueur.pile_monstres_vaincus:
                     _reset_temporary_card_modifiers(carte)
-                    donjon.rajoute_en_haut_de_la_pile(carte)
+                    _remet_carte_en_haut_sans_doublon(donjon, carte)
                     Jeu.carte_passee = carte
                 index_joueur += 1
                 if index_joueur >= nb_joueurs:

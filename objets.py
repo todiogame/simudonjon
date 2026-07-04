@@ -3294,10 +3294,16 @@ class PistoletLaser(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class TrousseDeSecours(Objet):
+    manual_damage_response = True
+
     def __init__(self):
         super().__init__("Trousse de secours", True)
+    def can_use_damage_response(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        return self.intact and joueur_proprietaire == joueur and joueur.pv_total > 0 and carte.dommages >= 4
+    def apply_damage_response(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        self.subit_dommages_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
     def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if self.intact and joueur_proprietaire == joueur and joueur.pv_total > 0 and carte.dommages >= 4:
+        if self.can_use_damage_response(joueur_proprietaire, joueur, carte, Jeu, log_details):
             self.gagnePV(carte.dommages, joueur, log_details)
             self.destroy(joueur, Jeu, log_details)
 
@@ -3857,11 +3863,19 @@ class BananeExperimentale(Objet):
         self.destroy(joueur, Jeu, log_details)
 
 class KitDeSoin(Objet):
+    manual_damage_response = True
+
     def __init__(self):
         super().__init__("Kit de Soin", True)
+    def can_use_damage_response(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        return (
+            self.intact and joueur_proprietaire == joueur and joueur.pv_total > 0
+            and joueur.pv_total <= 5 and carte.dommages > 0
+        )
+    def apply_damage_response(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
+        self.subit_dommages_effet(joueur_proprietaire, joueur, carte, Jeu, log_details)
     def subit_dommages_effet(self, joueur_proprietaire, joueur, carte, Jeu, log_details):
-        if (self.intact and joueur_proprietaire == joueur and joueur.pv_total > 0
-                and joueur.pv_total <= 5 and carte.dommages > 0):
+        if self.can_use_damage_response(joueur_proprietaire, joueur, carte, Jeu, log_details):
             self.gagnePV(5, joueur, log_details)
             self.destroy(joueur, Jeu, log_details)
 
