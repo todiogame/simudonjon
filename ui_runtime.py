@@ -243,6 +243,19 @@ class GameSession:
                 }
         return snapshots
 
+    def _hero_snapshots(self):
+        snapshots = {}
+        for player in self.players:
+            hero = getattr(player, "perso_obj", None)
+            if hero is None:
+                continue
+            payload = serialize_hero(hero)
+            snapshots[payload["heroId"]] = {
+                "player": getattr(player, "nom", ""),
+                "hero": payload,
+            }
+        return snapshots
+
     def _log_mentions_bot_item_use(self, text, player_name, item_name):
         text_key = _cle_nom(text)
         item_key = _cle_nom(item_name)
@@ -268,6 +281,39 @@ class GameSession:
             return any(marker in text_key for marker in use_markers)
         return text_key.startswith(f"utilise{item_key}") or text_key.startswith(f"active{item_key}")
 
+    def _log_mentions_hero_use(self, text, player_name, hero_name):
+        text_key = _cle_nom(text)
+        hero_key = _cle_nom(hero_name)
+        if not hero_key or hero_key not in text_key:
+            return False
+        if any(marker in text_key for marker in ("nutilisepas", "nepeutpas", "impossible")):
+            return False
+        if text_key.startswith("tour"):
+            return False
+
+        player_key = _cle_nom(player_name)
+        use_markers = (
+            "utilise",
+            "capacite",
+            "consulte",
+            "triche",
+            "repose",
+            "relance",
+            "voit",
+            "saute",
+            "remet",
+            "execute",
+            "absorbe",
+            "reduit",
+            "augmente",
+            "survivre",
+            "gagne",
+            "booste",
+            "defausse",
+            "pioche",
+        )
+        return bool(player_key and player_key in text_key and any(marker in text_key for marker in use_markers))
+
     def _emit_bot_item_fx_row(self, player_name, item_payload, effect):
         action = "breaks" if effect == "break" else "uses"
         self._append_event_row(
@@ -277,6 +323,18 @@ class GameSession:
                 "player": player_name,
                 "item": item_payload,
                 "effect": effect,
+            },
+            basic=False,
+        )
+
+    def _emit_hero_fx_row(self, player_name, hero_payload):
+        self._append_event_row(
+            "hero_fx",
+            f"{player_name} uses {hero_payload.get('name', 'hero')}.",
+            {
+                "player": player_name,
+                "hero": hero_payload,
+                "effect": "use",
             },
             basic=False,
         )
@@ -331,6 +389,9 @@ class GameSession:
                         "item": data["item"],
                         "age": 0,
                     }
+            for data in self._hero_snapshots().values():
+                if self._log_mentions_hero_use(text, data["player"], data["hero"].get("name", "")):
+                    self._emit_hero_fx_row(data["player"], data["hero"])
 
         self._bot_item_fx_state = current
 

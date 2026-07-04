@@ -300,11 +300,12 @@ function showDiceRoll(value) {
 function showBotItemEffect(payload) {
   const layer = $("fxLayer");
   if (!layer) return;
-  const item = payload?.item || {};
-  const name = cleanText(item.name || payload?.itemName || "Item");
+  const item = payload?.item || payload?.hero || {};
+  const name = cleanText(item.name || payload?.itemName || payload?.heroName || "Item");
   const player = cleanText(payload?.player || "");
   const broken = payload?.effect === "break";
-  const fxKey = `${searchKey(player)}:${searchKey(name)}:${broken ? "break" : "use"}`;
+  const heroFx = Boolean(payload?.hero);
+  const fxKey = `${heroFx ? "hero" : "item"}:${searchKey(player)}:${searchKey(name)}:${broken ? "break" : "use"}`;
   const now = Date.now();
   if (recentItemFxKeys.has(fxKey) && now - recentItemFxKeys.get(fxKey) < 1200) {
     return;
@@ -314,7 +315,7 @@ function showBotItemEffect(payload) {
     if (now - seenAt > 3000) recentItemFxKeys.delete(key);
   }
   const fx = document.createElement("div");
-  fx.className = `item-use-fx${broken ? " item-break-fx" : ""}`;
+  fx.className = `item-use-fx${heroFx ? " hero-use-fx" : ""}${broken ? " item-break-fx" : ""}`;
   const lane = ITEM_FX_LANES[itemFxLane % ITEM_FX_LANES.length];
   itemFxLane += 1;
   fx.style.setProperty("--item-fx-x", `${lane.x}px`);
@@ -335,7 +336,7 @@ function showBotItemEffect(payload) {
 
   const label = document.createElement("div");
   label.className = "item-fx-label";
-  label.textContent = broken ? `${name} breaks` : name;
+  label.textContent = heroFx ? name : (broken ? `${name} breaks` : name);
   fx.appendChild(label);
 
   if (player) {
@@ -421,7 +422,7 @@ function handleEventEffects(events) {
       flashCurrentCard();
     } else if (event.kind === "draft_pick" || event.kind === "human_decision") {
       playSound("playcard");
-    } else if (event.kind === "bot_item_fx") {
+    } else if (event.kind === "bot_item_fx" || event.kind === "hero_fx") {
       const broken = event.payload?.effect === "break";
       playSound(broken ? "execute" : "playcard");
       showBotItemEffect(event.payload || {});

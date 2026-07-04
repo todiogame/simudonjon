@@ -1290,6 +1290,20 @@ button.default .button-desc {
   color: #ffd87c;
 }
 
+.hero-use-fx {
+  border-color: #bfe7ff;
+  background: #eef7ff;
+}
+
+.hero-use-fx img,
+.hero-use-fx .item-fx-fallback {
+  border-color: #24455c;
+}
+
+.hero-use-fx .item-fx-player {
+  color: #24455c;
+}
+
 .card-zoom {
   position: fixed;
   inset: 0;

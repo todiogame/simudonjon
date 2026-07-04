@@ -4592,7 +4592,7 @@ class FilDuDestin(Objet):
         # regarde les 4 prochaines cartes et les reordonne: la plus simple pour soi d'abord,
         # les plus dangereuses ensuite (pour les adversaires)
         donjon = Jeu.donjon
-        if not self.intact or joueur.tour < 2 or donjon.nb_cartes - donjon.index < 4:
+        if not self.intact or donjon.nb_cartes - donjon.index < 4:
             return
         positions = list(range(donjon.index, donjon.index + 4))
         entries = [(donjon.ordre[p], donjon.cartes[donjon.ordre[p]]) for p in positions]

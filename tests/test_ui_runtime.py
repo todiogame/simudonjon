@@ -1519,6 +1519,23 @@ def test_bot_item_break_fx_replaces_pending_use_fx():
     assert fx_events[0]["payload"]["item"]["name"] == "Debug Relic"
 
 
+def test_hero_use_emits_fx_event_for_human_and_bots():
+    session = GameSession({"mode": "random"})
+    human = Joueur("Human", Princesse(), [], control="human")
+    bot = Joueur("Bot 1", Perso("Bot Hero", 10), [], control="ai")
+    session.set_players([human, bot])
+
+    session.emit({"kind": "log", "text": "Tour de Human (Princesse), 10PV, 0MV", "basic": True})
+    assert not [event for event in session.events_after() if event["kind"] == "hero_fx"]
+
+    session.emit({"kind": "log", "text": "Human (Princesse) utilise sa capacite pour piocher un objet.", "basic": True})
+    session.emit({"kind": "log", "text": "Bot 1 (Bot Hero) consulte les 2 prochaines cartes.", "basic": True})
+
+    fx_events = [event for event in session.events_after() if event["kind"] == "hero_fx"]
+    assert [event["payload"]["player"] for event in fx_events] == ["Human", "Bot 1"]
+    assert [event["payload"]["hero"]["name"] for event in fx_events] == ["Princesse", "Bot Hero"]
+
+
 def test_human_item_choice_options_hide_zero_pv_and_expose_color():
     item = Objet("Zero PV Test", actif=True, pv_bonus=0, modificateur_de=0)
     item.couleur = 1
@@ -1862,7 +1879,7 @@ def test_thread_of_fate_human_orders_four_cards():
         control="human",
         decision_provider=provider,
     )
-    owner.tour = 2
+    owner.tour = 0
     donjon = DonjonDeck()
     names = ["Orc", "Dragon", "Gobelin", "Vampire"]
     indices = [next(i for i, card in enumerate(donjon.cartes) if card.titre == name) for name in names]
